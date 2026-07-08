@@ -21,6 +21,38 @@ pub type Handle = Arc<ManagedTorrent>;
 /// How long a create waits for magnet metadata before returning best-effort.
 const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
 
+/// Default public trackers injected into every torrent, mirroring the blob
+/// (server.js:71921 / getDefaults). Without these, DHT is the only peer source
+/// and less-popular content gets zero peers; the addon's own trackers are added
+/// on top. librqbit supports UDP trackers.
+const DEFAULT_TRACKERS: &[&str] = &[
+    "udp://tracker.opentrackr.org:1337/announce",
+    "udp://open.demonoid.ch:6969/announce",
+    "udp://open.demonii.com:1337/announce",
+    "udp://open.tracker.cl:1337/announce",
+    "udp://open.stealth.si:80/announce",
+    "udp://tracker.torrent.eu.org:451/announce",
+    "udp://tracker.therarbg.to:6969/announce",
+    "udp://tracker.qu.ax:6969/announce",
+    "udp://tracker.dler.org:6969/announce",
+    "udp://tracker.bittor.pw:1337/announce",
+    "udp://tracker.0x7c0.com:6969/announce",
+    "udp://tracker-udp.gbitt.info:80/announce",
+    "udp://run.publictracker.xyz:6969/announce",
+    "udp://opentracker.io:6969/announce",
+    "udp://open.dstud.io:6969/announce",
+    "udp://leet-tracker.moe:1337/announce",
+    "udp://explodie.org:6969/announce",
+    "udp://bt.rer.lol:6969/announce",
+];
+
+fn add_torrent_options() -> librqbit::AddTorrentOptions {
+    librqbit::AddTorrentOptions {
+        trackers: Some(DEFAULT_TRACKERS.iter().map(|s| s.to_string()).collect()),
+        ..Default::default()
+    }
+}
+
 // opts echo (getStatistics.opts) — from the blob's getDefaults merged with our
 // settings (server.js:46886-46907). Constant here; these mirror the values M0
 // reports in /settings.values.
@@ -79,7 +111,7 @@ impl Engine {
     pub async fn add_blob(&self, bytes: Vec<u8>) -> anyhow::Result<Handle> {
         let resp = self
             .session
-            .add_torrent(AddTorrent::from_bytes(bytes), None)
+            .add_torrent(AddTorrent::from_bytes(bytes), Some(add_torrent_options()))
             .await?;
         resp.into_handle().context("add_torrent returned list-only")
     }
@@ -90,7 +122,7 @@ impl Engine {
     pub async fn add_magnet(&self, magnet: &str) -> anyhow::Result<Handle> {
         let resp = self
             .session
-            .add_torrent(AddTorrent::from_url(magnet), None)
+            .add_torrent(AddTorrent::from_url(magnet), Some(add_torrent_options()))
             .await?;
         let handle = resp.into_handle().context("add_torrent returned list-only")?;
         // Bounded wait: a magnet with no reachable peers must not hang the request.
