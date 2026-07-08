@@ -4,10 +4,7 @@
   "version": "0.1.0",
   "identifier": "com.stremio.desktop",
   "build": {
-    "frontendDist": "../../web/build",
-    "devUrl": "http://localhost:8080",
-    "beforeDevCommand": "pnpm --filter stremio exec webpack serve --mode development --env serverType=http",
-    "beforeBuildCommand": "pnpm --filter stremio run build"
+    "frontendDist": "../../web/build"
   },
   "app": {
     "withGlobalTauri": true,
