@@ -11,6 +11,7 @@ mod proxy;
 mod routes;
 mod stats;
 mod stream;
+mod support;
 mod torrent;
 
 pub mod config;
@@ -90,6 +91,13 @@ pub fn router(config: Config, engine: Engine) -> Router {
         // M3a header-injecting media proxy + HLS playlist rewriter (all methods).
         .route("/proxy/{opts}", any(proxy::proxy_root))
         .route("/proxy/{opts}/{*path}", any(proxy::proxy_with_path))
+        // M3b support routes.
+        .route("/opensubHash", get(support::opensub_hash))
+        .route("/subtitles.vtt", get(support::subtitles_vtt))
+        .route("/subtitles.srt", get(support::subtitles_srt))
+        .route("/subtitlesTracks", get(support::subtitles_tracks))
+        .route("/tracks/{url}", get(support::tracks))
+        .route("/yt/{id}", get(support::yt))
         // The media stream. GET+HEAD are handled explicitly (HEAD must not open
         // the FileStream), so we register both methods on one handler rather
         // than let axum synthesize HEAD from GET.

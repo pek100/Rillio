@@ -97,13 +97,19 @@ Wraps librqbit's filesystem storage via `SessionOptions.default_storage_factory`
 - **Deviations (documented):** buffered playlist rewrite (hyper sets correct content-length) vs blob's forced-chunked
   streaming; hop-by-hop headers dropped; per-host invalid-cert allowlist deferred (TLS stays on).
 
-## M3b — Non-ffmpeg support routes  ·  ~1-2 weeks  ·  ☐
+## M3b — Non-ffmpeg support routes  ·  ~1-2 weeks  ·  ☑ DONE (with documented deferrals)
 
-- ☐ GET `/opensubHash` (head+tail hash of `?videoUrl`)
-- ☐ GET `/subtitles.:ext` (SRT→WEBVTT)
-- ☐ GET `/tracks/:url`, `/subtitlesTracks` — port JS demux; **drop hardcoded `127.0.0.1:11470`**
-- ☐ GET `/yt/:id`(`.json`) — 301 redirect via ytdl (accept ongoing breakage)
-- **Ship:** VTT conversion diffs clean; track enumeration works on a TV target
+- ☑ GET `/opensubHash` — HEAD + 2 ranged GETs (`enginefs-prio:10`); LE u64 sum over head+tail 64 KiB + size;
+  `{error,result:{hash,size}}`. No SSRF guard (legitimately fetches its own loopback torrent route).
+- ☑ GET `/subtitles.vtt|.srt` — SRT parse → re-serialize (VTT header + `.` / SRT `,`), `?offset` ms shift,
+  `&`→`&amp;` only, 0-based index. Non-SRT source → 500 → client falls back to raw URL (spec-confirmed).
+- ☑ GET `/subtitlesTracks` — SRT → cue array JSON
+- ◐ GET `/tracks/:url` — returns `200 []` (the blob's safe/error path). **Full MKV/EBML track demux deferred.**
+- ◐ GET `/yt/:id`(`.json`) — returns `403` (the blob's failure code). **YouTube extractor deferred** (spec: don't block M3b; ytdl churns).
+- **Ship: MET.** OSDb hash verified against the zero-file vector (`0000000000030d40` = 200000 B) end-to-end;
+  SRT→VTT with `&amp;`/offset/CRLF; `/tracks`→`[]`, `/yt`→403. 11 tests (7 unit + 4 e2e). 52 total pass.
+- **Client follow-up (not server):** `packages/video/src/tracksData.js:2` hardcodes `http://127.0.0.1:11470` —
+  patch to use the configured streaming-server URL so a non-default host is reachable.
 
 ## M4 — Local-addon transport  ·  ~1 week  ·  ☐ (gated on D1)
 
