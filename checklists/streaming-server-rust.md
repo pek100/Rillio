@@ -81,14 +81,21 @@ Wraps librqbit's filesystem storage via `SessionOptions.default_storage_factory`
 - **Ship: MET.** Live BBB: `streamProgress=0.734` (= 202/276 MB downloaded), `peers=43`, `downloadSpeed=1.6 MB/s`,
   no NaN. Torrent-level resolves name/files for video's `fetchVideoParams`. 29 tests pass.
 
-## M3a — `/proxy` subsystem (critical path)  ·  ~2-3 weeks  ·  ☐
+## M3a — `/proxy` subsystem (critical path)  ·  ~2-3 weeks  ·  ☑ DONE
 
-- ☐ `d=`/`h=`/`r=` header-injection options blob (core+video build identical URLs)
-- ☐ Follow ≤5 redirects
-- ☐ m3u8/mpegurl detection → strip `content-length`, force chunked
-- ☐ **Playlist body URL rewriter** — rewrite every absolute URL back through the proxy (recompute `virtualRoot`)
-- ☐ SSRF policy: allowlist / explicit opt-in — **not** blanket `rejectUnauthorized:false`
-- **Ship:** proxied header-injection stream plays; a real m3u8 addon stream plays through the rewriter; diffs clean
+- ☑ `d=`/`h=`/`r=` header-injection options blob (form-urlencoded; accepts `+`/`%20`)
+- ☑ Request header allowlist (8 names) + forced `Host` + injected `h` overrides
+- ☑ Manual redirects ≤5, per-hop SSRF re-check, `Host` re-set + `h` re-applied per hop
+- ☑ Response header allowlist + injected `r` (hop-by-hop `connection`/`transfer-encoding` dropped — hyper frames)
+- ☑ m3u8/mpegurl detection → drop `content-length`, `accept-ranges: none`
+- ☑ **Playlist rewriter**: same-origin→virtual_root, cross-origin→fresh opts (h carried, **r dropped**),
+  rooted→join, bare-relative→unchanged, `URI="…"` in tags; EOL preserved. Double-port blob bug NOT replicated.
+- ☑ SSRF guard: TLS **on**; blocks loopback/private/link-local/CGNAT/IPv6-ULA unless host allowlisted; http/https only; re-checked per redirect
+- **Ship: MET.** Hermetic e2e (local origin, no net): playlist rewritten across all branches + `accept-ranges: none`;
+  Range passthrough (206 + content-range); injected `h` reaches origin; loopback blocked (403) without allowlist.
+  13 tests (9 unit rewriter/SSRF/opts + 4 e2e). 42 total, stable across re-runs.
+- **Deviations (documented):** buffered playlist rewrite (hyper sets correct content-length) vs blob's forced-chunked
+  streaming; hop-by-hop headers dropped; per-host invalid-cert allowlist deferred (TLS stays on).
 
 ## M3b — Non-ffmpeg support routes  ·  ~1-2 weeks  ·  ☐
 

@@ -29,6 +29,9 @@ async fn spawn(tag: &str) -> (String, reqwest::Client) {
         .unwrap();
     let base = format!("http://127.0.0.1:{}", listener.local_addr().unwrap().port());
     let dir = std::env::temp_dir().join(format!("stremio-stats-{tag}"));
+    // Clean: a persisted torrent from a prior run cannot be re-added (librqbit
+    // "file is None"; see M1.4), which would 500 the create.
+    let _ = std::fs::remove_dir_all(&dir);
     let _ = std::fs::create_dir_all(&dir);
     let engine = Engine::new(dir.clone()).await.unwrap();
     let app = router(Config::local(dir), engine);

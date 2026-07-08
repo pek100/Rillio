@@ -18,6 +18,9 @@ pub struct Config {
     /// Cache size in bytes. `None` = unlimited (the "∞" selection).
     pub cache_size: Option<f64>,
     pub server_version: String,
+    /// `/proxy` SSRF allowlist: exact hosts permitted to resolve to private /
+    /// loopback / link-local ranges. Empty = block all such destinations.
+    pub proxy_allow_private_hosts: Vec<String>,
 }
 
 /// Default streaming-server port, matching `STREAMING_SERVER_URL` in
@@ -41,6 +44,7 @@ impl Config {
             app_path,
             cache_size: Some(2_147_483_648.0),
             server_version: SERVER_VERSION.to_owned(),
+            proxy_allow_private_hosts: Vec::new(),
         }
     }
 }

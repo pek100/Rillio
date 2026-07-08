@@ -7,6 +7,7 @@
 //! Milestone status lives in `docs/streaming-server-rust/` and
 //! `checklists/streaming-server-rust.md`. This is **M0** — the control plane.
 
+mod proxy;
 mod routes;
 mod stats;
 mod stream;
@@ -21,7 +22,7 @@ pub use config::Config;
 pub use engine::Engine;
 
 use axum::extract::FromRef;
-use axum::routing::{get, on, post, MethodFilter};
+use axum::routing::{any, get, on, post, MethodFilter};
 use axum::Router;
 use tower_http::cors::CorsLayer;
 
@@ -32,6 +33,8 @@ use tower_http::cors::CorsLayer;
 pub struct AppState {
     pub config: Config,
     pub engine: Engine,
+    /// Shared outbound HTTP client for `/proxy` (manual redirects; TLS verified).
+    pub http: reqwest::Client,
 }
 
 impl FromRef<AppState> for Config {
@@ -44,6 +47,11 @@ impl FromRef<AppState> for Engine {
         s.engine.clone()
     }
 }
+impl FromRef<AppState> for reqwest::Client {
+    fn from_ref(s: &AppState) -> reqwest::Client {
+        s.http.clone()
+    }
+}
 
 /// Build the streaming-server router.
 ///
@@ -51,7 +59,12 @@ impl FromRef<AppState> for Engine {
 /// container's `NO_CORS=1` behavior — safe only because the socket is expected
 /// to bind loopback. Do not bind this to a public interface.
 pub fn router(config: Config, engine: Engine) -> Router {
-    let state = AppState { config, engine };
+    // Manual redirect handling so the proxy's SSRF guard runs on every hop.
+    let http = reqwest::Client::builder()
+        .redirect(reqwest::redirect::Policy::none())
+        .build()
+        .expect("reqwest client");
+    let state = AppState { config, engine, http };
     Router::new()
         // M0 control plane
         .route("/settings", get(routes::get_settings).post(routes::post_settings))
@@ -74,6 +87,9 @@ pub fn router(config: Config, engine: Engine) -> Router {
         .route("/stats.json", get(stats::stats_aggregate))
         .route("/{info_hash}/stats.json", get(stats::stats_torrent))
         .route("/{info_hash}/{idx}/stats.json", get(stats::stats_file))
+        // M3a header-injecting media proxy + HLS playlist rewriter (all methods).
+        .route("/proxy/{opts}", any(proxy::proxy_root))
+        .route("/proxy/{opts}/{*path}", any(proxy::proxy_with_path))
         // The media stream. GET+HEAD are handled explicitly (HEAD must not open
         // the FileStream), so we register both methods on one handler rather
         // than let axum synthesize HEAD from GET.
