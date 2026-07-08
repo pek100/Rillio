@@ -4,6 +4,8 @@
 //! S1: the Rust streaming server runs in-process (no container/sidecar) — the
 //! web client reaches it at http://127.0.0.1:11470 exactly as before.
 
+pub mod mpv;
+
 use tauri::Manager;
 
 /// Open a URL or file path in the OS default handler / native app (S2).

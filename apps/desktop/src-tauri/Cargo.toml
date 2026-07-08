@@ -25,3 +25,6 @@ tracing = "0.1"
 stremio-streaming-server = { path = "../../../crates/streaming-server", default-features = false }
 # Open URLs / files in the OS default handler (S2 external-player fallback).
 open = "5"
+# Dynamically load libmpv-2.dll at runtime (S3). Hand-declared FFI against the
+# stable libmpv v2 ABI -> no dev headers/import-lib, DLL-agnostic.
+libloading = "0.8"
