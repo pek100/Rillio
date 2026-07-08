@@ -25,7 +25,7 @@ fn media_re() -> &'static Regex {
     RE.get_or_init(|| Regex::new(MEDIA_EXT_RE).expect("media regex"))
 }
 
-fn is_valid_infohash(ih: &str) -> bool {
+pub(crate) fn is_valid_infohash(ih: &str) -> bool {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| Regex::new(INFOHASH_RE).expect("infohash regex"))
         .is_match(ih)
@@ -147,7 +147,7 @@ fn resolve_index(files: &[types::File], body: &CreateMagnetBody) -> Option<i64> 
 /// First file whose name matches any client pattern (server.js:18362-18378).
 /// Patterns that fail to compile are skipped (mirrors "ignore evil regex");
 /// the `regex` crate is linear-time so no timeout is needed (spec §5).
-fn file_must_include(files: &[types::File], patterns: &[String]) -> Option<usize> {
+pub(crate) fn file_must_include(files: &[types::File], patterns: &[String]) -> Option<usize> {
     let compiled: Vec<Regex> = patterns.iter().filter_map(|p| compile_js_pattern(p)).collect();
     files
         .iter()
@@ -175,7 +175,7 @@ fn compile_js_pattern(s: &str) -> Option<Regex> {
 /// GuessFileIdx: largest media file, or largest episode-matching media file
 /// (server.js:62040-62058). M1 ports the media-largest path; series matching
 /// (parseVideoName) is a later refinement that degrades to largest-media.
-fn guess_file_idx(files: &[types::File]) -> i64 {
+pub(crate) fn guess_file_idx(files: &[types::File]) -> i64 {
     let media: Vec<usize> = files
         .iter()
         .enumerate()

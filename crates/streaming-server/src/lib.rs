@@ -8,6 +8,7 @@
 //! `checklists/streaming-server-rust.md`. This is **M0** — the control plane.
 
 mod routes;
+mod stream;
 mod torrent;
 
 pub mod config;
@@ -18,7 +19,7 @@ pub use config::Config;
 pub use engine::Engine;
 
 use axum::extract::FromRef;
-use axum::routing::{get, post};
+use axum::routing::{get, on, post, MethodFilter};
 use axum::Router;
 use tower_http::cors::CorsLayer;
 
@@ -59,11 +60,22 @@ pub fn router(config: Config, engine: Engine) -> Router {
         .route("/heartbeat", get(routes::heartbeat))
         .route("/", get(routes::root))
         .route("/favicon.ico", get(routes::favicon))
-        // M1 torrent engine (create routes; stream + lifecycle land next)
+        // M1 torrent engine
         .route("/create", post(torrent::create_blob).get(torrent::create_blob))
         .route(
             "/{info_hash}/create",
             post(torrent::create_magnet).get(torrent::create_magnet),
+        )
+        // The media stream. GET+HEAD are handled explicitly (HEAD must not open
+        // the FileStream), so we register both methods on one handler rather
+        // than let axum synthesize HEAD from GET.
+        .route(
+            "/{info_hash}/{idx}",
+            on(MethodFilter::GET.or(MethodFilter::HEAD), stream::stream),
+        )
+        .route(
+            "/{info_hash}/{idx}/{*rest}",
+            on(MethodFilter::GET.or(MethodFilter::HEAD), stream::stream_rest),
         )
         .layer(CorsLayer::permissive())
         .with_state(state)
