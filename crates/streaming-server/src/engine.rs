@@ -6,8 +6,29 @@
 
 use std::path::PathBuf;
 use std::sync::Arc;
+use std::time::Duration;
 
-use librqbit::{Session, SessionOptions};
+use anyhow::Context;
+use librqbit::{AddTorrent, ManagedTorrent, Session, SessionOptions};
+
+use crate::types;
+
+/// Handle to one managed torrent. librqbit defines this alias internally but
+/// does not re-export it, so we mirror it.
+pub type Handle = Arc<ManagedTorrent>;
+
+/// How long a create waits for magnet metadata before returning best-effort.
+const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
+
+// opts echo (getStatistics.opts) — from the blob's getDefaults merged with our
+// settings (server.js:46886-46907). Constant here; these mirror the values M0
+// reports in /settings.values.
+const OPT_CONNECTIONS: u64 = 55;
+const OPT_HANDSHAKE_TIMEOUT: u64 = 20_000;
+const OPT_REQUEST_TIMEOUT: u64 = 4_000;
+const OPT_SWARM_MIN_PEERS: u64 = 5;
+const OPT_SWARM_MAX_SPEED: f64 = 2_621_440.0;
+const OPT_GROWLER_PULSE: u64 = 3_670_016;
 
 /// Shared torrent engine handle. Cheap to clone (`Arc` inside).
 #[derive(Clone)]
@@ -36,4 +57,141 @@ impl Engine {
     pub fn session(&self) -> &Arc<Session> {
         &self.session
     }
+
+    /// Add a raw `.torrent` blob (`POST /create`). Metadata is immediate.
+    pub async fn add_blob(&self, bytes: Vec<u8>) -> anyhow::Result<Handle> {
+        let resp = self
+            .session
+            .add_torrent(AddTorrent::from_bytes(bytes), None)
+            .await?;
+        resp.into_handle().context("add_torrent returned list-only")
+    }
+
+    /// Get-or-create a torrent from a magnet URL (`POST /:ih/create`, and the
+    /// idempotent auto-create on stream). Waits, bounded, for magnet metadata so
+    /// files are available for index resolution.
+    pub async fn add_magnet(&self, magnet: &str) -> anyhow::Result<Handle> {
+        let resp = self
+            .session
+            .add_torrent(AddTorrent::from_url(magnet), None)
+            .await?;
+        let handle = resp.into_handle().context("add_torrent returned list-only")?;
+        // Bounded wait: a magnet with no reachable peers must not hang the request.
+        let _ = tokio::time::timeout(METADATA_TIMEOUT, handle.wait_until_initialized()).await;
+        Ok(handle)
+    }
+
+    /// Lowercase hex infohash of a handle.
+    pub fn info_hash_hex(handle: &Handle) -> String {
+        format!("{:?}", handle.info_hash()).to_lowercase()
+    }
+
+    /// The torrent's files as the wire `File` shape. Empty if metadata is not
+    /// yet resolved (magnet still fetching).
+    pub fn files(handle: &Handle) -> Vec<types::File> {
+        handle
+            .with_metadata(|m| {
+                m.file_infos
+                    .iter()
+                    .map(|fi| {
+                        let path = fi.relative_filename.to_string_lossy().replace('\\', "/");
+                        let name = fi
+                            .relative_filename
+                            .file_name()
+                            .map(|n| n.to_string_lossy().into_owned())
+                            .unwrap_or_else(|| path.clone());
+                        types::File {
+                            name,
+                            path,
+                            length: fi.len,
+                            offset: fi.offset_in_torrent,
+                        }
+                    })
+                    .collect()
+            })
+            .unwrap_or_default()
+    }
+
+    /// Build the `getStatistics` object (server.js:18294-18338). `idx`, when a
+    /// valid file index, merges the per-file `stream*` fields. Swarm/peer
+    /// counters are stubbed in M1 and made real in M2.
+    pub fn statistics(
+        &self,
+        handle: &Handle,
+        cache_path: String,
+        peer_search: types::PeerSearch,
+        idx: Option<usize>,
+    ) -> types::Statistics {
+        let files = Self::files(handle);
+        let stats = handle.stats();
+        let (download_speed, upload_speed) = stats
+            .live
+            .as_ref()
+            // Speed.mbps is megabits/s; the blob reports bytes/s (×125_000).
+            .map(|l| {
+                (
+                    l.download_speed.mbps * 125_000.0,
+                    l.upload_speed.mbps * 125_000.0,
+                )
+            })
+            .unwrap_or((0.0, 0.0));
+
+        let (stream_len, stream_name, stream_progress) = match idx {
+            Some(i) => files
+                .get(i)
+                .map(|f| {
+                    let done = stats.file_progress.get(i).copied().unwrap_or(0);
+                    let frac = if f.length > 0 {
+                        done as f64 / f.length as f64
+                    } else {
+                        0.0
+                    };
+                    (f.length, f.name.clone(), frac)
+                })
+                .unwrap_or((0, String::new(), 0.0)),
+            None => (0, String::new(), 0.0),
+        };
+
+        types::Statistics {
+            name: handle.name().unwrap_or_default(),
+            info_hash: Self::info_hash_hex(handle),
+            files,
+            sources: vec![],
+            opts: types::Options {
+                connections: Some(OPT_CONNECTIONS),
+                dht: false,
+                growler: types::Growler {
+                    flood: 0,
+                    pulse: Some(OPT_GROWLER_PULSE),
+                },
+                handshake_timeout: Some(OPT_HANDSHAKE_TIMEOUT),
+                path: cache_path,
+                peer_search,
+                swarm_cap: types::SwarmCap {
+                    max_speed: Some(OPT_SWARM_MAX_SPEED),
+                    min_peers: Some(OPT_SWARM_MIN_PEERS),
+                },
+                timeout: Some(OPT_REQUEST_TIMEOUT),
+                tracker: false,
+                r#virtual: true,
+            },
+            download_speed,
+            upload_speed,
+            downloaded: stats.progress_bytes,
+            uploaded: stats.uploaded_bytes,
+            unchoked: 0,
+            peers: 0,
+            queued: 0,
+            unique: 0,
+            connection_tries: 0,
+            peer_search_running: false,
+            stream_len,
+            stream_name,
+            stream_progress,
+            swarm_connections: 0,
+            swarm_paused: handle.is_paused(),
+            swarm_size: 0,
+        }
+    }
 }
+

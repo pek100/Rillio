@@ -8,24 +8,49 @@
 //! `checklists/streaming-server-rust.md`. This is **M0** — the control plane.
 
 mod routes;
+mod torrent;
 
 pub mod config;
 pub mod engine;
 pub mod types;
 
 pub use config::Config;
+pub use engine::Engine;
 
-use axum::routing::get;
+use axum::extract::FromRef;
+use axum::routing::{get, post};
 use axum::Router;
 use tower_http::cors::CorsLayer;
+
+/// Shared router state. `FromRef` lets control-plane handlers extract
+/// `State<Config>` and torrent handlers extract `State<Engine>` from the same
+/// state without either knowing about the other.
+#[derive(Clone)]
+pub struct AppState {
+    pub config: Config,
+    pub engine: Engine,
+}
+
+impl FromRef<AppState> for Config {
+    fn from_ref(s: &AppState) -> Config {
+        s.config.clone()
+    }
+}
+impl FromRef<AppState> for Engine {
+    fn from_ref(s: &AppState) -> Engine {
+        s.engine.clone()
+    }
+}
 
 /// Build the streaming-server router.
 ///
 /// CORS is permissive (`Access-Control-Allow-Origin: *`) to match the
 /// container's `NO_CORS=1` behavior — safe only because the socket is expected
 /// to bind loopback. Do not bind this to a public interface.
-pub fn router(config: Config) -> Router {
+pub fn router(config: Config, engine: Engine) -> Router {
+    let state = AppState { config, engine };
     Router::new()
+        // M0 control plane
         .route("/settings", get(routes::get_settings).post(routes::post_settings))
         .route("/network-info", get(routes::network_info))
         .route("/device-info", get(routes::device_info))
@@ -34,16 +59,25 @@ pub fn router(config: Config) -> Router {
         .route("/heartbeat", get(routes::heartbeat))
         .route("/", get(routes::root))
         .route("/favicon.ico", get(routes::favicon))
+        // M1 torrent engine (create routes; stream + lifecycle land next)
+        .route("/create", post(torrent::create_blob).get(torrent::create_blob))
+        .route(
+            "/{info_hash}/create",
+            post(torrent::create_magnet).get(torrent::create_magnet),
+        )
         .layer(CorsLayer::permissive())
-        .with_state(config)
+        .with_state(state)
 }
 
-/// Bind `config.bind` and serve until the process is signalled. Used by the
-/// bin and the oracle tests; embedders call [`router`] and drive their own
-/// server instead.
+/// Bind `config.bind` and serve until the process is signalled. Builds the
+/// engine from `config.cache_root`. Embedders build their own [`Engine`],
+/// call [`router`], and drive their own server.
 pub async fn serve(config: Config) -> std::io::Result<()> {
     let bind = config.bind;
-    let app = router(config);
+    let engine = Engine::new(config.cache_root.clone())
+        .await
+        .map_err(|e| std::io::Error::other(e.to_string()))?;
+    let app = router(config, engine);
     let listener = tokio::net::TcpListener::bind(bind).await?;
     tracing::info!(%bind, "streaming server listening");
     axum::serve(listener, app).await

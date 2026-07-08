@@ -16,7 +16,7 @@
 use std::net::SocketAddr;
 
 use serde_json::Value;
-use stremio_streaming_server::{router, Config};
+use stremio_streaming_server::{router, Config, Engine};
 
 const CONTAINER: &str = "http://127.0.0.1:11470";
 
@@ -40,8 +40,10 @@ async fn spawn_rust() -> String {
         .expect("bind ephemeral");
     let addr = listener.local_addr().unwrap();
     let base = format!("http://127.0.0.1:{}", addr.port());
-    let config = Config::local(std::env::temp_dir().join("stremio-oracle-test"));
-    let app = router(config);
+    let dir = std::env::temp_dir().join("stremio-oracle-test");
+    let config = Config::local(dir.clone());
+    let engine = Engine::new(dir).await.expect("engine");
+    let app = router(config, engine);
     tokio::spawn(async move {
         axum::serve(listener, app).await.unwrap();
     });

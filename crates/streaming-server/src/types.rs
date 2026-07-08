@@ -93,3 +93,93 @@ impl Success {
         Self { success: true }
     }
 }
+
+// ---------------------------------------------------------------------------
+// getStatistics (M1 create responses; shared with M2 stats routes).
+// Field names/types mirror crates/core/src/types/streaming_server/statistics.rs
+// EXACTLY — every field is required there (no serde defaults), so an omission
+// makes core's `Option<Statistics>` deserialize to None (silent "no stats").
+// ---------------------------------------------------------------------------
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct File {
+    pub name: String,
+    pub path: String,
+    pub length: u64,
+    pub offset: u64,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Growler {
+    pub flood: u64,
+    pub pulse: Option<u64>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct PeerSearch {
+    pub max: u64,
+    pub min: u64,
+    pub sources: Vec<String>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct SwarmCap {
+    pub max_speed: Option<f64>,
+    pub min_peers: Option<u64>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Options {
+    pub connections: Option<u64>,
+    pub dht: bool,
+    pub growler: Growler,
+    pub handshake_timeout: Option<u64>,
+    pub path: String,
+    pub peer_search: PeerSearch,
+    pub swarm_cap: SwarmCap,
+    pub timeout: Option<u64>,
+    pub tracker: bool,
+    pub r#virtual: bool,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct Statistics {
+    pub name: String,
+    pub info_hash: String,
+    pub files: Vec<File>,
+    pub sources: Vec<serde_json::Value>,
+    pub opts: Options,
+    pub download_speed: f64,
+    pub upload_speed: f64,
+    pub downloaded: u64,
+    pub uploaded: u64,
+    pub unchoked: u64,
+    pub peers: u64,
+    pub queued: u64,
+    pub unique: u64,
+    pub connection_tries: u64,
+    pub peer_search_running: bool,
+    pub stream_len: u64,
+    pub stream_name: String,
+    pub stream_progress: f64,
+    pub swarm_connections: u64,
+    pub swarm_paused: bool,
+    pub swarm_size: u64,
+}
+
+/// Create-route response: the full statistics object plus `guessedFileIdx`,
+/// which video reads (createTorrent.js:68) and is not part of `Statistics`.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateResponse {
+    #[serde(flatten)]
+    pub statistics: Statistics,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub guessed_file_idx: Option<i64>,
+}
