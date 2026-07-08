@@ -10,16 +10,8 @@
     "beforeBuildCommand": "pnpm --filter stremio run build"
   },
   "app": {
-    "windows": [
-      {
-        "label": "main",
-        "title": "Stremio",
-        "width": 1280,
-        "height": 800,
-        "resizable": true,
-        "fullscreen": false
-      }
-    ],
+    "withGlobalTauri": true,
+    "windows": [],
     "security": {
       "csp": null
     }

@@ -23,3 +23,5 @@ serde_json = "1"
 tracing = "0.1"
 # The Rust streaming server, embedded in-process (S1). No container/sidecar.
 stremio-streaming-server = { path = "../../../crates/streaming-server", default-features = false }
+# Open URLs / files in the OS default handler (S2 external-player fallback).
+open = "5"

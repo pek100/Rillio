@@ -20,6 +20,16 @@ const PlatformProvider = ({ children }: Props) => {
     const shell = useShell();
 
     const openExternal = (url: string) => {
+        // Desktop shell (Tauri): open natively in the OS default handler /
+        // external player. The browser safety-warning wrapper below is a
+        // web-only guard; in the trusted shell we hand the URL straight to the OS.
+        const tauri = (globalThis as any).__TAURI__;
+        if (tauri?.core?.invoke) {
+            tauri.core.invoke('open_external', { url })
+                .catch((e: unknown) => console.error('Shell openExternal failed:', e));
+            return;
+        }
+
         try {
             const { hostname } = new URL(url);
             const isWhitelisted = WHITELISTED_HOSTS.some((host: string) =>
