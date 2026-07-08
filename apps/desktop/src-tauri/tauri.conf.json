@@ -1,0 +1,37 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "Stremio",
+  "version": "0.1.0",
+  "identifier": "com.stremio.desktop",
+  "build": {
+    "frontendDist": "../../web/build",
+    "devUrl": "http://localhost:8080",
+    "beforeDevCommand": "pnpm --filter stremio exec webpack serve --mode development --env serverType=http",
+    "beforeBuildCommand": "pnpm --filter stremio run build"
+  },
+  "app": {
+    "windows": [
+      {
+        "label": "main",
+        "title": "Stremio",
+        "width": 1280,
+        "height": 800,
+        "resizable": true,
+        "fullscreen": false
+      }
+    ],
+    "security": {
+      "csp": null
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": "all",
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/128x128@2x.png",
+      "icons/icon.ico"
+    ]
+  }
+}

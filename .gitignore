@@ -29,3 +29,6 @@ Thumbs.db
 
 # Scratch space for the server.js reverse-engineering effort (blob + notes)
 /.research/
+
+# Tauri generated schemas
+/apps/desktop/src-tauri/gen/

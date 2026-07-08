@@ -1,0 +1,22 @@
+# Standalone workspace: native-only (Tauri pulls url >=2.5, like the streaming
+# server), isolated from the root wasm workspace. Build from this directory.
+[workspace]
+
+[package]
+name = "stremio-desktop"
+version = "0.1.0"
+edition = "2021"
+description = "Stremio desktop shell (Tauri) embedding the Rust streaming server"
+license = "gpl-2.0"
+
+[lib]
+name = "stremio_desktop_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
