@@ -37,19 +37,22 @@ Every milestone's ship criterion is an **oracle diff** against `docker/streaming
 
   _Corrections the oracle forced vs the plan: `/device-info` is boolean `false`; `/casting/` 404s under our container config. Both folded in._
 
-## M1 — Torrent engine (librqbit)  ·  ~3-4 weeks  ·  ☐
+## M1 — Torrent engine (librqbit)  ·  ~3-4 weeks  ·  ◐ CODE COMPLETE (streamed-bytes diff pending a peer-reachable network)
 
-- ☐ Pin `librqbit = "=8.1.1"` (stable; avoid 9.0.0-rc). Native-only, never wasm.
-- ☐ Session bootstrap: cache dir from config, DHT/PEX/trackers, no listen port (leech-only)
-- ☐ POST `/create` (hex `.torrent` blob) — **drop both `from` branches** (local-read + http-fetch SSRF)
-- ☐ POST `/:infoHash/create` — magnet/infohash, `peerSearch`, `guessFileIdx`→`guessedFileIdx`
-- ☐ … `fileMustInclude` selector + 500 ms ReDoS guard
-- ☐ GET/HEAD `/:infoHash/:idx` (+`/*`) — **idx union type** (int | -1 | url-encoded filename)
-- ☐ … librqbit `FileStream` (parks until piece verifies; seek re-prioritizes)
-- ☐ … Range: first-range-only, **no 416 (→200)**, open-ended prewarm, `enginefs-prio` header
-- ☐ … `?external`→307, `?download`→disposition, `?subtitles`→DLNA; fixed headers + `sendDLNAHeaders` + `mime.lookup`
-- ☐ GET `/:infoHash/remove`, `/removeAll` → `Session::delete`
-- **Ship:** play a public multi-file torrent end-to-end; seeks re-prioritize; **byte-diff** the streamed file vs container
+- ☑ Pin `librqbit = "=8.1.1"`, own workspace (url 2.5 conflict w/ wasm crates), `default-tls` (NASM avoidance)
+- ☑ Session bootstrap: leech-only (no listen port), DHT on, no persistence, `disable_dht_persistence`
+- ☑ POST `/create` (hex `.torrent` blob) — both `from` branches dropped (local-read + SSRF)
+- ☑ POST `/:infoHash/create` — magnet/infohash, `peerSearch`, `guessFileIdx`→`guessedFileIdx`
+- ☑ … `fileMustInclude` selector (linear-time regex, skip-on-error; no timeout needed)
+- ☑ GET/HEAD `/:infoHash/:idx` (+`/*`) — **idx union** (int | -1 GuessFileIdx | filename | `?f=`)
+- ☑ … librqbit `FileStream` (parks until piece verifies; seek re-prioritizes — native)
+- ☑ … Range: first-range-only, **no 416 (→200)**; `enginefs-prio`/prewarm are documented no-ops
+- ☑ … `?external`→307, `?download`→disposition, `?subtitles`→CaptionInfo; DLNA (byte-exact space bug) + `mime_guess`
+- ☑ GET `/:infoHash/remove`, `/removeAll` → `Session::delete` (delete_files=true — librqbit re-add constraint)
+- **Ship (partial):** metadata/create from real BBB `.torrent`, full Range contract via HEAD, file
+  selection, remove→re-add cycle — all verified. **Streamed torrent BYTES not yet diffed** — this
+  environment blocks P2P (DHT UDP + peer TCP); the container fails identically. Deferred to a network
+  with reachable peers. 17 automated tests pass.
 
 ## M2 — Stats fidelity shim  ·  ~1 week  ·  ☐
 
