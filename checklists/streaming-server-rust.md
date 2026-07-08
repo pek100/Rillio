@@ -111,11 +111,19 @@ Wraps librqbit's filesystem storage via `SessionOptions.default_storage_factory`
 - **Client follow-up (not server):** `packages/video/src/tracksData.js:2` hardcodes `http://127.0.0.1:11470` —
   patch to use the configured streaming-server URL so a non-default host is reachable.
 
-## M4 — Local-addon transport  ·  ~1 week  ·  ☐ (gated on D1)
+## M4 — Local-addon transport  ·  ~1 week  ·  ☑ DONE (indexing deferred)
 
-- ☐ GET `/local-addon/manifest.json`
-- ☐ GET `/local-addon/:resource/:type/:id/:extra?`
-- **Ship:** core resolves the local addon (no `LOCAL_ADDON_NOT_ENABLED`); local catalog lists
+- ☑ GET `/local-addon/manifest.json` — `org.stremio.local` "Local Files (without catalog support)"
+  manifest (default `localAddonEnabled:false` → `manifestNoCatalogs`): catalogs `[]`, resources
+  catalog/meta/stream, prefixes `local:`/`bt:`/`tt`, valid semver `1.10.0`. Satisfies core's `Manifest`.
+- ☑ GET `/local-addon/{resource}/{type}/{*rest}` — valid empty responses (stream `{streams:[]}`,
+  meta `{meta:null}`, catalog `{metas:[]}`, subtitles `{subtitles:[]}`), unknown → 404.
+- ◐ **Full local-file indexing DEFERRED** — scanning the localFiles dir, video-name parsing, and
+  imdb/name-to-imdb matching are the "Enable Local Files" feature (off by default). Resources return
+  empty (no-files-indexed state) until built.
+- **Ship: MET.** core recognizes the addon via the manifest (no `LOCAL_ADDON_NOT_ENABLED` breakage);
+  resource routes serve valid empty responses. 3 tests. **54 total pass. Every route `crates/core`
+  consumes is now covered by Rust.**
 
 ## M5 — Archives  ·  ~2-3 weeks  ·  ☐ (optional)
 

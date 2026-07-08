@@ -7,6 +7,7 @@
 //! Milestone status lives in `docs/streaming-server-rust/` and
 //! `checklists/streaming-server-rust.md`. This is **M0** — the control plane.
 
+mod local_addon;
 mod proxy;
 mod routes;
 mod stats;
@@ -98,6 +99,10 @@ pub fn router(config: Config, engine: Engine) -> Router {
         .route("/subtitlesTracks", get(support::subtitles_tracks))
         .route("/tracks/{url}", get(support::tracks))
         .route("/yt/{id}", get(support::yt))
+        // M4 local-files addon transport (manifest so core recognizes it;
+        // resources return empty — full indexing deferred).
+        .route("/local-addon/manifest.json", get(local_addon::local_manifest))
+        .route("/local-addon/{resource}/{type}/{*rest}", get(local_addon::local_resource))
         // The media stream. GET+HEAD are handled explicitly (HEAD must not open
         // the FileStream), so we register both methods on one handler rather
         // than let axum synthesize HEAD from GET.
