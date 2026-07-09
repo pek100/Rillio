@@ -1,0 +1,6 @@
+# Build output (also holds the ANGLE + d3dcompiler DLLs copied in at runtime —
+# never commit binaries).
+/target
+*.dll
+# Generated test artifact.
+/testcard.png

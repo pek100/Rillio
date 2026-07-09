@@ -1,0 +1,47 @@
+# Standalone spike (own workspace, own Cargo.lock) to de-risk the DComp +
+# WebView2 composition path before touching the real Tauri shell. See
+# memory/compositing-dcomp-plan.md. Build from THIS directory.
+[workspace]
+
+[package]
+name = "dcomp-webview-spike"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+name = "dcomp_webview_spike"
+path = "src/lib.rs"
+
+[[bin]]
+name = "dcomp-spike"
+path = "src/main.rs"
+
+# Stage 2: mpv render API -> ANGLE -> D3D11 texture -> DComp.
+[[bin]]
+name = "stage2"
+path = "src/bin/stage2.rs"
+
+[dependencies]
+# Dynamically load libmpv-2.dll (DLL-agnostic), same as the shipping shell.
+libloading = "0.8"
+# Same major as the shell's tree (windows 0.61.3) so COM types unify with
+# webview2-com-sys 0.38.2 (which pins windows-core 0.61).
+windows = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Direct3D11",
+    "Win32_Graphics_Dxgi",
+    "Win32_Graphics_Dxgi_Common",
+    "Win32_Graphics_DirectComposition",
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_WindowsAndMessaging",
+    "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
+] }
+windows-core = "0.61"
+# WebView2 in composition mode: CreateCoreWebView2CompositionController +
+# ICoreWebView2CompositionController (RootVisualTarget / SendMouseInput).
+webview2-com = "0.38"
