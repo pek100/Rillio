@@ -5,6 +5,7 @@
 //! web client reaches it at http://127.0.0.1:11470 exactly as before.
 
 pub mod mpv;
+mod shell;
 
 use std::sync::Mutex;
 
@@ -36,6 +37,7 @@ pub fn run() {
 
     tauri::Builder::default()
         .manage(MpvState::default())
+        .manage(shell::ShellState::default())
         .setup(|app| {
             start_streaming_server(app.handle());
             let window = build_main_window(app)?;
@@ -48,7 +50,11 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![open_external])
+        .invoke_handler(tauri::generate_handler![
+            open_external,
+            shell::shell_init,
+            shell::shell_send
+        ])
         .run(tauri::generate_context!())
         .expect("error while running the Stremio desktop shell");
 }

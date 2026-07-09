@@ -56,11 +56,27 @@ root.render(
     </React.StrictMode>
 );
 
-if (process.env.NODE_ENV === 'production' && process.env.SERVICE_WORKER_DISABLED !== 'true' && process.env.SERVICE_WORKER_DISABLED !== true && 'serviceWorker' in navigator) {
+const SERVICE_WORKER_DISABLED = process.env.SERVICE_WORKER_DISABLED === 'true' || process.env.SERVICE_WORKER_DISABLED === true;
+
+if (process.env.NODE_ENV === 'production' && !SERVICE_WORKER_DISABLED && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {
         navigator.serviceWorker.register('service-worker.js')
             .catch((registrationError) => {
                 console.error('SW registration failed: ', registrationError);
             });
     });
+} else if ('serviceWorker' in navigator) {
+    // Self-heal when the service worker is disabled (e.g. the desktop shell,
+    // where assets are embedded and always fresh): tear down any previously
+    // installed worker + precache. Without this a stale cache-first SW keeps
+    // serving an old bundle across rebuilds — the commit-hash asset folder is
+    // stable, so the SW never sees a new URL to fetch.
+    navigator.serviceWorker.getRegistrations()
+        .then((registrations) => registrations.forEach((registration) => registration.unregister()))
+        .catch(() => { /* noop */ });
+    if (typeof caches !== 'undefined' && caches.keys) {
+        caches.keys()
+            .then((keys) => Promise.all(keys.map((key) => caches.delete(key))))
+            .catch(() => { /* noop */ });
+    }
 }

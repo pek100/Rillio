@@ -5,6 +5,14 @@ const IPC = globalThis?.chrome?.webview;
 const LEGACY_IPC = globalThis?.qt?.webChannelTransport;
 if (LEGACY_IPC) LEGACY_IPC.onmessage = () => { /* empty */ };
 
+// Desktop shell (Tauri): when running inside the native shell we carry the
+// ShellVideo IPC over Tauri's invoke/event bridge instead of chrome.webview.
+// The native side (apps/desktop src/shell.rs) drives libmpv, so playback is
+// fully native (HEVC/HDR/10-bit) and the stream is fetched by mpv directly —
+// no WebView codec gate, no CORS/Private-Network preflight.
+const TAURI = (globalThis as any)?.__TAURI__;
+const USE_TAURI = !!TAURI?.core?.invoke;
+
 const events = new EventEmitter();
 
 enum ShellEventType {
@@ -49,6 +57,12 @@ const useShell = (): Shell => {
     const off = (name: string, listener: (arg: any) => void) => events.off(name, listener);
 
     const send = (method: string, ...args: (string | number | object)[]) => {
+        if (USE_TAURI) {
+            TAURI.core.invoke('shell_send', { method, args })
+                .catch((e: unknown) => console.error('Shell', 'shell_send failed', method, e));
+            return;
+        }
+
         try {
             IPC?.postMessage(JSON.stringify({
                 id: 0,
@@ -84,7 +98,34 @@ const useShell = (): Shell => {
         };
     }, []);
 
+    // Tauri desktop shell: inbound signals arrive as the `shell-signal` event,
+    // and the one-shot `shell_init` reports version + capabilities. Each signal
+    // is `{ event, payload }` where `event` is the method name ShellVideo waits
+    // for (`mpv-prop-change` / `mpv-event-ended`) and `payload` its argument.
     useEffect(() => {
+        if (!USE_TAURI) return;
+
+        let unlisten: (() => void) | undefined;
+        let cancelled = false;
+
+        TAURI.event.listen('shell-signal', (event: { payload: { event: string; payload: any } }) => {
+            const { event: name, payload } = event.payload;
+            events.emit(name, payload);
+        }).then((un: () => void) => {
+            if (cancelled) un(); else unlisten = un;
+        }).catch((e: unknown) => console.error('Shell', 'listen failed', e));
+
+        TAURI.core.invoke('shell_init').then((res: { version: string; gpuVideoProcessing: boolean; ok: boolean }) => {
+            setState((state) => ({ ...state, initialized: res.ok, version: res.version }));
+            setCapabilities({ gpuVideoProcessing: !!res.gpuVideoProcessing });
+        }).catch((e: unknown) => console.error('Shell', 'shell_init failed', e));
+
+        return () => { cancelled = true; if (unlisten) unlisten(); };
+    }, []);
+
+    useEffect(() => {
+        if (USE_TAURI) return;
+
         const onMessage = (message: ShellMessage) => {
             try {
                 const event = JSON.parse(message.data) as ShellEvent;
@@ -123,7 +164,7 @@ const useShell = (): Shell => {
     }, []);
 
     return {
-        active: !!IPC,
+        active: USE_TAURI || !!IPC,
         send,
         on,
         off,
