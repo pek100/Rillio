@@ -18,8 +18,14 @@ use crate::types;
 /// does not re-export it, so we mirror it.
 pub type Handle = Arc<ManagedTorrent>;
 
-/// How long a create waits for magnet metadata before returning best-effort.
-const METADATA_TIMEOUT: Duration = Duration::from_secs(30);
+/// How long a stream/create waits for a torrent to become streamable before
+/// giving up. This must exceed librqbit's initial full-file checksum pass, which
+/// for a large title (tens of GiB) can run ~a minute on a fresh add — the
+/// torrent stays `Initializing` (not streamable) that whole time. Too short a
+/// wait 500s the stream open mid-validation. (Removing that delay entirely is a
+/// follow-up: a lazy response body that returns headers immediately and blocks
+/// only the body until the torrent goes live.)
+const METADATA_TIMEOUT: Duration = Duration::from_secs(180);
 
 /// Default public trackers injected into every torrent, mirroring the blob
 /// (server.js:71921 / getDefaults). Without these, DHT is the only peer source
@@ -49,6 +55,17 @@ const DEFAULT_TRACKERS: &[&str] = &[
 fn add_torrent_options() -> librqbit::AddTorrentOptions {
     librqbit::AddTorrentOptions {
         trackers: Some(DEFAULT_TRACKERS.iter().map(|s| s.to_string()).collect()),
+        // Reuse existing cache files instead of failing on them. With
+        // allow_overwrite=false librqbit's fs storage opens files with
+        // `create_new` (fs.rs), so re-adding a torrent whose files already exist
+        // — the normal "close the app, reopen, replay the same title" flow, and
+        // any add after a partial download — fails init ("file is None" / "error
+        // creating a new file") and the stream 500s. `overwrite: true` opens
+        // existing files with truncate(false): the initial checksum pass
+        // validates what's on disk and playback RESUMES. Safe under our sandbox —
+        // ConfinedStorage still confines every path before init runs, so this
+        // only ever reuses files already under the cache root.
+        overwrite: true,
         ..Default::default()
     }
 }
@@ -89,7 +106,11 @@ impl Engine {
             // None => no inbound TCP listener is bound => leech-only.
             listen_port_range: None,
             enable_upnp_port_forwarding: false,
-            // Do not persist added-torrent state across restarts.
+            // No session persistence: librqbit 8.1.1 only supports persistence
+            // with its built-in FilesystemStorageFactory, which is incompatible
+            // with our ConfinedStorage sandbox (a core security requirement).
+            // The restart-then-replay re-add is instead made safe by
+            // `overwrite: true` in add_torrent_options (reuse existing files).
             persistence: None,
             // Confine every torrent's writes to the cache (M1.5).
             default_storage_factory: Some(confined),
@@ -124,6 +145,23 @@ impl Engine {
         // Bounded wait: a magnet with no reachable peers must not hang the request.
         let _ = tokio::time::timeout(METADATA_TIMEOUT, handle.wait_until_initialized()).await;
         Ok(handle)
+    }
+
+    /// Get-or-create by infohash for the stream route. Crucially, if the torrent
+    /// is already managed it returns the LIVE handle without re-adding: the media
+    /// player opens many connections per title (header read, mkv-index seek,
+    /// read-ahead), and calling `add_torrent` again on a live torrent resets it
+    /// to the `initializing` state (`overwrite: true` re-runs storage init),
+    /// which makes the concurrent stream reads fail with "invalid state:
+    /// initializing" and playback abort. Only a genuinely new infohash adds.
+    pub async fn get_or_create(&self, info_hash: &str) -> anyhow::Result<Handle> {
+        if let Some(handle) = self.get(info_hash) {
+            // Already managed: make sure metadata is ready, but never re-add.
+            let _ = tokio::time::timeout(METADATA_TIMEOUT, handle.wait_until_initialized()).await;
+            return Ok(handle);
+        }
+        let magnet = format!("magnet:?xt=urn:btih:{info_hash}");
+        self.add_magnet(&magnet).await
     }
 
     /// Lowercase hex infohash of a handle.

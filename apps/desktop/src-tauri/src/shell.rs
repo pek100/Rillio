@@ -98,12 +98,21 @@ impl Controller {
             ("osc", "no"), // the web UI is our on-screen controls
             ("input-default-bindings", "no"),
             ("input-vo-keyboard", "no"),
+            // Be patient with the loopback stream: on a fresh large title the
+            // server holds the response while librqbit runs its initial checksum
+            // pass (can be ~a minute). Default network-timeout (60s) could abort
+            // the open; give generous headroom.
+            ("network-timeout", "600"),
         ] {
             if let Err(e) = mpv.set_option(name, value) {
                 tracing::warn!("mpv: option {name}={value} not applied: {e}");
             }
         }
         mpv.initialize()?;
+        // Stream mpv's own log so we can see vo/decoder/cache diagnostics.
+        if let Err(e) = mpv.request_log_messages("v") {
+            tracing::warn!("mpv: request_log_messages failed: {e}");
+        }
         Ok(Self { mpv: Arc::new(mpv), observed: Mutex::new(HashSet::new()) })
     }
 }
@@ -116,7 +125,14 @@ fn spawn_event_loop(mpv: Arc<Mpv>, app: AppHandle) {
         .spawn(move || loop {
             match mpv.wait_event(-1.0) {
                 MpvEvent::Shutdown => break,
+                MpvEvent::LogMessage { prefix, level, text } => {
+                    tracing::debug!("mpv[{level}] {prefix}: {text}");
+                }
                 MpvEvent::PropertyChange { name, value } => {
+                    // High-signal, low-noise props at debug (skip the per-frame ones).
+                    if !matches!(name.as_str(), "time-pos" | "demuxer-cache-time") {
+                        tracing::debug!("mpv prop {name} = {value}");
+                    }
                     emit(
                         &app,
                         "mpv-prop-change",
@@ -124,6 +140,7 @@ fn spawn_event_loop(mpv: Arc<Mpv>, app: AppHandle) {
                     );
                 }
                 MpvEvent::EndFile { reason, error } => {
+                    tracing::debug!("mpv end-file: reason={reason} error={error}");
                     // mpv_end_file_reason: 0 eof, 2 stop, 3 quit, 4 error, 5 redirect.
                     let reason_str = match reason {
                         0 => "eof",
@@ -188,6 +205,7 @@ pub fn shell_send(
             let list = arg0.as_array().ok_or("mpv-command: expected an array")?;
             let strs: Vec<String> = list.iter().map(json_to_mpv_str).collect();
             let refs: Vec<&str> = strs.iter().map(String::as_str).collect();
+            tracing::debug!("mpv command {refs:?}");
             ctrl.mpv.command(&refs)
         }
         "mpv-set-prop" => {
@@ -197,7 +215,13 @@ pub fn shell_send(
                 .and_then(Value::as_str)
                 .ok_or("mpv-set-prop: missing property name")?;
             let value = json_to_mpv_str(list.get(1).unwrap_or(&Value::Null));
-            ctrl.mpv.set_property(name, &value)
+            tracing::debug!("mpv set-prop {name} = {value}");
+            if let Err(e) = ctrl.mpv.set_property(name, &value) {
+                // A minimal build may reject a prop (e.g. vo=gpu-next); log but
+                // don't fail the whole load sequence.
+                tracing::warn!("mpv set-prop {name}={value} failed: {e}");
+            }
+            Ok(())
         }
         "mpv-observe-prop" => {
             let name = arg0.as_str().ok_or("mpv-observe-prop: expected a name")?;

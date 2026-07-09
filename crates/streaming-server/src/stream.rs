@@ -82,18 +82,24 @@ async fn handle_stream(
     let info_hash = info_hash.to_lowercase();
     let flags = parse_flags(&query);
 
-    // Idempotent get-or-create; needs metadata for file resolution.
-    let magnet = format!("magnet:?xt=urn:btih:{info_hash}");
-    let handle = match engine.add_magnet(&magnet).await {
+    // Idempotent get-or-create; needs metadata for file resolution. Reuses the
+    // live handle if already managed (never re-adds — that would reset a playing
+    // torrent to `initializing` and 500 concurrent reads).
+    let handle = match engine.get_or_create(&info_hash).await {
         Ok(h) => h,
-        Err(_) => return err500(),
+        Err(e) => {
+            tracing::error!("stream {info_hash}: get_or_create failed: {e:#}");
+            return err500();
+        }
     };
     let files = Engine::files(&handle);
     if files.is_empty() {
+        tracing::error!("stream {info_hash}: metadata not resolved (no files)");
         return err500(); // metadata never resolved
     }
 
     let Some(i) = resolve_index(&files, &idx, &flags) else {
+        tracing::error!("stream {info_hash}: index {idx} did not resolve");
         return err500(); // invalid index/filename → 500, never 404 (blob parity)
     };
     let file = &files[i];
@@ -148,7 +154,10 @@ async fn handle_stream(
 
     let body = match open_body(&handle, i, start, content_len).await {
         Ok(b) => b,
-        Err(_) => return err500(),
+        Err(e) => {
+            tracing::error!("stream {info_hash}: open_body failed: {e:#}");
+            return err500();
+        }
     };
     (status, resp_headers, body).into_response()
 }

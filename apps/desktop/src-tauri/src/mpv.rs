@@ -28,6 +28,9 @@ type MpvObserveProperty = unsafe extern "C" fn(*mut c_void, u64, *const c_char, 
 // mpv_wait_event(handle, timeout_s) — block for the next event on this handle.
 // The returned pointer is owned by mpv and valid until the next wait_event.
 type MpvWaitEvent = unsafe extern "C" fn(*mut c_void, f64) -> *mut MpvEventRaw;
+// mpv_request_log_messages(handle, min_level) — stream mpv's own log at
+// `min_level` ("info", "v", "debug", …) as LOG_MESSAGE events.
+type MpvRequestLogMessages = unsafe extern "C" fn(*mut c_void, *const c_char) -> c_int;
 
 // mpv_format values (mpv/client.h). We observe every property as NODE so the
 // event carries a self-describing value we can map straight to JSON.
@@ -41,6 +44,7 @@ const MPV_FORMAT_NODE_MAP: c_int = 8;
 
 // mpv_event_id values we care about.
 const MPV_EVENT_SHUTDOWN: c_int = 1;
+const MPV_EVENT_LOG_MESSAGE: c_int = 2;
 const MPV_EVENT_END_FILE: c_int = 7;
 const MPV_EVENT_PROPERTY_CHANGE: c_int = 22;
 
@@ -77,6 +81,15 @@ struct MpvEventEndFile {
     error: c_int,
 }
 
+/// `mpv_event_log_message` — payload of a LOG_MESSAGE event.
+#[repr(C)]
+struct MpvEventLogMessage {
+    prefix: *const c_char,
+    level: *const c_char,
+    text: *const c_char,
+    log_level: c_int,
+}
+
 /// `mpv_event` — the fixed header every event shares.
 #[repr(C)]
 struct MpvEventRaw {
@@ -92,6 +105,8 @@ pub enum MpvEvent {
     PropertyChange { name: String, value: serde_json::Value },
     /// Playback of the current file ended. `reason`/`error` are mpv's raw codes.
     EndFile { reason: c_int, error: c_int },
+    /// A line from mpv's own log (diagnostics): `prefix`, `level`, `text`.
+    LogMessage { prefix: String, level: String, text: String },
     /// mpv is shutting down; the event loop should stop.
     Shutdown,
     /// Anything we don't translate (timeouts, reconfig, replies, …).
@@ -109,6 +124,7 @@ struct Api {
     error_string: MpvErrorString,
     observe_property: MpvObserveProperty,
     wait_event: MpvWaitEvent,
+    request_log_messages: MpvRequestLogMessages,
 }
 
 /// A loaded mpv instance. `Drop` destroys it. Not `Sync`; drive it from one
@@ -152,6 +168,7 @@ impl Mpv {
                 error_string: sym!("mpv_error_string", MpvErrorString),
                 observe_property: sym!("mpv_observe_property", MpvObserveProperty),
                 wait_event: sym!("mpv_wait_event", MpvWaitEvent),
+                request_log_messages: sym!("mpv_request_log_messages", MpvRequestLogMessages),
             };
             let ctx = (api.create)();
             if ctx.is_null() {
@@ -199,6 +216,13 @@ impl Mpv {
         self.check(unsafe { (self.api.observe_property)(self.ctx, 0, n.as_ptr(), MPV_FORMAT_NODE) })
     }
 
+    /// Ask mpv to stream its own log at `min_level` ("info", "v", "debug", …)
+    /// as LOG_MESSAGE events. Diagnostics only.
+    pub fn request_log_messages(&self, min_level: &str) -> Result<(), String> {
+        let l = cstr(min_level)?;
+        self.check(unsafe { (self.api.request_log_messages)(self.ctx, l.as_ptr()) })
+    }
+
     /// Block up to `timeout` seconds (negative = forever) for the next event and
     /// translate it. Call this from a single dedicated thread; other threads may
     /// concurrently issue commands/property sets on the same handle.
@@ -210,6 +234,17 @@ impl Mpv {
             }
             match (*ev).event_id {
                 MPV_EVENT_SHUTDOWN => MpvEvent::Shutdown,
+                MPV_EVENT_LOG_MESSAGE => {
+                    let m = (*ev).data as *const MpvEventLogMessage;
+                    if m.is_null() {
+                        return MpvEvent::Other;
+                    }
+                    MpvEvent::LogMessage {
+                        prefix: cstr_to_string((*m).prefix),
+                        level: cstr_to_string((*m).level),
+                        text: cstr_to_string((*m).text).trim_end().to_string(),
+                    }
+                }
                 MPV_EVENT_END_FILE => {
                     let ef = (*ev).data as *const MpvEventEndFile;
                     if ef.is_null() {
