@@ -151,6 +151,12 @@ const Player = () => {
     const playbackSpeed = React.useRef(video.state.playbackSpeed || 1);
     const pressTimer = React.useRef(null);
     const longPress = React.useRef(false);
+    // Intended paused state, so two fast clicks (a double-click) toggle
+    // deterministically without racing React's re-render. See onVideoClick.
+    const intendedPaused = React.useRef(null);
+    // Timestamp of the previous video click, for custom double-click detection.
+    // The native dblclick uses the ~500ms OS window, which feels far too long.
+    const lastVideoClickTime = React.useRef(0);
     const controlBarRef = React.useRef(null);
 
     const HOLD_DELAY = 400;
@@ -208,13 +214,10 @@ const Player = () => {
         setSeeking(false);
     }, []);
 
-    const onPlayRequestedDebounced = React.useCallback(debounce(onPlayRequested, 200), []);
-
     const onPauseRequested = React.useCallback(() => {
         video.setPaused(true);
     }, []);
 
-    const onPauseRequestedDebounced = React.useCallback(debounce(onPauseRequested, 200), []);
     const onMuteRequested = React.useCallback(() => {
         video.setMuted(true);
     }, []);
@@ -271,21 +274,48 @@ const Player = () => {
         }
     }, [player.nextVideo, handleNextVideoNavigation, profile.settings]);
 
-    const onVideoClick = React.useCallback(() => {
-        if (video.state.paused !== null && !longPress.current) {
-            if (video.state.paused) {
-                onPlayRequestedDebounced();
-            } else {
-                onPauseRequestedDebounced();
-            }
+    // Keep the intent ref in sync when paused changes from anywhere else
+    // (keyboard, ended, load, mpv).
+    React.useEffect(() => {
+        if (video.state.paused !== null) {
+            intendedPaused.current = video.state.paused;
         }
-    }, [video.state.paused, longPress.current]);
+    }, [video.state.paused]);
 
-    const onVideoDoubleClick = React.useCallback(() => {
-        onPlayRequestedDebounced.cancel();
-        onPauseRequestedDebounced.cancel();
-        toggleFullscreen();
-    }, [toggleFullscreen]);
+    const onVideoClick = React.useCallback(() => {
+        if (video.state.paused === null || longPress.current) {
+            return;
+        }
+        const DOUBLE_CLICK_MS = 200;
+        const current = intendedPaused.current !== null ? intendedPaused.current : video.state.paused;
+        const now = Date.now();
+        if (now - lastVideoClickTime.current < DOUBLE_CLICK_MS) {
+            // Second click inside the window -> double-click: undo the pause
+            // toggle the first click just did, and go fullscreen instead. Custom
+            // 200ms window because the native dblclick's ~500ms OS window is too
+            // long for a player. Net result: play state unchanged + fullscreen.
+            lastVideoClickTime.current = 0;
+            const reverted = !current; // state before the first click
+            intendedPaused.current = reverted;
+            if (reverted) {
+                onPauseRequested();
+            } else {
+                onPlayRequested();
+            }
+            toggleFullscreen();
+            return;
+        }
+        lastVideoClickTime.current = now;
+        // Single click: toggle immediately for instant feedback (no debounce).
+        // Driven off the ref so two fast clicks can't race React's re-render.
+        const nextPaused = !current;
+        intendedPaused.current = nextPaused;
+        if (nextPaused) {
+            onPauseRequested();
+        } else {
+            onPlayRequested();
+        }
+    }, [video.state.paused, onPlayRequested, onPauseRequested, toggleFullscreen]);
 
     const onContainerMouseDown = React.useCallback((event) => {
         if (!event.nativeEvent.optionsMenuClosePrevented) {
@@ -791,8 +821,6 @@ const Player = () => {
     React.useLayoutEffect(() => {
         return () => {
             setImmersedDebounced.cancel();
-            onPlayRequestedDebounced.cancel();
-            onPauseRequestedDebounced.cancel();
         };
     }, []);
 
@@ -806,7 +834,6 @@ const Player = () => {
                 ref={video.containerRef}
                 className={styles['layer']}
                 onClick={onVideoClick}
-                onDoubleClick={onVideoDoubleClick}
             />
             {
                 !video.state.loaded ?

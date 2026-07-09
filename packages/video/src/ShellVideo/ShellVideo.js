@@ -305,6 +305,13 @@ function ShellVideo(options) {
             case 'paused': {
                 if (stream !== null) {
                     ipc.send('mpv-set-prop', ['pause', propValue]);
+                    // Reflect the new state immediately instead of waiting for the
+                    // mpv -> IPC round-trip (like volume/muted/videoScale below do).
+                    // Otherwise the play/pause icon and the controls auto-hide
+                    // (which keys off `paused`) lag ~200-300ms behind the click.
+                    // mpv re-emits the observed `pause` prop, so this self-corrects.
+                    props.pause = propValue;
+                    onPropChanged('paused');
                 }
 
                 break;
