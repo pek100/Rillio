@@ -101,6 +101,17 @@ impl ShellState {
         let wid = main_window_wid(app);
         let ctrl = Arc::new(Controller::create(wid)?);
         spawn_event_loop(ctrl.clone(), app.clone());
+        // With force-window, mpv's (black) output window exists from startup; push
+        // it behind the WebView as soon as it appears so it never covers the UI.
+        if wid.is_some() {
+            let app = app.clone();
+            std::thread::spawn(move || {
+                for _ in 0..30 {
+                    std::thread::sleep(Duration::from_millis(50));
+                    composite_behind_webview(&app);
+                }
+            });
+        }
         *guard = Some(ctrl.clone());
         tracing::info!("shell: native mpv player ready (wid={wid:?})");
         Ok(ctrl)
@@ -149,9 +160,14 @@ impl Controller {
         // Best-effort: a minimal libmpv build may lack some of these options
         // (e.g. `osc` needs the Lua OSC). A missing option must not sink the
         // whole player, so we log and continue rather than abort init.
+        // When embedded (wid set), keep a black output window alive from startup
+        // so the transparent WebView reveals BLACK during the buffering gap (before
+        // the first frame) instead of the desktop behind the app. Composited to the
+        // back immediately (see ensure) so it never covers the UI.
+        let force_window = if wid.is_some() { "yes" } else { "no" };
         for (name, value) in [
             ("idle", "yes"),
-            ("force-window", "no"),
+            ("force-window", force_window),
             ("config", "no"), // ignore any on-machine mpv.conf
             ("terminal", "no"),
             ("osc", "no"), // the web UI is our on-screen controls
