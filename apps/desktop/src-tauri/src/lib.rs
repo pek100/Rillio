@@ -24,6 +24,29 @@ pub(crate) fn mpv_embed_enabled() -> bool {
     !matches!(std::env::var("STREMIO_EMBED_MPV").as_deref(), Ok("0") | Ok("false"))
 }
 
+/// Chromium/WebView2 command-line switches for the main window.
+///
+/// Setting `additional_browser_args` REPLACES wry's defaults, so we re-include
+/// them, then turn on DNS-over-HTTPS so the web UI's hostname lookups (addons,
+/// image/subtitle CDNs, the update server) are encrypted instead of going out as
+/// plaintext DNS. `secure` mode = DoH only, no plaintext fallback. Override the
+/// resolver with `STREMIO_DOH_TEMPLATE=<url>`, or disable with `=off` (e.g. if a
+/// network blocks the DoH endpoint and breaks resolution). NOTE: DoH does not
+/// hide your IP from torrent peers (that needs a VPN/proxy) — see
+/// memory/compositing-dcomp-plan sibling notes.
+fn browser_args() -> String {
+    let base = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+    match std::env::var("STREMIO_DOH_TEMPLATE") {
+        Ok(v) if v == "0" || v.eq_ignore_ascii_case("off") => base.to_string(),
+        Ok(v) if !v.trim().is_empty() => {
+            format!("{base} --dns-over-https-mode=secure --dns-over-https-templates={}", v.trim())
+        }
+        _ => format!(
+            "{base} --dns-over-https-mode=secure --dns-over-https-templates=https://cloudflare-dns.com/dns-query"
+        ),
+    }
+}
+
 /// Open a URL or file path in the OS default handler / native app (S2).
 ///
 /// This is the desktop implementation of the web client's
@@ -118,11 +141,19 @@ fn build_main_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
     // `wid` renders to an invisible surface. Until that's solved properly, the
     // default is a non-transparent window + mpv in its own output window (which
     // works). See mpv_embed_enabled().
-    tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
+    // STREMIO_START_URL overrides the initial page (debug hook — e.g. point it at
+    // a DoH check page to verify DNS encryption is active).
+    let start_url = std::env::var("STREMIO_START_URL")
+        .ok()
+        .and_then(|u| tauri::Url::parse(&u).ok())
+        .map(tauri::WebviewUrl::External)
+        .unwrap_or_default();
+    tauri::WebviewWindowBuilder::new(app, "main", start_url)
         .title("Stremio")
         .inner_size(1280.0, 800.0)
         .resizable(true)
         .transparent(mpv_embed_enabled())
+        .additional_browser_args(&browser_args())
         .on_navigation(|url| {
             match url.scheme() {
                 "http" | "https" | "tauri" | "data" | "blob" | "about" => true,
