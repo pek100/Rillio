@@ -123,9 +123,7 @@ pub fn router(config: Config, engine: Engine) -> Router {
 /// call [`router`], and drive their own server.
 pub async fn serve(config: Config) -> std::io::Result<()> {
     let bind = config.bind;
-    // Enforce the reported cacheSize as a hard cache quota (M1.5).
-    let quota = config.cache_size.map(|s| s as u64);
-    let engine = Engine::with_quota(config.cache_root.clone(), quota)
+    let engine = Engine::new(config.cache_root.clone())
         .await
         .map_err(|e| std::io::Error::other(e.to_string()))?;
     let app = router(config, engine);

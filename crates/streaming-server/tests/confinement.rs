@@ -27,52 +27,40 @@ fn make_torrent(name: &str, length: u64) -> Vec<u8> {
     torrent
 }
 
-async fn engine(tag: &str, quota: Option<u64>) -> Engine {
+async fn engine(tag: &str) -> Engine {
     let dir = std::env::temp_dir().join(format!("stremio-confine-{tag}"));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    Engine::with_quota(dir, quota).await.unwrap()
-}
-
-#[tokio::test]
-async fn oversized_torrent_is_refused_by_quota() {
-    // 2 GiB declared file, 1 MiB cache cap.
-    let engine = engine("quota-over", Some(1_000_000)).await;
-    let torrent = make_torrent("big.mkv", 2_000_000_000);
-    let result = engine.add_blob(torrent).await;
-    assert!(
-        result.is_err(),
-        "a 2GB torrent must be refused under a 1MB quota"
-    );
-}
-
-#[tokio::test]
-async fn within_quota_torrent_is_accepted() {
-    // 500 KiB declared file, 1 MiB cap → allowed.
-    let engine = engine("quota-under", Some(1_000_000)).await;
-    let torrent = make_torrent("small.mkv", 500_000);
-    let result = engine.add_blob(torrent).await;
-    assert!(result.is_ok(), "a 500KB torrent fits a 1MB quota");
+    Engine::new(dir).await.unwrap()
 }
 
 #[tokio::test]
 async fn traversal_path_torrent_is_rejected() {
     // A name carrying a separator/traversal is rejected (librqbit-core at parse;
     // ConfinedStorage would independently reject the resolved path too).
-    let engine = engine("traversal", None).await;
+    let engine = engine("traversal").await;
     let torrent = make_torrent("../../Startup/evil.exe", 1000);
     let result = engine.add_blob(torrent).await;
     assert!(result.is_err(), "a traversal path must never be added");
 }
 
 #[tokio::test]
-async fn unlimited_quota_does_not_reject_on_size() {
-    // With no quota the size gate never fires. (Kept disk-safe: a huge declared
-    // length would fail on librqbit's file pre-allocation, not on our check.)
-    let engine = engine("nolimit", None).await;
-    let torrent = make_torrent("normal.mkv", 500_000);
-    let result = engine.add_blob(torrent).await;
-    assert!(result.is_ok(), "no quota → size gate never rejects");
+async fn large_torrent_not_rejected_by_size_quota() {
+    // Regression for the size-quota bug: a movie far larger than the cache (a
+    // 9 GB HDR film under a 2 GB cache) was rejected with "exceeds cache quota",
+    // which broke basically every movie. A streaming server plays a window, not
+    // the whole file, so there is no size gate. We assert the add is NOT refused
+    // for a size/quota reason. (A degenerate synthetic single-8GB-piece torrent
+    // may still error inside librqbit's own file handling; that is not our gate.)
+    let engine = engine("large").await;
+    let torrent = make_torrent("movie-8gb.mkv", 8_000_000_000);
+    if let Err(e) = engine.add_blob(torrent).await {
+        let msg = e.to_string();
+        assert!(
+            !msg.contains("quota") && !msg.contains("exceeds"),
+            "add must not be refused by a size quota, got: {msg}"
+        );
+    }
 }
 
 // Confidence check that the router still builds with the confined engine.
@@ -83,6 +71,6 @@ async fn router_builds_with_confined_engine() {
         .unwrap();
     let dir = std::env::temp_dir().join("stremio-confine-router");
     let _ = std::fs::create_dir_all(&dir);
-    let engine = Engine::with_quota(dir.clone(), Some(2_147_483_648)).await.unwrap();
+    let engine = Engine::new(dir.clone()).await.unwrap();
     let _app = router(Config::local(dir), engine);
 }

@@ -33,16 +33,13 @@ pub struct ConfinedStorageFactory {
     inner: BoxStorageFactory,
     /// Absolute, lexically-normalized cache root. All writes must stay under it.
     cache_root: PathBuf,
-    /// Total-bytes cap. `None` = unlimited.
-    quota_bytes: Option<u64>,
 }
 
 impl ConfinedStorageFactory {
-    pub fn new(cache_root: &Path, quota_bytes: Option<u64>) -> anyhow::Result<Self> {
+    pub fn new(cache_root: &Path) -> anyhow::Result<Self> {
         Ok(Self {
             inner: FilesystemStorageFactory::default().boxed(),
             cache_root: absolutize(cache_root)?,
-            quota_bytes,
         })
     }
 
@@ -57,20 +54,18 @@ impl ConfinedStorageFactory {
     /// is the session default (= `cache_root`) and its fs storage writes to
     /// `output_folder.join(relative_filename)`. So the true path of file i is
     /// `cache_root.join(relative_filename[i])`.
+    ///
+    /// NOTE: there is deliberately NO total-size cap. A streaming server plays a
+    /// window of a torrent; rejecting a torrent because its nominal size exceeds
+    /// the cache would break most movies (a 9 GB film under a 2 GB cache). Disk
+    /// use is bounded by what is actually streamed; a rolling-cache eviction
+    /// policy is a future refinement, not a per-torrent size gate.
     fn validate(&self, metadata: &TorrentMetadata) -> anyhow::Result<Vec<PathBuf>> {
-        let mut total: u64 = 0;
-        let mut paths = Vec::with_capacity(metadata.file_infos.len());
-        for fi in metadata.file_infos.iter() {
-            paths.push(confined_path(&self.cache_root, &fi.relative_filename)?);
-            total = total.saturating_add(fi.len);
-        }
-
-        if let Some(cap) = self.quota_bytes {
-            if total > cap {
-                bail!("torrent size {total} exceeds cache quota {cap}");
-            }
-        }
-        Ok(paths)
+        metadata
+            .file_infos
+            .iter()
+            .map(|fi| confined_path(&self.cache_root, &fi.relative_filename))
+            .collect()
     }
 }
 
@@ -82,8 +77,8 @@ impl StorageFactory for ConfinedStorageFactory {
         shared: &ManagedTorrentShared,
         metadata: &TorrentMetadata,
     ) -> anyhow::Result<Self::Storage> {
-        // Confinement + quota are enforced HERE, before any file is opened. A
-        // rejection fails the torrent add (blob/magnet create returns 500).
+        // Path confinement is enforced HERE, before any file is opened. A
+        // rejection fails the torrent add.
         let file_paths = self.validate(metadata)?;
         let inner = self.inner.create(shared, metadata)?;
         Ok(Box::new(ConfinedStorage { inner, file_paths }))
@@ -93,7 +88,6 @@ impl StorageFactory for ConfinedStorageFactory {
         Box::new(Self {
             inner: self.inner.clone_box(),
             cache_root: self.cache_root.clone(),
-            quota_bytes: self.quota_bytes,
         })
     }
 }
@@ -242,11 +236,4 @@ mod tests {
         assert!(confined_path(&root(), Path::new(r"..\..\evil")).is_err());
     }
 
-    #[test]
-    fn quota_math() {
-        // Direct check of the cap comparison used in validate().
-        let cap = 1_000u64;
-        assert!(1_001u64 > cap, "over cap rejected");
-        assert!(999u64 <= cap, "under cap allowed");
-    }
 }

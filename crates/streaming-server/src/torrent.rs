@@ -108,7 +108,10 @@ pub(crate) async fn create_magnet(
     let magnet = build_magnet(&info_hash, body.peer_search.as_ref());
     let handle = match engine.add_magnet(&magnet).await {
         Ok(h) => h,
-        Err(_) => return err500(),
+        Err(e) => {
+            tracing::error!("add_magnet failed: {e:#}");
+            return err500();
+        }
     };
 
     let files = Engine::files(&handle);

@@ -70,19 +70,15 @@ pub struct Engine {
 }
 
 impl Engine {
-    /// Bootstrap the session rooted at `cache_dir`, unlimited cache. librqbit
-    /// lays out per-torrent subfolders beneath it.
-    pub async fn new(cache_dir: PathBuf) -> anyhow::Result<Self> {
-        Self::with_quota(cache_dir, None).await
-    }
-
-    /// Bootstrap with an optional total-bytes cache quota (M1.5).
+    /// Bootstrap the session rooted at `cache_dir`. librqbit lays out per-torrent
+    /// subfolders beneath it.
     ///
-    /// All torrent storage goes through [`ConfinedStorageFactory`]: every file
-    /// is confined under `cache_dir`, created non-executable, and the total is
-    /// capped at `quota_bytes`.
-    pub async fn with_quota(cache_dir: PathBuf, quota_bytes: Option<u64>) -> anyhow::Result<Self> {
-        let confined = ConfinedStorageFactory::new(&cache_dir, quota_bytes)?.boxed();
+    /// All torrent storage goes through [`ConfinedStorageFactory`]: every file is
+    /// confined under `cache_dir` (path-traversal guard) and created
+    /// non-executable. There is no per-torrent size cap — a streaming server
+    /// plays a window of a torrent regardless of its total size.
+    pub async fn new(cache_dir: PathBuf) -> anyhow::Result<Self> {
+        let confined = ConfinedStorageFactory::new(&cache_dir)?.boxed();
         let opts = SessionOptions {
             // DHT on: with trackers off it is the only peer source for a magnet.
             disable_dht: false,
