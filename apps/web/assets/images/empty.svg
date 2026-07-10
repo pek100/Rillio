@@ -17,7 +17,4 @@
 
   <!-- a hint of a ridge down the trunk -->
   <path d="M100 158V90" stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="2" stroke-linecap="round"/>
-
-  <!-- the one accent: a bloom resting on the tip -->
-  <circle cx="100" cy="60" r="6.5" fill="#FFA033"/>
 </svg>
