@@ -123,18 +123,6 @@
   .cta-row { display: flex; gap: 0.9rem; justify-content: center; flex-wrap: wrap; }
   .cta-note { margin-top: 1.25rem; font-size: 0.9rem; color: var(--fg-3); }
 
-  .frame {
-    margin: 4.5rem auto 0; max-width: 60rem;
-    border: 1px solid var(--edge); border-radius: var(--radius-lg); overflow: hidden;
-    background: var(--surface-1); box-shadow: var(--elev-4);
-  }
-  .frame-bar { display: flex; gap: 0.5rem; padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--edge); }
-  .frame-bar i { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: rgba(255,255,255,0.13); }
-  .frame-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(7rem, 1fr)); gap: 0.75rem; padding: 1.25rem; }
-  .poster { aspect-ratio: 2/3; border-radius: 0.5rem; background: linear-gradient(160deg, #16202b, #0b121a); border: 1px solid var(--edge); position: relative; }
-  .poster::after { content: ""; position: absolute; left: 0.6rem; right: 0.6rem; bottom: 0.6rem; height: 0.35rem; border-radius: var(--pill); background: rgba(255,255,255,0.10); }
-  .poster.hot::after { background: linear-gradient(90deg, var(--accent), var(--accent-2)); width: 55%; right: auto; }
-
   section { padding: var(--sy) 0; }
   .section-head { text-align: center; max-width: 42rem; margin: 0 auto 3rem; }
   .section-head h2 { font-size: clamp(1.9rem, 4vw, 2.7rem); font-weight: 900; margin-bottom: 1rem; }
@@ -241,16 +229,6 @@
       </a>
     </div>
     <p class="cta-note reveal" style="transition-delay:0.28s">No account required. Windows today, macOS and Linux coming.</p>
-
-    <div class="frame reveal" style="transition-delay:0.34s" aria-hidden="true">
-      <div class="frame-bar"><i></i><i></i><i></i></div>
-      <div class="frame-body">
-        <div class="poster hot"></div><div class="poster"></div><div class="poster"></div>
-        <div class="poster"></div><div class="poster hot"></div><div class="poster"></div>
-        <div class="poster"></div><div class="poster"></div><div class="poster hot"></div>
-        <div class="poster"></div><div class="poster"></div><div class="poster"></div>
-      </div>
-    </div>
   </section>
 
   <section id="features">
