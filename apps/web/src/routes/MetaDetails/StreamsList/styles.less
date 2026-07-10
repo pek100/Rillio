@@ -141,12 +141,14 @@
         flex: 1 1 auto;
         align-self: stretch;
         margin-top: 1rem;
-        padding: 0 1rem;
-        overflow-y: auto;
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(24rem, 1fr));
+        gap: 0.75rem;
     }
 
     .install-button-container {
         flex: none;
+        grid-column: 1 / -1;
         align-self: stretch;
         display: flex;
         flex-direction: row;

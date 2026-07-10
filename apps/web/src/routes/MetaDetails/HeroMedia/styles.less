@@ -1,0 +1,30 @@
+// Copyright (C) 2017-2026 Smart code 203358507
+
+.hero-media {
+    flex: none;
+    position: relative;
+    width: 100%;
+    aspect-ratio: 16 / 9;
+    border-radius: var(--radius-card);
+    overflow: hidden;
+    background-color: var(--color-surface);
+    box-shadow: var(--outer-glow);
+
+    .trailer,
+    .still,
+    .still-empty {
+        display: block;
+        width: 100%;
+        height: 100%;
+        border: none;
+    }
+
+    .still {
+        object-fit: cover;
+        object-position: center;
+    }
+
+    .still-empty {
+        background-color: var(--color-surface);
+    }
+}

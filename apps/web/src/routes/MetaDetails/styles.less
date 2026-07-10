@@ -17,6 +17,8 @@
     padding-right: var(--safe-area-inset-right);
     box-sizing: border-box;
 
+    // Full-bleed backdrop, fixed behind everything (the transparent nav bar
+    // included), fading down into the page background so the hero sits on it.
     .background-image-layer {
         position: fixed;
         top: 0;
@@ -24,16 +26,23 @@
         bottom: 0;
         left: 0;
         z-index: -1;
-        background-color: var(--modal-background-color);
+        background-color: var(--color-bg);
 
         .background-image {
-            pointer-events: none; 
+            pointer-events: none;
             display: block;
             width: 100%;
             height: 100%;
             object-fit: cover;
-            object-position: right;
-            opacity: 0.3;
+            object-position: center top;
+            opacity: 0.2;
+        }
+
+        &::after {
+            content: '';
+            position: absolute;
+            inset: 0;
+            background: linear-gradient(to bottom, rgba(2, 4, 7, 0.35) 0%, rgba(2, 4, 7, 0.82) 55%, var(--color-bg) 100%);
         }
     }
 
@@ -50,62 +59,81 @@
         z-index: 0;
         display: flex;
         flex-direction: row;
-        margin-top: calc(var(--top-overlay-size) * -1);
-        padding-top: var(--top-overlay-size);
-        padding-bottom: var(--safe-area-inset-bottom, 0rem);
+        min-height: 0;
+
         .vertical-nav-bar {
             flex: none;
         }
 
-        .meta-message-container {
+        // The vertical scroll column holding the hero + the streams/videos.
+        .main-column {
+            flex: 1;
+            min-width: 0;
             align-self: stretch;
+            overflow-y: auto;
             display: flex;
             flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            padding: 2rem;
-            width: 100%;
-            height: 100%;
+            padding: 0 2rem 2.5rem;
+            padding-left: max(2rem, calc(2rem - var(--safe-area-inset-left)));
+        }
+    }
 
-            .image {
-                flex: none;
-                width: 12rem;
-                height: 12rem;
-                max-width: 100%;
-                margin-bottom: 1rem;
-                object-fit: contain;
-                object-position: center;
-                opacity: 0.9;
-            }
+    .meta-message-container {
+        flex: 1;
+        align-self: stretch;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        padding: 2rem;
 
-            .message-label {
-                flex: none;
-                align-self: stretch;
-                font-size: 2rem;
-                text-align: center;
-                color: var(--primary-foreground-color);
-            }
+        .image {
+            flex: none;
+            width: 12rem;
+            height: 12rem;
+            max-width: 100%;
+            margin-bottom: 1rem;
+            object-fit: contain;
+            object-position: center;
+            opacity: 0.9;
+        }
+
+        .message-label {
+            flex: none;
+            align-self: stretch;
+            font-size: 2rem;
+            text-align: center;
+            color: var(--color-fg);
+        }
+    }
+
+    // HERO — media (autoplay-muted trailer / backdrop) beside the meta info.
+    .hero {
+        flex: none;
+        align-self: stretch;
+        display: flex;
+        flex-direction: row;
+        align-items: flex-start;
+        gap: 2.5rem;
+        padding: 1.5rem 0 2.5rem;
+
+        .hero-media {
+            flex: 0 0 clamp(22rem, 46%, 44rem);
         }
 
         .meta-preview {
-            flex: 0 1 auto;
+            flex: 1 1 0;
+            min-width: 0;
             align-self: stretch;
-            padding: 0 4rem 2rem 4rem;
-
-            padding-left: max(1rem, calc(4rem - var(--safe-area-inset-left)));
         }
+    }
 
-        .spacing {
-            flex: 1;
-        }
-
-        .videos-list, .streams-list {
-            flex: 0 0 30rem;
-            align-self: stretch;
-            border-radius: var(--border-radius) 0 0 var(--border-radius);
-            background-color: rgba(0, 0, 0, 0.4);
-            backdrop-filter: blur(15px);
-        }
+    // Streams / videos now span the full width beneath the hero and let the
+    // page scroll vertically (no more cramped 30rem side panel).
+    .streams-list,
+    .videos-list {
+        flex: none;
+        align-self: stretch;
     }
 }
 
@@ -125,11 +153,17 @@
     }
 }
 
-@media @phone-landscape {
+// Stack the hero (media on top, info below) once side-by-side gets cramped.
+@media (max-width: 60rem) {
     .metadetails-container {
-        .metadetails-content {
-            .meta-preview {
-                padding: 0 1.5rem 1rem;
+        .hero {
+            flex-direction: column;
+            gap: 1.5rem;
+
+            .hero-media {
+                flex: none;
+                width: 100%;
+                max-width: 40rem;
             }
         }
     }
@@ -144,21 +178,13 @@
         }
 
         .metadetails-content {
-            display: block;
-            overflow-y: auto;
-            padding-top: calc(var(--top-overlay-size) + var(--safe-area-inset-top));
-
-            .spacing {
-                display: none;
+            .main-column {
+                padding: 0 1rem 1.5rem;
             }
+        }
 
-            .meta-preview {
-                padding: 0 1.5rem 2rem;
-            }
-
-            .videos-list, .streams-list {
-                border-radius: var(--border-radius) var(--border-radius) 0 0;
-            }
+        .hero {
+            padding: 1rem 0 1.5rem;
         }
     }
 }

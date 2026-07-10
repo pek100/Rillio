@@ -11,6 +11,7 @@ const { useNavigateWithOrigin } = require('rillio-router');
 const { VerticalNavBar, HorizontalNavBar, DelayedRenderer, Image, MetaPreview, ModalDialog } = require('rillio/components');
 const StreamsList = require('./StreamsList');
 const VideosList = require('./VideosList');
+const { default: HeroMedia } = require('./HeroMedia');
 const useMetaDetails = require('./useMetaDetails');
 const useSeason = require('./useSeason');
 const useMetaExtensionTabs = require('./useMetaExtensionTabs');
@@ -123,6 +124,10 @@ const MetaDetails = () => {
         metaDetails.metaItem.content.content.background.length > 0
     ), [metaPath, metaDetails]);
     const originPath = React.useMemo(() => getStoredOrigin(), [getStoredOrigin]);
+    const trailerYtId = React.useMemo(() => {
+        const ts = metaDetails.metaItem?.content?.content?.trailerStreams;
+        return Array.isArray(ts) && ts.length > 0 && typeof ts[0].ytId === 'string' && ts[0].ytId.length > 0 ? ts[0].ytId : null;
+    }, [metaDetails.metaItem]);
 
     useContentGamepadNavigation(contentRef, GAMEPAD_HANDLER_ID);
     return (
@@ -158,79 +163,87 @@ const MetaDetails = () => {
                         :
                         null
                 }
-                {
-                    metaPath === null ?
-                        <DelayedRenderer delay={500}>
-                            <div className={styles['meta-message-container']}>
-                                <Image className={styles['image']} src={require('/assets/images/empty.svg')} alt={' '} />
-                                <div className={styles['message-label']}>{t('ERR_NO_META_SELECTED')}</div>
-                            </div>
-                        </DelayedRenderer>
-                        :
-                        metaDetails.metaItem === null ?
-                            <div className={styles['meta-message-container']}>
-                                <Image className={styles['image']} src={require('/assets/images/empty.svg')} alt={' '} />
-                                <div className={styles['message-label']}>{t('ERR_NO_ADDONS_FOR_META')}</div>
-                            </div>
-                            :
-                            metaDetails.metaItem.content.type === 'Err' ?
+                <div className={styles['main-column']}>
+                    {
+                        metaPath === null ?
+                            <DelayedRenderer delay={500}>
                                 <div className={styles['meta-message-container']}>
                                     <Image className={styles['image']} src={require('/assets/images/empty.svg')} alt={' '} />
-                                    <div className={styles['message-label']}>{t('ERR_NO_META_FOUND')}</div>
+                                    <div className={styles['message-label']}>{t('ERR_NO_META_SELECTED')}</div>
+                                </div>
+                            </DelayedRenderer>
+                            :
+                            metaDetails.metaItem === null ?
+                                <div className={styles['meta-message-container']}>
+                                    <Image className={styles['image']} src={require('/assets/images/empty.svg')} alt={' '} />
+                                    <div className={styles['message-label']}>{t('ERR_NO_ADDONS_FOR_META')}</div>
                                 </div>
                                 :
-                                metaDetails.metaItem.content.type === 'Loading' ?
-                                    <MetaPreview.Placeholder className={styles['meta-preview']} />
+                                metaDetails.metaItem.content.type === 'Err' ?
+                                    <div className={styles['meta-message-container']}>
+                                        <Image className={styles['image']} src={require('/assets/images/empty.svg')} alt={' '} />
+                                        <div className={styles['message-label']}>{t('ERR_NO_META_FOUND')}</div>
+                                    </div>
                                     :
-                                    <React.Fragment>
-                                        <MetaPreview
-                                            className={classnames(styles['meta-preview'], 'animation-fade-in')}
-                                            name={metaDetails.metaItem.content.content.name}
-                                            logo={metaDetails.metaItem.content.content.logo}
-                                            runtime={metaDetails.metaItem.content.content.runtime}
-                                            releaseInfo={metaDetails.metaItem.content.content.releaseInfo}
-                                            released={metaDetails.metaItem.content.content.released}
-                                            description={
-                                                video !== null && typeof video.overview === 'string' && video.overview.length > 0 ?
-                                                    video.overview
-                                                    :
-                                                    metaDetails.metaItem.content.content.description
-                                            }
-                                            links={metaDetails.metaItem.content.content.links}
-                                            trailerStreams={metaDetails.metaItem.content.content.trailerStreams}
-                                            inLibrary={metaDetails.metaItem.content.content.inLibrary}
-                                            toggleInLibrary={metaDetails.metaItem.content.content.inLibrary ? removeFromLibrary : addToLibrary}
-                                            watched={metaDetails.metaItem.content.content.watched}
-                                            toggleWatched={toggleWatched}
-                                            metaId={metaDetails.metaItem.content.content.id}
-                                            ratingInfo={metaDetails.ratingInfo}
-                                        />
-                                    </React.Fragment>
-                }
-                <div className={styles['spacing']} />
-                {
-                    streamPath !== null ?
-                        <StreamsList
-                            className={styles['streams-list']}
-                            streams={metaDetails.streams}
-                            video={video}
-                            type={streamPath.type}
-                            onEpisodeSearch={handleEpisodeSearch}
-                        />
-                        :
-                        metaPath !== null ?
-                            <VideosList
-                                className={styles['videos-list']}
-                                metaItem={metaDetails.metaItem}
-                                libraryItem={metaDetails.libraryItem}
-                                season={season}
-                                selectedVideoId={metaDetails.libraryItem?.state?.video_id}
-                                seasonOnSelect={seasonOnSelect}
-                                toggleNotifications={toggleNotifications}
+                                    metaDetails.metaItem.content.type === 'Loading' ?
+                                        <MetaPreview.Placeholder className={styles['meta-preview']} />
+                                        :
+                                        <div className={classnames(styles['hero'], 'animation-fade-in')}>
+                                            <HeroMedia
+                                                className={styles['hero-media']}
+                                                ytId={trailerYtId}
+                                                background={metaDetails.metaItem.content.content.background}
+                                                poster={metaDetails.metaItem.content.content.poster}
+                                                name={metaDetails.metaItem.content.content.name}
+                                            />
+                                            <MetaPreview
+                                                className={styles['meta-preview']}
+                                                name={metaDetails.metaItem.content.content.name}
+                                                logo={metaDetails.metaItem.content.content.logo}
+                                                runtime={metaDetails.metaItem.content.content.runtime}
+                                                releaseInfo={metaDetails.metaItem.content.content.releaseInfo}
+                                                released={metaDetails.metaItem.content.content.released}
+                                                description={
+                                                    video !== null && typeof video.overview === 'string' && video.overview.length > 0 ?
+                                                        video.overview
+                                                        :
+                                                        metaDetails.metaItem.content.content.description
+                                                }
+                                                links={metaDetails.metaItem.content.content.links}
+                                                trailerStreams={metaDetails.metaItem.content.content.trailerStreams}
+                                                inLibrary={metaDetails.metaItem.content.content.inLibrary}
+                                                toggleInLibrary={metaDetails.metaItem.content.content.inLibrary ? removeFromLibrary : addToLibrary}
+                                                watched={metaDetails.metaItem.content.content.watched}
+                                                toggleWatched={toggleWatched}
+                                                metaId={metaDetails.metaItem.content.content.id}
+                                                ratingInfo={metaDetails.ratingInfo}
+                                            />
+                                        </div>
+                    }
+                    {
+                        streamPath !== null ?
+                            <StreamsList
+                                className={styles['streams-list']}
+                                streams={metaDetails.streams}
+                                video={video}
+                                type={streamPath.type}
+                                onEpisodeSearch={handleEpisodeSearch}
                             />
                             :
-                            null
-                }
+                            metaPath !== null ?
+                                <VideosList
+                                    className={styles['videos-list']}
+                                    metaItem={metaDetails.metaItem}
+                                    libraryItem={metaDetails.libraryItem}
+                                    season={season}
+                                    selectedVideoId={metaDetails.libraryItem?.state?.video_id}
+                                    seasonOnSelect={seasonOnSelect}
+                                    toggleNotifications={toggleNotifications}
+                                />
+                                :
+                                null
+                    }
+                </div>
             </div>
             {
                 metaExtension !== null ?
