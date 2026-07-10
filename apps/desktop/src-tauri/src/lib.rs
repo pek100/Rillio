@@ -68,7 +68,6 @@ pub fn run() {
         .try_init();
 
     tauri::Builder::default()
-        .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(MpvState::default())
         .manage(shell::ShellState::default())
@@ -87,6 +86,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             open_external,
+            install_update,
             shell::shell_init,
             shell::shell_send,
             shell::shell_mpv_stats
@@ -173,13 +173,14 @@ fn build_main_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
 }
 
 /// On launch, ask GitHub Releases (see `plugins.updater.endpoints` in
-/// tauri.conf.json) whether a newer signed build exists. If so, prompt the user
-/// natively and, on confirmation, download + verify (minisign) + install +
-/// relaunch. Fails quietly: no release yet / offline / an unconfigured signing
-/// key all just log at debug and leave the running app untouched — the check is
-/// never allowed to crash startup.
+/// tauri.conf.json) whether a newer signed build exists. If so, emit
+/// `update-available` with the version so the web UI can surface a toast (see
+/// apps/web ServicesToaster); the user installs it from there via
+/// [`install_update`]. Runs on every startup, so the toast reappears until the
+/// update is taken. Fails quietly: no release yet / offline / an unconfigured
+/// signing key all just log at debug and leave the running app untouched.
 fn spawn_update_check(app: tauri::AppHandle) {
-    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+    use tauri::Emitter;
     use tauri_plugin_updater::UpdaterExt;
 
     tauri::async_runtime::spawn(async move {
@@ -192,45 +193,39 @@ fn spawn_update_check(app: tauri::AppHandle) {
             }
         };
 
-        let update = match updater.check().await {
-            Ok(Some(update)) => update,
-            Ok(None) => {
-                tracing::debug!("rillio is up to date");
-                return;
+        match updater.check().await {
+            Ok(Some(update)) => {
+                tracing::info!("update {} available", update.version);
+                let _ = app.emit("update-available", update.version.clone());
             }
-            Err(e) => {
-                tracing::debug!("update check failed: {e}");
-                return;
-            }
-        };
-
-        let version = update.version.clone();
-        let accepted = app
-            .dialog()
-            .message(format!(
-                "Rillio {version} is available. Install it now? Rillio will restart to finish."
-            ))
-            .title("Update available")
-            .kind(MessageDialogKind::Info)
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                "Install & restart".to_string(),
-                "Later".to_string(),
-            ))
-            .blocking_show();
-
-        if !accepted {
-            tracing::debug!("user postponed update {version}");
-            return;
-        }
-
-        match update.download_and_install(|_, _| {}, || {}).await {
-            Ok(()) => {
-                tracing::info!("update {version} installed; restarting");
-                app.restart();
-            }
-            Err(e) => tracing::error!("update {version} install failed: {e}"),
+            Ok(None) => tracing::debug!("rillio is up to date"),
+            Err(e) => tracing::debug!("update check failed: {e}"),
         }
     });
+}
+
+/// Download, verify (minisign) and install the pending update, then relaunch.
+/// Invoked from the web UI's update toast. Re-checks so it never installs a
+/// stale handle.
+#[tauri::command]
+async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri_plugin_updater::UpdaterExt;
+
+    let update = app
+        .updater()
+        .map_err(|e| e.to_string())?
+        .check()
+        .await
+        .map_err(|e| e.to_string())?
+        .ok_or_else(|| "no update available".to_string())?;
+
+    update
+        .download_and_install(|_, _| {}, || {})
+        .await
+        .map_err(|e| e.to_string())?;
+
+    // Diverges (never returns), so the Ok arm below is unreachable.
+    app.restart()
 }
 
 /// Spawn the embedded streaming server on Tauri's async (tokio) runtime. It

@@ -45,7 +45,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
           cache: pnpm
 
       - uses: dtolnay/rust-toolchain@stable
@@ -98,6 +98,20 @@ jobs:
           projectPath: apps/desktop/src-tauri
           tagName: ${{ github.ref_name }}
           releaseName: 'Rillio ${{ github.ref_name }}'
-          releaseBody: 'Download the installer for your platform below. Existing installs update automatically.'
+          releaseBody: 'Download the installer below. Existing installs update automatically.'
           releaseDraft: true
           prerelease: false
+
+      # Also publish the installer under a version-stable name so the website's
+      # download button can link straight to the file via
+      # releases/latest/download/Rillio-Setup.exe (works once the draft above is
+      # published).
+      - name: Publish stable-named installer
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $exe = Get-ChildItem apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe -ErrorAction SilentlyContinue | Select-Object -First 1
+          if (-not $exe) { throw "no NSIS installer produced" }
+          Copy-Item $exe.FullName Rillio-Setup.exe
+          gh release upload ${{ github.ref_name }} Rillio-Setup.exe --clobber --repo ${{ github.repository }}

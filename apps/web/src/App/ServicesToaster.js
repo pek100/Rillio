@@ -72,6 +72,33 @@ const ServicesToaster = () => {
             filedrop.off('*', onFileDrop);
         };
     }, []);
+
+    // Desktop self-updater: the native shell checks GitHub Releases on every
+    // launch and emits `update-available` with the version. Surface it as a
+    // clickable toast (click installs + restarts). Reappears each startup until
+    // the update is taken. No-op outside the Tauri shell.
+    React.useEffect(() => {
+        const TAURI = globalThis?.__TAURI__;
+        if (!TAURI?.event?.listen || !TAURI?.core?.invoke) return;
+        let unlisten;
+        let cancelled = false;
+        TAURI.event.listen('update-available', (event) => {
+            const version = typeof event?.payload === 'string' ? event.payload : null;
+            toast.show({
+                type: 'info',
+                title: version ? `Rillio ${version} is available` : 'An update is available',
+                message: 'Click to install and restart',
+                timeout: 60000,
+                onSelect: () => {
+                    TAURI.core.invoke('install_update').catch((e) => {
+                        toast.show({ type: 'error', title: 'Update failed', message: String(e), timeout: 5000 });
+                    });
+                },
+            });
+        }).then((un) => { if (cancelled) un(); else unlisten = un; }).catch(() => { /* not in shell */ });
+        return () => { cancelled = true; if (typeof unlisten === 'function') unlisten(); };
+    }, []);
+
     return null;
 };
 
