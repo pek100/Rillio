@@ -15,12 +15,11 @@ use serde::{de::Error, Deserialize, Deserializer, Serialize};
 use serde_with::{serde_as, DefaultOnNull, VecSkipError};
 use url::{form_urlencoded, Url};
 
-use stremio_serde_hex::{SerHex, Strict};
-
 use crate::{
     constants::{BASE64, URI_COMPONENT_ENCODE_SET, YOUTUBE_ADDON_ID_PREFIX},
     types::{
         resource::Subtitles,
+        strict_hex,
         streaming_server::{ArchiveStreamBody, ArchiveStreamOptions, FtpStreamBody},
         streams::StreamSourceTrait,
         torrent::InfoHash,
@@ -804,7 +803,7 @@ pub enum StreamSource {
     },
     #[serde(rename_all = "camelCase")]
     Torrent {
-        #[serde(with = "SerHex::<Strict>")]
+        #[serde(with = "strict_hex")]
         info_hash: [u8; 20],
         #[serde(default)]
         file_idx: Option<u16>,

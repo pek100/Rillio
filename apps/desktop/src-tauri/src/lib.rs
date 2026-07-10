@@ -68,11 +68,14 @@ pub fn run() {
         .try_init();
 
     tauri::Builder::default()
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(MpvState::default())
         .manage(shell::ShellState::default())
         .setup(|app| {
             start_streaming_server(app.handle());
             let window = build_main_window(app)?;
+            spawn_update_check(app.handle().clone());
             // S3 part-2 render proof: STREMIO_MPV_TEST=<url|"test"> embeds mpv in
             // the window and plays it. "test" = a generated color pattern.
             if let Ok(src) = std::env::var("STREMIO_MPV_TEST") {
@@ -167,6 +170,67 @@ fn build_main_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
             }
         })
         .build()
+}
+
+/// On launch, ask GitHub Releases (see `plugins.updater.endpoints` in
+/// tauri.conf.json) whether a newer signed build exists. If so, prompt the user
+/// natively and, on confirmation, download + verify (minisign) + install +
+/// relaunch. Fails quietly: no release yet / offline / an unconfigured signing
+/// key all just log at debug and leave the running app untouched — the check is
+/// never allowed to crash startup.
+fn spawn_update_check(app: tauri::AppHandle) {
+    use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+    use tauri_plugin_updater::UpdaterExt;
+
+    tauri::async_runtime::spawn(async move {
+        let updater = match app.updater() {
+            Ok(updater) => updater,
+            // A missing/invalid pubkey surfaces here as Err, not a panic.
+            Err(e) => {
+                tracing::debug!("updater unavailable: {e}");
+                return;
+            }
+        };
+
+        let update = match updater.check().await {
+            Ok(Some(update)) => update,
+            Ok(None) => {
+                tracing::debug!("rillio is up to date");
+                return;
+            }
+            Err(e) => {
+                tracing::debug!("update check failed: {e}");
+                return;
+            }
+        };
+
+        let version = update.version.clone();
+        let accepted = app
+            .dialog()
+            .message(format!(
+                "Rillio {version} is available. Install it now? Rillio will restart to finish."
+            ))
+            .title("Update available")
+            .kind(MessageDialogKind::Info)
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                "Install & restart".to_string(),
+                "Later".to_string(),
+            ))
+            .blocking_show();
+
+        if !accepted {
+            tracing::debug!("user postponed update {version}");
+            return;
+        }
+
+        match update.download_and_install(|_, _| {}, || {}).await {
+            Ok(()) => {
+                tracing::info!("update {version} installed; restarting");
+                app.restart();
+            }
+            Err(e) => tracing::error!("update {version} install failed: {e}"),
+        }
+    });
 }
 
 /// Spawn the embedded streaming server on Tauri's async (tokio) runtime. It

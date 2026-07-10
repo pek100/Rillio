@@ -39,12 +39,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "86fdf8605db99b54d3cd748a44c6d04df638eb5dafb219b135d0149bd0db01f6"
 
 [[package]]
-name = "array-init"
-version = "2.1.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3d62b7694a562cdf5a74227903507c56ab2cc8bdd1f781ed5cb4cf9c9f810bfc"
-
-[[package]]
 name = "assert_matches"
 version = "1.5.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -896,7 +890,6 @@ dependencies = [
  "sha1",
  "sha2",
  "stremio-official-addons",
- "stremio-serde-hex",
  "strum",
  "thiserror",
  "tokio",
@@ -1154,12 +1147,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "smallvec"
-version = "1.15.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8917285742e9f3e1683f0a9c4e6b57960b7314d0b08d30d1ecd426713ee2eee9"
-
-[[package]]
 name = "stremio-official-addons"
 version = "2.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1167,17 +1154,6 @@ checksum = "f3aea8b91737b34bf40f8d1ac3d977d98d38b5121415d5dfdf297da48d66401b"
 dependencies = [
  "deflate-macro",
  "flate2",
-]
-
-[[package]]
-name = "stremio-serde-hex"
-version = "0.1.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "51cd84ea7e099ea99f749dfb4b189bd415f01d7ac372a2f6a5e1972c369aa35d"
-dependencies = [
- "array-init",
- "serde",
- "smallvec",
 ]
 
 [[package]]

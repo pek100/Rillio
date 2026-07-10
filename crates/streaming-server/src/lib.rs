@@ -71,6 +71,12 @@ pub fn router(config: Config, engine: Engine) -> Router {
     Router::new()
         // M0 control plane
         .route("/settings", get(routes::get_settings).post(routes::post_settings))
+        // Rillio-specific torrent prefs (the "faster downloads" toggle). Kept off
+        // the Stremio-schema /settings so its oracle diff stays clean.
+        .route(
+            "/torrent-settings",
+            get(routes::get_torrent_settings).post(routes::post_torrent_settings),
+        )
         .route("/network-info", get(routes::network_info))
         .route("/device-info", get(routes::device_info))
         .route("/casting", get(routes::casting))

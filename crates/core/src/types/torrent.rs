@@ -2,7 +2,8 @@ use core::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
-use stremio_serde_hex::{SerHex, Strict};
+
+use crate::types::strict_hex;
 
 ///
 /// # Examples
@@ -17,7 +18,7 @@ use stremio_serde_hex::{SerHex, Strict};
 /// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(transparent)]
-pub struct InfoHash(#[serde(with = "SerHex::<Strict>")] [u8; 20]);
+pub struct InfoHash(#[serde(with = "strict_hex")] [u8; 20]);
 
 impl InfoHash {
     pub fn new(info_hash: [u8; 20]) -> Self {

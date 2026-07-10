@@ -4,8 +4,8 @@
 
 # wasm-pack output + generated bridge artifacts (crates/core-web)
 /crates/core-web/wasm_build/
-/crates/core-web/stremio_core_web_bg.wasm
-/crates/core-web/stremio_core_web.js
+/crates/core-web/rillio_core_web_bg.wasm
+/crates/core-web/rillio_core_web.js
 /crates/core-web/bridge.js
 /crates/core-web/worker.js
 

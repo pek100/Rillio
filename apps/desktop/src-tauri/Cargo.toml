@@ -18,6 +18,11 @@ tauri-build = { version = "2", features = [] }
 
 [dependencies]
 tauri = { version = "2", features = [] }
+# Self-update: check GitHub Releases for a newer signed build, download + verify
+# (minisign) + install. `dialog` gives a native "update available?" prompt so the
+# check drives entirely from Rust (no coupling into the shared web UI).
+tauri-plugin-updater = "2"
+tauri-plugin-dialog = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"

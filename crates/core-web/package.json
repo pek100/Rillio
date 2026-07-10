@@ -3,7 +3,7 @@
     "version": "0.59.0",
     "description": "Bridge between rillio-core and the Rillio web app",
     "author": "Smart Code OOD",
-    "main": "stremio_core_web.js",
+    "main": "rillio_core_web.js",
     "license": "MIT",
     "repository": {
         "type": "git",

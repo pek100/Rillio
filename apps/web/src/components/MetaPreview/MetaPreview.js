@@ -102,18 +102,30 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
     const renderLogoFallback = React.useCallback(() => (
         <div className={styles['logo-placeholder']}>{name}</div>
     ), [name]);
-    const metaItemActions = React.useMemo(() => [
-        {
-            icon: inLibrary ? 'remove-from-library' : 'add-to-library',
-            label: inLibrary ? t('REMOVE_FROM_LIB') : t('ADD_TO_LIB'),
-            onClick: typeof toggleInLibrary === 'function' ? toggleInLibrary : null,
-        },
-        {
-            icon: watched ? 'eye-off' : 'eye',
-            label: watched ? t('CTX_MARK_UNWATCHED') : t('CTX_MARK_WATCHED'),
-            onClick: typeof toggleWatched === 'function' ? toggleWatched : undefined,
-        },
-    ], [inLibrary, watched, toggleInLibrary, toggleWatched]);
+    const metaItemActions = React.useMemo(() => {
+        const actions = [
+            {
+                icon: inLibrary ? 'remove-from-library' : 'add-to-library',
+                label: inLibrary ? t('REMOVE_FROM_LIB') : t('ADD_TO_LIB'),
+                onClick: typeof toggleInLibrary === 'function' ? toggleInLibrary : null,
+            },
+            {
+                icon: watched ? 'eye-off' : 'eye',
+                label: watched ? t('CTX_MARK_UNWATCHED') : t('CTX_MARK_WATCHED'),
+                onClick: typeof toggleWatched === 'function' ? toggleWatched : undefined,
+            },
+        ];
+        // Share lives in the same group as library/watched so every action reads
+        // as one uniform pill, rather than a lone circular button beside them.
+        if (linksGroups.has(CONSTANTS.SHARE_LINK_CATEGORY)) {
+            actions.push({
+                icon: 'share',
+                label: t('CTX_SHARE'),
+                onClick: openShareModal,
+            });
+        }
+        return actions;
+    }, [inLibrary, watched, toggleInLibrary, toggleWatched, linksGroups, openShareModal, t]);
     return (
         <div className={classnames(className, styles['meta-preview-container'], { [styles['compact']]: compact })} ref={ref}>
             {
@@ -189,28 +201,13 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                                                 null
                                         }
                                         {
-                                            linksGroups.has(CONSTANTS.SHARE_LINK_CATEGORY) ?
-                                                <React.Fragment>
-                                                    <ActionButton
-                                                        className={styles['action-button']}
-                                                        icon={'share'}
-                                                        label={t('CTX_SHARE')}
-                                                        tooltip={true}
-                                                        tabIndex={0}
-                                                        onClick={openShareModal}
+                                            shareModalOpen && linksGroups.has(CONSTANTS.SHARE_LINK_CATEGORY) ?
+                                                <ModalDialog title={t('CTX_SHARE')} onCloseRequest={closeShareModal}>
+                                                    <SharePrompt
+                                                        className={styles['share-prompt']}
+                                                        url={linksGroups.get(CONSTANTS.SHARE_LINK_CATEGORY).href}
                                                     />
-                                                    {
-                                                        shareModalOpen ?
-                                                            <ModalDialog title={t('CTX_SHARE')} onCloseRequest={closeShareModal}>
-                                                                <SharePrompt
-                                                                    className={styles['share-prompt']}
-                                                                    url={linksGroups.get(CONSTANTS.SHARE_LINK_CATEGORY).href}
-                                                                />
-                                                            </ModalDialog>
-                                                            :
-                                                            null
-                                                    }
-                                                </React.Fragment>
+                                                </ModalDialog>
                                                 :
                                                 null
                                         }

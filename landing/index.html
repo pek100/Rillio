@@ -1,0 +1,300 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Rillio — private streaming, in one place</title>
+<meta name="description" content="Rillio brings movies, series and live TV together through open add-ons, with a native 4K player — and keeps what you watch on your device, encrypted and yours." />
+<meta property="og:title" content="Rillio — private streaming, in one place" />
+<meta property="og:description" content="Everything you watch, in one quiet place. Free, open source, and private by default." />
+<meta property="og:type" content="website" />
+<meta name="theme-color" content="#020407" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Nunito+Sans:opsz,wght@6..12,400;6..12,600;6..12,800&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg: #020407;
+    --surface: #0A1017;
+    --surface-hover: #111A24;
+    --line: rgba(255, 255, 255, 0.08);
+    --accent: #FFA033;
+    --accent-soft: rgba(255, 160, 51, 0.14);
+    --fg: rgba(255, 255, 255, 0.95);
+    --fg-muted: rgba(255, 255, 255, 0.62);
+    --fg-subtle: rgba(255, 255, 255, 0.40);
+    --radius-card: 0.75rem;
+    --radius-pill: 9999px;
+    --ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --max: 68rem;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html { scroll-behavior: smooth; }
+  body {
+    font-family: "Nunito Sans", system-ui, Arial, sans-serif;
+    background: var(--bg);
+    color: var(--fg);
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: hidden;
+  }
+  a { color: inherit; text-decoration: none; }
+  .wrap { width: 100%; max-width: var(--max); margin: 0 auto; padding: 0 1.5rem; }
+
+  /* backdrop glow-free accent wash, purely flat radial tint */
+  .bg-wash {
+    position: fixed; inset: 0; z-index: -1; pointer-events: none;
+    background:
+      radial-gradient(60rem 40rem at 50% -10%, rgba(255,160,51,0.06), transparent 70%),
+      radial-gradient(50rem 40rem at 90% 20%, rgba(255,160,51,0.03), transparent 60%);
+  }
+
+  header {
+    position: sticky; top: 0; z-index: 10;
+    backdrop-filter: blur(12px);
+    background: rgba(2, 4, 7, 0.72);
+    border-bottom: 1px solid var(--line);
+  }
+  .nav { display: flex; align-items: center; justify-content: space-between; height: 4.25rem; }
+  .brand { display: flex; align-items: center; gap: 0.6rem; font-weight: 800; font-size: 1.15rem; letter-spacing: -0.01em; }
+  .brand svg { display: block; }
+  .nav-links { display: flex; align-items: center; gap: 1.75rem; }
+  .nav-links a { color: var(--fg-muted); font-weight: 600; font-size: 0.95rem; transition: color 0.15s var(--ease); }
+  .nav-links a:hover { color: var(--fg); }
+
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-weight: 800; font-size: 1rem;
+    padding: 0.8rem 1.4rem; border-radius: var(--radius-pill);
+    border: 1px solid transparent; cursor: pointer;
+    transition: transform 0.15s var(--ease), background-color 0.15s var(--ease), border-color 0.15s var(--ease);
+  }
+  .btn-primary { background: var(--accent); color: #1a0f00; }
+  .btn-primary:hover { transform: translateY(-1px); background: #ffab4d; }
+  .btn-ghost { background: transparent; color: var(--fg); border-color: var(--line); }
+  .btn-ghost:hover { background: var(--surface-hover); border-color: rgba(255,255,255,0.16); }
+  .btn-sm { padding: 0.55rem 1.05rem; font-size: 0.9rem; }
+
+  /* hero */
+  .hero { text-align: center; padding: 6rem 0 4.5rem; }
+  .eyebrow {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font-size: 0.82rem; font-weight: 800; letter-spacing: 0.04em; text-transform: uppercase;
+    color: var(--accent); background: var(--accent-soft);
+    padding: 0.4rem 0.9rem; border-radius: var(--radius-pill); margin-bottom: 1.75rem;
+  }
+  .hero h1 {
+    font-size: clamp(2.5rem, 6vw, 4.25rem); line-height: 1.05; font-weight: 800;
+    letter-spacing: -0.03em; margin-bottom: 1.5rem;
+  }
+  .hero h1 .accent { color: var(--accent); }
+  .hero p.lede {
+    max-width: 40rem; margin: 0 auto 2.5rem; font-size: clamp(1.05rem, 2.2vw, 1.3rem);
+    color: var(--fg-muted);
+  }
+  .cta-row { display: flex; gap: 1rem; justify-content: center; flex-wrap: wrap; }
+  .cta-note { margin-top: 1.25rem; font-size: 0.9rem; color: var(--fg-subtle); }
+
+  /* app frame mock */
+  .frame {
+    margin: 4rem auto 0; max-width: 60rem;
+    border: 1px solid var(--line); border-radius: 1rem; overflow: hidden;
+    background: var(--surface); box-shadow: 0 30px 80px rgba(0,0,0,0.55);
+  }
+  .frame-bar { display: flex; gap: 0.5rem; padding: 0.85rem 1.1rem; border-bottom: 1px solid var(--line); }
+  .frame-bar i { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: rgba(255,255,255,0.14); }
+  .frame-body { display: grid; grid-template-columns: repeat(auto-fill, minmax(7.5rem, 1fr)); gap: 0.75rem; padding: 1.25rem; }
+  .poster { aspect-ratio: 2/3; border-radius: 0.5rem; background: linear-gradient(160deg, #16202b, #0c141c); border: 1px solid var(--line); position: relative; }
+  .poster::after { content: ""; position: absolute; left: 0.6rem; bottom: 0.6rem; width: 55%; height: 0.4rem; border-radius: 9999px; background: rgba(255,255,255,0.10); }
+  .poster.hot::after { background: var(--accent); }
+
+  /* sections */
+  section { padding: 5rem 0; }
+  .section-head { text-align: center; max-width: 40rem; margin: 0 auto 3rem; }
+  .section-head h2 { font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 1rem; }
+  .section-head p { color: var(--fg-muted); font-size: 1.1rem; }
+
+  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1.25rem; }
+  .card {
+    background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius-card);
+    padding: 1.75rem; transition: border-color 0.2s var(--ease), transform 0.2s var(--ease);
+  }
+  .card:hover { border-color: rgba(255,255,255,0.14); transform: translateY(-3px); }
+  .card .icon {
+    width: 2.75rem; height: 2.75rem; border-radius: 0.7rem;
+    display: flex; align-items: center; justify-content: center; margin-bottom: 1.1rem;
+    background: var(--accent-soft); color: var(--accent);
+  }
+  .card h3 { font-size: 1.2rem; font-weight: 800; margin-bottom: 0.5rem; }
+  .card p { color: var(--fg-muted); font-size: 0.98rem; }
+
+  /* security band */
+  .security { background: linear-gradient(180deg, transparent, rgba(255,160,51,0.03)); border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+  .security .icon { background: rgba(63, 174, 121, 0.14); color: #5fce97; }
+
+  /* final cta */
+  .final { text-align: center; }
+  .final .box {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 1.25rem;
+    padding: 3.5rem 2rem; max-width: 46rem; margin: 0 auto;
+  }
+  .final h2 { font-size: clamp(1.8rem, 4vw, 2.6rem); font-weight: 800; letter-spacing: -0.02em; margin-bottom: 0.75rem; }
+  .final p { color: var(--fg-muted); margin-bottom: 2rem; font-size: 1.1rem; }
+
+  footer { border-top: 1px solid var(--line); padding: 2.5rem 0; color: var(--fg-subtle); }
+  .foot { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 1rem; font-size: 0.9rem; }
+  .foot a { color: var(--fg-muted); }
+  .foot a:hover { color: var(--fg); }
+
+  @media (max-width: 52rem) {
+    .grid { grid-template-columns: 1fr; }
+    .nav-links a:not(.btn) { display: none; }
+    .hero { padding: 4rem 0 3rem; }
+    section { padding: 3.5rem 0; }
+  }
+</style>
+</head>
+<body>
+<div class="bg-wash"></div>
+
+<header>
+  <div class="wrap nav">
+    <a class="brand" href="#top" aria-label="Rillio home">
+      <svg width="30" height="30.9" viewBox="0 0 201 207" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Rillio">
+        <g clip-path="url(#lg)">
+          <rect width="201" height="207" rx="57" fill="#FFA033"/>
+          <path d="M-4.47 0.11C-4.47-4.5.53-7.39 4.53-5.08L186.95 100.24C190.95 102.55 190.95 108.32 186.95 110.63L4.53 215.95C.53 218.26-4.47 215.38-4.47 210.76V0.11Z" fill="#020407"/>
+        </g>
+        <defs><clipPath id="lg"><rect width="201" height="207" rx="57" fill="#fff"/></clipPath></defs>
+      </svg>
+      Rillio
+    </a>
+    <nav class="nav-links">
+      <a href="#features">Features</a>
+      <a href="#privacy">Privacy</a>
+      <a href="https://github.com/pek100/rillio">GitHub</a>
+      <a class="btn btn-primary btn-sm" href="https://github.com/pek100/rillio/releases/latest">Download</a>
+    </nav>
+  </div>
+</header>
+
+<main id="top">
+  <section class="hero wrap">
+    <span class="eyebrow">Free &amp; open source</span>
+    <h1>Everything you watch,<br />in one <span class="accent">quiet</span> place.</h1>
+    <p class="lede">Rillio unifies movies, series and live TV through open add-ons and plays them in a native 4K&nbsp;player — while keeping your library on your device, encrypted and yours.</p>
+    <div class="cta-row">
+      <a class="btn btn-primary" href="https://github.com/pek100/rillio/releases/latest">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13"/><path d="m7 12 5 5 5-5"/><path d="M5 21h14"/></svg>
+        Download for Windows
+      </a>
+      <a class="btn btn-ghost" href="https://github.com/pek100/rillio">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M12 2A10 10 0 0 0 8.84 21.5c.5.09.68-.22.68-.48v-1.7c-2.78.6-3.37-1.34-3.37-1.34-.45-1.16-1.11-1.47-1.11-1.47-.9-.62.07-.6.07-.6 1 .07 1.53 1.03 1.53 1.03.9 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02a9.5 9.5 0 0 1 5 0c1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.68-4.57 4.93.36.31.68.92.68 1.85v2.74c0 .27.18.58.69.48A10 10 0 0 0 12 2Z"/></svg>
+        View on GitHub
+      </a>
+    </div>
+    <p class="cta-note">No account required. Windows today — macOS &amp; Linux coming.</p>
+
+    <div class="frame" aria-hidden="true">
+      <div class="frame-bar"><i></i><i></i><i></i></div>
+      <div class="frame-body">
+        <div class="poster hot"></div><div class="poster"></div><div class="poster"></div>
+        <div class="poster"></div><div class="poster hot"></div><div class="poster"></div>
+        <div class="poster"></div><div class="poster"></div><div class="poster hot"></div>
+        <div class="poster"></div><div class="poster"></div><div class="poster"></div>
+      </div>
+    </div>
+  </section>
+
+  <section id="features">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>One app for all of it</h2>
+        <p>Discover, organize and watch from any source — held together by an open add-on ecosystem.</p>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg></div>
+          <h3>Everything in one place</h3>
+          <p>Add-ons pull catalogs, subtitles and streams from across the web into a single, tidy library — you choose what to plug in.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 14 8-14 8V4Z"/></svg></div>
+          <h3>Native 4K playback</h3>
+          <p>An in-app player handles 4K HDR and Dolby Vision natively — smooth, sharp, and no browser codec limits.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></div>
+          <h3>Pick up anywhere</h3>
+          <p>Your library and watch progress stay in sync across your devices — optionally, and end-to-end encrypted when they do.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="privacy" class="security">
+    <div class="wrap">
+      <div class="section-head">
+        <h2>Private by default</h2>
+        <p>Most apps treat privacy as a setting. Rillio treats it as the default — the quiet stream the name is named for.</p>
+      </div>
+      <div class="grid">
+        <div class="card">
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></div>
+          <h3>Your data stays yours</h3>
+          <p>No account needed. Your library and history live on your device by default — not on someone else's server.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
+          <h3>Encrypted DNS</h3>
+          <p>Every name lookup goes out over DNS-over-HTTPS — encrypted, not broadcast in plaintext to whoever's listening.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/><path d="M22 4v16"/></svg></div>
+          <h3>Quiet networking</h3>
+          <p>The streaming engine stays a quiet client by default and never advertises you as a seeder — and you can route it through your own VPN or proxy.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg></div>
+          <h3>Auditable, not a black box</h3>
+          <p>The engine is open-source Rust you can read and verify — the same code, running locally, with nothing hidden.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.9 4.9 2.8 2.8"/><path d="m16.3 16.3 2.8 2.8"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.9 19.1 2.8-2.8"/><path d="m16.3 7.7 2.8-2.8"/></svg></div>
+          <h3>Signed updates</h3>
+          <p>Every update is cryptographically signed and verified before it installs — you always get the real thing.</p>
+        </div>
+        <div class="card">
+          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
+          <h3>No ads, no tracking</h3>
+          <p>No trackers, no telemetry-by-default, no ads between you and what you came to watch.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="final">
+    <div class="wrap">
+      <div class="box">
+        <h2>Start watching, quietly.</h2>
+        <p>Free, open source, and private from the first launch.</p>
+        <div class="cta-row">
+          <a class="btn btn-primary" href="https://github.com/pek100/rillio/releases/latest">Download for Windows</a>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap foot">
+    <span>© Rillio — free software under the GPL.</span>
+    <span>
+      <a href="https://github.com/pek100/rillio">GitHub</a>
+      &nbsp;·&nbsp;
+      <a href="https://github.com/pek100/rillio/releases/latest">Download</a>
+    </span>
+  </div>
+</footer>
+</body>
+</html>

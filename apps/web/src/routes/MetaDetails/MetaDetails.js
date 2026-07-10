@@ -164,7 +164,7 @@ const MetaDetails = () => {
                         null
                 }
                 <div className={styles['main-column']}>
-                    <div className={styles['top']}>
+                    <div className={styles['left-section']}>
                         {
                             metaPath === null ?
                                 <DelayedRenderer delay={500}>

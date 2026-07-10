@@ -1,32 +1,23 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none" role="img" aria-label="Nothing here yet">
-  <!-- the rill, dried up: what were ripples are now a flat, empty bed -->
-  <g stroke="#FFFFFF" stroke-width="2" stroke-linecap="round">
-    <path d="M44 170h112" stroke-opacity="0.085"/>
-    <path d="M62 181h76" stroke-opacity="0.055"/>
-    <path d="M80 190h40" stroke-opacity="0.035"/>
-  </g>
+  <!-- dry ground: one soft line and a couple of pebbles -->
+  <ellipse cx="100" cy="178" rx="48" ry="4.5" fill="#FFFFFF" fill-opacity="0.05"/>
+  <circle cx="54" cy="176" r="2.6" fill="#FFFFFF" fill-opacity="0.09"/>
+  <circle cx="149" cy="178" r="2" fill="#FFFFFF" fill-opacity="0.07"/>
 
-  <!-- cactus: a hairline outline drawn under a darker fill stroke -->
-  <g fill="none" stroke-linecap="round" stroke-linejoin="round">
-    <g stroke="#FFFFFF" stroke-opacity="0.14" stroke-width="24">
-      <path d="M100 160V80"/>
-      <path d="M100 124H82v-22"/>
-      <path d="M100 138h18v-20"/>
-    </g>
-    <g stroke="#0A1017" stroke-width="20">
-      <path d="M100 160V80"/>
-      <path d="M100 124H82v-22"/>
-      <path d="M100 138h18v-20"/>
+  <!-- cactus: one flat silhouette. Group opacity flattens the trunk + arms
+       first, so their overlaps read as a single solid shape (per-stroke
+       opacity would double up and seam at the joints). -->
+  <g opacity="0.16">
+    <g fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M100 174V72"/>
+      <path d="M100 126H78v-24"/>
+      <path d="M100 142h22v-26"/>
     </g>
   </g>
 
-  <!-- a faint ridge down the trunk -->
-  <path d="M100 96v56" stroke="#FFFFFF" stroke-opacity="0.07" stroke-width="1.5" stroke-linecap="round"/>
+  <!-- a hint of a ridge down the trunk -->
+  <path d="M100 158V90" stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="2" stroke-linecap="round"/>
 
-  <!-- the one accent: a bloom -->
-  <circle cx="100" cy="64" r="6" fill="#FFA033"/>
-
-  <!-- pebbles in the dry bed -->
-  <circle cx="55" cy="163" r="3" fill="#FFFFFF" fill-opacity="0.10"/>
-  <circle cx="146" cy="165" r="2.4" fill="#FFFFFF" fill-opacity="0.075"/>
+  <!-- the one accent: a bloom resting on the tip -->
+  <circle cx="100" cy="60" r="6.5" fill="#FFA033"/>
 </svg>

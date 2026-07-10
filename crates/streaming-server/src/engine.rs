@@ -1,11 +1,13 @@
 //! Torrent engine — a thin wrapper over one librqbit [`Session`] shared across
-//! the whole server. Tuned for download speed: DHT + injected trackers for peer
-//! discovery, an inbound listen port + UPnP for reachability, and batched disk
-//! writes. A bring-your-own SOCKS5 proxy (STREMIO_SOCKS_PROXY) hides the client
-//! IP from peers and force-disables the inbound port (no real-IP leak past the
-//! proxy). See [`Engine::new`].
+//! the whole server. Quiet by default: DHT + injected trackers for peer
+//! discovery and batched disk writes, but NO inbound listen port and NO UPnP —
+//! we connect outbound to peers without advertising a reachable port, so we are
+//! not a discoverable seeder. `STREMIO_TORRENT_LISTEN=1` opts into the louder,
+//! marginally-faster-on-rare-titles inbound behavior. A bring-your-own SOCKS5
+//! proxy (STREMIO_SOCKS_PROXY) hides the client IP from peers and keeps the
+//! inbound port off (no real-IP leak past the proxy). See [`Engine::new`].
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -51,6 +53,30 @@ const DEFAULT_TRACKERS: &[&str] = &[
     "udp://explodie.org:6969/announce",
     "udp://bt.rer.lol:6969/announce",
 ];
+
+/// Filename of the persisted torrent preferences, under the cache root. Written
+/// by `POST /torrent-settings` (the desktop "faster downloads" toggle), read
+/// once at [`Engine::new`].
+const TORRENT_PREFS_FILE: &str = "torrent-settings.json";
+
+/// Read the persisted "inbound listen port + UPnP" preference from the cache
+/// root. Absent / unreadable / malformed ⇒ `false` (quiet default).
+pub fn read_listen_pref(cache_dir: &Path) -> bool {
+    std::fs::read(cache_dir.join(TORRENT_PREFS_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<types::TorrentSettings>(&bytes).ok())
+        .map(|s| s.listen_enabled)
+        .unwrap_or(false)
+}
+
+/// Persist the "inbound listen port + UPnP" preference. Takes effect on the next
+/// [`Engine::new`] (i.e. next server start), since librqbit fixes the listener
+/// at session construction.
+pub fn write_listen_pref(cache_dir: &Path, listen_enabled: bool) -> std::io::Result<()> {
+    let body = serde_json::to_vec(&types::TorrentSettings { listen_enabled })
+        .expect("TorrentSettings serializes");
+    std::fs::write(cache_dir.join(TORRENT_PREFS_FILE), body)
+}
 
 /// Parse a KiB/s rate limit from an env var into librqbit's bytes-per-second
 /// `NonZeroU32`. Unset / 0 / invalid ⇒ `None` (uncapped).
@@ -118,16 +144,25 @@ impl Engine {
             .map(|s| s.trim().to_string())
             .filter(|s| !s.is_empty());
 
-        // Inbound listen port + UPnP → far more reachable peers (esp. NAT'd/passive
-        // seeders) = faster. ON by default. But a SOCKS5 proxy only tunnels
-        // OUTBOUND; a listen port on the real interface would leak your real IP to
-        // inbound peers and defeat the proxy — so it's force-disabled whenever a
-        // proxy is set. Also opt out with STREMIO_TORRENT_NO_LISTEN=1.
-        let listen_enabled = socks_proxy.is_none()
-            && !matches!(
-                std::env::var("STREMIO_TORRENT_NO_LISTEN").as_deref(),
-                Ok("1") | Ok("true")
-            );
+        // Inbound listen port + UPnP make us reachable by NAT'd/passive seeders —
+        // more peers, faster especially on less-seeded titles. But being reachable
+        // is also what makes a client a discoverable SEEDER: anti-piracy monitors
+        // join a swarm and connect INBOUND to log distributors. Outbound-only
+        // leeching still saturates the pipe on well-seeded content (BitTorrent is
+        // already multi-source), so the download-speed cost of staying quiet is
+        // small while the exposure saved is large. OFF by default.
+        //
+        // Resolved as: STREMIO_TORRENT_LISTEN env (explicit on/off, a dev escape
+        // hatch) ⇒ else the persisted "faster downloads" toggle from the cache
+        // root ⇒ else off. A SOCKS5 proxy only tunnels OUTBOUND, so a
+        // real-interface listener would leak the real IP past it — the proxy keeps
+        // the listener off regardless of the above.
+        let listen_requested = match std::env::var("STREMIO_TORRENT_LISTEN").as_deref() {
+            Ok("1") | Ok("true") => true,
+            Ok("0") | Ok("false") => false,
+            _ => read_listen_pref(&cache_dir),
+        };
+        let listen_enabled = socks_proxy.is_none() && listen_requested;
 
         let opts = SessionOptions {
             // DHT on: with trackers off it is the only peer source for a magnet.
@@ -407,6 +442,40 @@ impl Engine {
             swarm_paused: handle.is_paused(),
             swarm_size: 0,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{read_listen_pref, write_listen_pref, TORRENT_PREFS_FILE};
+
+    /// Each test gets its own dir so parallel runs don't clobber the shared file.
+    fn fresh_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("rillio-torrent-prefs-{tag}"));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn absent_pref_is_quiet_default() {
+        assert!(!read_listen_pref(&fresh_dir("absent")));
+    }
+
+    #[test]
+    fn pref_roundtrips_both_ways() {
+        let dir = fresh_dir("roundtrip");
+        write_listen_pref(&dir, true).unwrap();
+        assert!(read_listen_pref(&dir));
+        write_listen_pref(&dir, false).unwrap();
+        assert!(!read_listen_pref(&dir));
+    }
+
+    #[test]
+    fn malformed_pref_falls_back_to_off() {
+        let dir = fresh_dir("malformed");
+        std::fs::write(dir.join(TORRENT_PREFS_FILE), b"{ not valid json").unwrap();
+        assert!(!read_listen_pref(&dir));
     }
 }
 

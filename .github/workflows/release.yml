@@ -1,0 +1,82 @@
+# Build, sign, and publish a Rillio desktop release + the updater manifest.
+#
+# Trigger: push a version tag (e.g. `git tag v0.2.0 && git push origin v0.2.0`),
+# or run manually. Do NOT trigger on every push — that would ship an update per
+# commit.
+#
+# Required repo secrets (Settings -> Secrets and variables -> Actions):
+#   TAURI_SIGNING_PRIVATE_KEY           output of `tauri signer generate` (private key)
+#   TAURI_SIGNING_PRIVATE_KEY_PASSWORD  the password you set for it (empty string if none)
+# and, in apps/desktop/src-tauri/tauri.conf.json, replace:
+#   plugins.updater.pubkey   -> the PUBLIC key from `tauri signer generate`
+#   plugins.updater.endpoints -> https://github.com/pek100/rillio/releases/latest/download/latest.json
+#
+# tauri-action builds the installer, signs it + the update artifact, uploads them
+# and a generated `latest.json` to a GitHub Release (created as a draft so you can
+# review before publishing — the updater resolves `releases/latest/...` only once
+# the release is published).
+#
+# NOTE: playback needs libmpv-2.dll at runtime. It is gitignored and NOT bundled
+# here yet — wire it as a bundle resource before shipping to end users.
+
+name: release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  release:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: windows-latest
+    runs-on: ${{ matrix.platform }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 9
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: jetli/wasm-pack-action@v0.4.0
+        with:
+          version: latest
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # The web build consumes a wasm bundle that is a gitignored build output,
+      # so it must be generated from source first (see memory/wasm-build-fix).
+      - name: Build wasm core
+        run: pnpm build:wasm
+
+      - name: Build web app
+        run: pnpm --filter rillio run build
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          projectPath: apps/desktop/src-tauri
+          tagName: ${{ github.ref_name }}
+          releaseName: 'Rillio ${{ github.ref_name }}'
+          releaseBody: 'Download the installer for your platform below. Existing installs update automatically.'
+          releaseDraft: true
+          prerelease: false

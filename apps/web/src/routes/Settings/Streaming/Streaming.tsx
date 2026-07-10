@@ -1,11 +1,12 @@
 import React, { forwardRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import Icon from '@stremio/stremio-icons/react';
-import { Button, MultiselectMenu } from 'rillio/components';
+import { Button, MultiselectMenu, Toggle } from 'rillio/components';
 import { useToast } from 'rillio/common';
 import { Section, Option } from '../components';
 import URLsManager from './URLsManager';
 import useStreamingOptions from './useStreamingOptions';
+import useFasterDownloads from './useFasterDownloads';
 import styles from './Streaming.less';
 
 type Props = {
@@ -24,6 +25,8 @@ const Streaming = forwardRef<HTMLDivElement, Props>(({ profile, streamingServer 
         torrentProfileSelect,
         transcodingProfileSelect,
     } = useStreamingOptions(streamingServer);
+
+    const fasterDownloads = useFasterDownloads(profile.settings.streamingServerUrl);
 
     const onCopyRemoteUrl = useCallback(() => {
         if (streamingServer.remoteUrl) {
@@ -73,6 +76,16 @@ const Streaming = forwardRef<HTMLDivElement, Props>(({ profile, streamingServer 
                         <MultiselectMenu
                             className={'multiselect'}
                             {...torrentProfileSelect}
+                        />
+                    </Option>
+            }
+            {
+                fasterDownloads.available &&
+                    <Option label={'SETTINGS_FASTER_DOWNLOADS'}>
+                        <Toggle
+                            className={styles['faster-downloads-toggle']}
+                            checked={fasterDownloads.enabled}
+                            onClick={fasterDownloads.toggle}
                         />
                     </Option>
             }

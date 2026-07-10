@@ -2,7 +2,7 @@
 //! `packages/video` deserialize; verified against the reference container and
 //! `crates/core/src/types/streaming_server/`.
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
 /// `GET /settings` — the master endpoint. If core cannot deserialize this, its
 /// whole streaming-server model cascades to "server down"
@@ -92,6 +92,17 @@ impl Success {
     pub fn ok() -> Self {
         Self { success: true }
     }
+}
+
+/// Body of `GET`/`POST /torrent-settings` — Rillio-specific (not part of the
+/// Stremio `/settings` schema, so it stays out of that oracle-diffed response).
+/// `listenEnabled` opts the torrent engine into an inbound listen port + UPnP
+/// ("faster downloads", at the cost of being a discoverable seeder). The engine
+/// reads it only at startup, so a change takes effect on the next launch.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TorrentSettings {
+    pub listen_enabled: bool,
 }
 
 // ---------------------------------------------------------------------------

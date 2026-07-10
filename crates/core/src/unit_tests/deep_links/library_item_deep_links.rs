@@ -1,6 +1,5 @@
 use chrono::Utc;
 use once_cell::sync::Lazy;
-use stremio_serde_hex::{SerHex, Strict};
 
 use crate::constants::STREAMING_SERVER_URL;
 use crate::deep_links::LibraryItemDeepLinks;
@@ -13,6 +12,7 @@ use crate::types::resource::StreamBehaviorHints;
 use crate::types::resource::StreamSource;
 use crate::types::resource::{MetaItemBehaviorHints, PosterShape};
 use crate::types::streams::StreamsItem;
+use crate::types::torrent::InfoHash;
 
 const META_DETAILS_VIDEOS: &str = "stremio:///detail/series/tt13622776";
 
@@ -24,8 +24,10 @@ static INFUSE_PLAYER_SETTINGS: Lazy<Settings> = Lazy::new(|| Settings {
 static TORRENT_STREAMS_ITEM: Lazy<StreamsItem> = Lazy::new(|| {
     let stream = Stream {
         source: StreamSource::Torrent {
-            info_hash: SerHex::<Strict>::from_hex("df2c94aec35f97943c4e432f25081b590cd35326")
-                .unwrap(),
+            info_hash: "df2c94aec35f97943c4e432f25081b590cd35326"
+                .parse::<InfoHash>()
+                .unwrap()
+                .as_array(),
             file_idx: Some(0),
             announce: vec![],
             file_must_include: vec![],

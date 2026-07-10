@@ -6,9 +6,10 @@ use axum::response::{IntoResponse, Redirect};
 use axum::Json;
 
 use crate::config::Config;
+use crate::engine;
 use crate::types::{
     DeviceInfo, NetworkInfo, SettingsOption, SettingsResponse, SettingsSelection, SettingsValues,
-    Success,
+    Success, TorrentSettings,
 };
 
 /// Web UI the bare `/` redirects to, matching the container's behavior.
@@ -67,6 +68,31 @@ pub async fn get_settings(State(cfg): State<Config>) -> Json<SettingsResponse> {
 /// actually consumes cacheSize/limits.
 pub async fn post_settings() -> Json<Success> {
     Json(Success::ok())
+}
+
+/// GET `/torrent-settings` — the persisted "faster downloads" (inbound listen
+/// port + UPnP) preference. Rillio-specific; the UI reflects this toggle and
+/// notes that a change applies on the next app start.
+pub async fn get_torrent_settings(State(cfg): State<Config>) -> Json<TorrentSettings> {
+    Json(TorrentSettings {
+        listen_enabled: engine::read_listen_pref(&cfg.cache_root),
+    })
+}
+
+/// POST `/torrent-settings` — persist the toggle. Written to the cache root the
+/// engine reads at startup; it does NOT reconfigure the live session (librqbit
+/// fixes the listener at construction), so it takes effect on the next launch.
+pub async fn post_torrent_settings(
+    State(cfg): State<Config>,
+    Json(body): Json<TorrentSettings>,
+) -> impl IntoResponse {
+    match engine::write_listen_pref(&cfg.cache_root, body.listen_enabled) {
+        Ok(()) => (StatusCode::OK, Json(Success::ok())),
+        Err(e) => {
+            tracing::error!("failed to persist torrent settings: {e}");
+            (StatusCode::INTERNAL_SERVER_ERROR, Json(Success { success: false }))
+        }
+    }
 }
 
 pub async fn network_info() -> Json<NetworkInfo> {
