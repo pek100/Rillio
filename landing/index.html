@@ -3,10 +3,10 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Rillio, private streaming in one place</title>
-<meta name="description" content="Rillio brings movies, series and live TV together through open add-ons, with a native 4K player, and keeps what you watch on your device, encrypted and yours." />
-<meta property="og:title" content="Rillio, private streaming in one place" />
-<meta property="og:description" content="Everything you watch, in one quiet place. Free, open source, private by default." />
+<title>Rillio, everything you watch in one place</title>
+<meta name="description" content="Rillio brings movies, series and live TV together through open add-ons, with a native 4K player. Local-first, open source, and built to respect you." />
+<meta property="og:title" content="Rillio, everything you watch in one place" />
+<meta property="og:description" content="Everything you watch, in one quiet place. Free, open source, and yours." />
 <meta property="og:type" content="website" />
 <meta name="theme-color" content="#020407" />
 <link rel="preconnect" href="https://fonts.googleapis.com" />
@@ -76,7 +76,7 @@
   header {
     position: sticky; top: 0; z-index: 20;
     backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-    background: rgba(2,4,7,0.72); border-bottom: 1px solid var(--edge);
+    background: rgba(2,4,7,0.55);
   }
   .nav { display: flex; align-items: center; justify-content: space-between; height: 4.25rem; }
   .brand { display: inline-flex; align-items: center; gap: 0.6rem; }
@@ -128,29 +128,30 @@
   .section-head h2 { font-size: clamp(1.9rem, 4vw, 2.7rem); font-weight: 900; margin-bottom: 1rem; }
   .section-head p { color: var(--fg-2); font-size: 1.1rem; }
 
-  .grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--gap); }
-  .card {
-    background: var(--surface-1); border: 1px solid var(--edge); border-radius: var(--radius);
-    padding: 1.85rem; box-shadow: var(--elev-2);
-    transition: border-color 0.25s var(--ease), transform 0.25s var(--ease), background-color 0.25s var(--ease);
+  /* Features as flat divided rows, not boxed cards: title on the left, the
+     description on the right, a hairline between each. */
+  .feature-rows { border-top: 1px solid var(--edge); }
+  .feature-row {
+    display: grid; grid-template-columns: 1fr 1.3fr; gap: 1.25rem 3rem;
+    align-items: baseline; padding: 2.5rem 0; border-bottom: 1px solid var(--edge);
   }
-  .card:hover { border-color: var(--edge-lit); transform: translateY(-4px); background: var(--surface-2); }
-  .card .icon {
-    width: 2.9rem; height: 2.9rem; border-radius: 0.7rem; margin-bottom: 1.15rem;
-    display: flex; align-items: center; justify-content: center;
-    background: var(--accent-soft); color: var(--accent);
-  }
-  .card h3 { font-size: 1.2rem; font-weight: 800; margin-bottom: 0.5rem; letter-spacing: -0.01em; }
-  .card p { color: var(--fg-2); font-size: 0.98rem; }
+  .feature-row .lead { display: flex; align-items: center; gap: 1rem; }
+  .feature-row .lead svg { color: var(--accent); flex: none; }
+  .feature-row h3 { font-size: clamp(1.4rem, 2.6vw, 1.95rem); font-weight: 800; letter-spacing: -0.02em; }
+  .feature-row p { color: var(--fg-2); font-size: 1.08rem; }
 
-  .security { border-top: 1px solid var(--edge); border-bottom: 1px solid var(--edge); background: linear-gradient(180deg, transparent, rgba(255,160,51,0.028)); }
-  .security .icon { background: rgba(63,174,121,0.14); color: #5fce97; }
+  /* Privacy: an honest statement, then a tight two-column list, no boxes. */
+  .privacy { border-top: 1px solid var(--edge); background: linear-gradient(180deg, transparent, rgba(255,160,51,0.02)); }
+  .privacy-list { display: grid; grid-template-columns: 1fr 1fr; gap: 1.6rem 3rem; }
+  .privacy-item { display: flex; gap: 0.85rem; }
+  .privacy-item .tick { color: var(--accent); flex: none; margin-top: 0.2rem; }
+  .privacy-item h3 { font-size: 1.08rem; font-weight: 800; margin-bottom: 0.25rem; letter-spacing: -0.01em; }
+  .privacy-item p { color: var(--fg-2); font-size: 0.97rem; }
+  .privacy-note { margin: 3rem auto 0; max-width: 42rem; text-align: center; color: var(--fg-3); font-size: 1rem; line-height: 1.7; }
+  .privacy-note b { color: var(--fg-2); font-weight: 800; }
 
   .final { text-align: center; }
-  .final .box {
-    background: var(--surface-1); border: 1px solid var(--edge); border-radius: var(--radius-lg);
-    padding: 3.5rem 2rem; max-width: 46rem; margin: 0 auto; box-shadow: var(--elev-3);
-  }
+  .final .box { padding: 1.5rem 2rem; max-width: 46rem; margin: 0 auto; }
   .final h2 { font-size: clamp(1.9rem, 4vw, 2.7rem); font-weight: 900; margin-bottom: 0.75rem; }
   .final p { color: var(--fg-2); margin-bottom: 2rem; font-size: 1.1rem; }
 
@@ -162,7 +163,8 @@
   .foot a:hover { color: var(--fg); }
 
   @media (max-width: 52rem) {
-    .grid { grid-template-columns: 1fr; }
+    .feature-row { grid-template-columns: 1fr; gap: 0.6rem; padding: 2rem 0; }
+    .privacy-list { grid-template-columns: 1fr; }
     .nav-links a:not(.btn) { display: none; }
   }
 </style>
@@ -217,7 +219,7 @@
     <h1 class="reveal" style="transition-delay:0.1s">
       <span class="headline-fill">Everything you watch,<br />in one</span> <span class="accent-fill">quiet</span> <span class="headline-fill">place.</span>
     </h1>
-    <p class="lede reveal" style="transition-delay:0.16s">Rillio brings movies, series and live TV together through open add-ons and plays them in a native 4K player, while keeping your library on your device, encrypted and yours.</p>
+    <p class="lede reveal" style="transition-delay:0.16s">Rillio brings movies, series and live TV together through open add-ons and plays them in a native 4K player. Your library lives on your device, and it stays yours.</p>
     <div class="cta-row reveal" style="transition-delay:0.22s">
       <a class="btn btn-primary" href="https://github.com/pek100/rillio/releases/latest/download/Rillio-Setup.exe">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3v13"/><path d="m7 12 5 5 5-5"/><path d="M5 21h14"/></svg>
@@ -237,64 +239,65 @@
         <h2>One app for all of it</h2>
         <p>Discover, organize and watch from any source, held together by an open add-on ecosystem.</p>
       </div>
-      <div class="grid">
-        <div class="card reveal">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg></div>
-          <h3>Everything in one place</h3>
-          <p>Add-ons pull catalogs, subtitles and streams from across the web into a single, tidy library. You choose what to plug in.</p>
+      <div class="feature-rows">
+        <div class="feature-row reveal">
+          <div class="lead">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>
+            <h3>Everything in one place</h3>
+          </div>
+          <p>Add-ons pull catalogs, subtitles and streams from across the web into a single, tidy library. You choose what to plug in, and nothing is bundled you did not ask for.</p>
         </div>
-        <div class="card reveal" style="transition-delay:0.08s">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 14 8-14 8V4Z"/></svg></div>
-          <h3>Native 4K playback</h3>
-          <p>An in-app player handles 4K HDR and Dolby Vision natively. Smooth, sharp, and free of browser codec limits.</p>
+        <div class="feature-row reveal">
+          <div class="lead">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m6 4 14 8-14 8V4Z"/></svg>
+            <h3>Native 4K playback</h3>
+          </div>
+          <p>A real in-app player handles 4K HDR and Dolby Vision natively through mpv. Smooth, sharp, and free of the browser codec limits every web player runs into.</p>
         </div>
-        <div class="card reveal" style="transition-delay:0.16s">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg></div>
-          <h3>Pick up anywhere</h3>
-          <p>Your library and watch progress stay in sync across your devices, optionally, and end-to-end encrypted when they do.</p>
+        <div class="feature-row reveal">
+          <div class="lead">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 0 1 15-6.7L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-15 6.7L3 16"/><path d="M3 21v-5h5"/></svg>
+            <h3>Pick up anywhere</h3>
+          </div>
+          <p>Your library and watch progress can follow you across devices when you choose to sync them, and stay put on your device when you do not.</p>
         </div>
       </div>
     </div>
   </section>
 
-  <section id="privacy" class="security">
+  <section id="privacy" class="privacy">
     <div class="wrap">
       <div class="section-head reveal">
-        <h2>Private by default</h2>
-        <p>Most apps treat privacy as a setting. Rillio treats it as the default, the quiet stream the name is named for.</p>
+        <h2>Yours, and quiet by default</h2>
+        <p>Rillio does not track you and keeps a low profile on the network. Here is what that means, and where it stops.</p>
       </div>
-      <div class="grid">
-        <div class="card reveal">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10Z"/></svg></div>
-          <h3>Your data stays yours</h3>
-          <p>No account needed. Your library and history live on your device by default, not on someone else's server.</p>
+      <div class="privacy-list reveal">
+        <div class="privacy-item">
+          <svg class="tick" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          <div><h3>Local-first, no account</h3><p>Your library and history live on your device by default, not on someone else's server.</p></div>
         </div>
-        <div class="card reveal" style="transition-delay:0.06s">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="10" rx="2"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/></svg></div>
-          <h3>Encrypted DNS</h3>
-          <p>Every name lookup goes out over DNS-over-HTTPS, encrypted, not broadcast in plaintext to whoever is listening.</p>
+        <div class="privacy-item">
+          <svg class="tick" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          <div><h3>Encrypted DNS</h3><p>Name lookups go out over DNS-over-HTTPS, not in plaintext to whoever is listening.</p></div>
         </div>
-        <div class="card reveal" style="transition-delay:0.12s">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 20h.01"/><path d="M7 20v-4"/><path d="M12 20v-8"/><path d="M17 20V8"/><path d="M22 4v16"/></svg></div>
-          <h3>Quiet networking</h3>
-          <p>The streaming engine stays a quiet client by default and never advertises you as a seeder, and you can route it through your own VPN or proxy.</p>
+        <div class="privacy-item">
+          <svg class="tick" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          <div><h3>Quiet networking</h3><p>No open ports by default, and the engine never advertises you as a seeder.</p></div>
         </div>
-        <div class="card reveal">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg></div>
-          <h3>Auditable, not a black box</h3>
-          <p>The engine is open-source Rust you can read and verify. The same code, running locally, with nothing hidden.</p>
+        <div class="privacy-item">
+          <svg class="tick" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          <div><h3>No ads, no tracking</h3><p>No trackers, no telemetry by default, nothing between you and what you came to watch.</p></div>
         </div>
-        <div class="card reveal" style="transition-delay:0.06s">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v4"/><path d="M12 18v4"/><path d="m4.9 4.9 2.8 2.8"/><path d="m16.3 16.3 2.8 2.8"/><path d="M2 12h4"/><path d="M18 12h4"/><path d="m4.9 19.1 2.8-2.8"/><path d="m16.3 7.7 2.8-2.8"/></svg></div>
-          <h3>Signed updates</h3>
-          <p>Every update is cryptographically signed and verified before it installs, so you always get the real thing.</p>
+        <div class="privacy-item">
+          <svg class="tick" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          <div><h3>Auditable</h3><p>An open-source Rust engine you can read and verify, running locally, not a black box.</p></div>
         </div>
-        <div class="card reveal" style="transition-delay:0.12s">
-          <div class="icon"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg></div>
-          <h3>No ads, no tracking</h3>
-          <p>No trackers, no telemetry by default, no ads between you and what you came to watch.</p>
+        <div class="privacy-item">
+          <svg class="tick" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          <div><h3>Signed updates</h3><p>Every update is cryptographically signed and verified before it installs.</p></div>
         </div>
       </div>
+      <p class="privacy-note reveal"><b>Where it stops.</b> Streaming over BitTorrent means other peers can see your IP address. Rillio does not hide that, and honestly no app can without a VPN. If it matters to you, route Rillio through your own VPN or SOCKS5 proxy.</p>
     </div>
   </section>
 
@@ -302,7 +305,7 @@
     <div class="wrap">
       <div class="box reveal">
         <h2>Start watching, quietly.</h2>
-        <p>Free, open source, and private from the first launch.</p>
+        <p>Free, open source, and yours from the first launch.</p>
         <div class="cta-row">
           <a class="btn btn-primary" href="https://github.com/pek100/rillio/releases/latest/download/Rillio-Setup.exe">Download for Windows</a>
         </div>
