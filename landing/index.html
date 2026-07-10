@@ -110,14 +110,6 @@
   @media (prefers-reduced-motion: reduce) { .reveal { opacity: 1; transform: none; transition: none; } }
 
   .hero { text-align: center; padding: 5.5rem 0 3.5rem; }
-  .hero-logo { height: clamp(4.5rem, 11vw, 7.5rem); margin: 0 auto 2rem; display: inline-block; }
-  .hero-logo .logo-mark { height: 100%; filter: drop-shadow(0 8px 32px rgba(255,160,51,0.22)); }
-  .eyebrow {
-    display: inline-flex; align-items: center; gap: 0.5rem;
-    font-size: 0.78rem; font-weight: 800; letter-spacing: 0.24em; text-transform: uppercase;
-    color: var(--accent); background: var(--accent-soft);
-    padding: 0.4rem 0.95rem; border-radius: var(--pill); margin-bottom: 1.6rem;
-  }
   .hero h1 { font-size: clamp(2.6rem, 6.4vw, 4.5rem); font-weight: 900; margin-bottom: 1.5rem; }
   .hero .lede { max-width: 40rem; margin: 0 auto 2.4rem; font-size: clamp(1.05rem, 2.2vw, 1.3rem); color: var(--fg-2); text-wrap: balance; }
   .cta-row { display: flex; gap: 0.9rem; justify-content: center; flex-wrap: wrap; }
@@ -212,10 +204,6 @@
 
 <main id="top">
   <section class="hero wrap">
-    <span class="hero-logo reveal"><svg class="logo-mark" viewBox="0 0 201 207" aria-label="Rillio"><use href="#rillio-mark"/></svg></span>
-    <div class="reveal" style="transition-delay:0.06s">
-      <span class="eyebrow">Free and open source</span>
-    </div>
     <h1 class="reveal" style="transition-delay:0.1s">
       <span class="headline-fill">Everything you watch,<br />in one</span> <span class="accent-fill">quiet</span> <span class="headline-fill">place.</span>
     </h1>
@@ -269,7 +257,7 @@
     <div class="wrap">
       <div class="section-head reveal">
         <h2>Yours, and quiet by default</h2>
-        <p>Rillio does not track you and keeps a low profile on the network. Here is what that means, and where it stops.</p>
+        <p>Rillio does not track you, and it does not open your machine up to the network. Here is what that means, and where it stops.</p>
       </div>
       <div class="privacy-list reveal">
         <div class="privacy-item">
@@ -282,7 +270,7 @@
         </div>
         <div class="privacy-item">
           <svg class="tick" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
-          <div><h3>Quiet networking</h3><p>No open ports by default, and the engine never advertises you as a seeder.</p></div>
+          <div><h3>Quiet networking</h3><p>The torrent engine does not open inbound ports or forward them through your router, so your machine is not left listening for connections.</p></div>
         </div>
         <div class="privacy-item">
           <svg class="tick" width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
