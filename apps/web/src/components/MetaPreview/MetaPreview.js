@@ -26,7 +26,17 @@ const ALLOWED_LINK_REDIRECTS = [
     routesRegexp.metadetails.regexp
 ];
 
-const MetaPreview = React.forwardRef(({ className, compact, name, logo, background, runtime, releaseInfo, released, description, deepLinks, links, trailerStreams, inLibrary, toggleInLibrary, watched, toggleWatched, ratingInfo }, ref) => {
+// Categories never rendered as link pills: imdb/share are surfaced elsewhere,
+// and cast/directors/writers are noise next to the genres.
+const HIDDEN_LINK_CATEGORIES = [
+    CONSTANTS.IMDB_LINK_CATEGORY,
+    CONSTANTS.SHARE_LINK_CATEGORY,
+    CONSTANTS.WRITERS_LINK_CATEGORY,
+    'Cast',
+    'Directors',
+];
+
+const MetaPreview = React.forwardRef(({ className, compact, name, logo, background, runtime, releaseInfo, released, description, deepLinks, links, inLibrary, toggleInLibrary, watched, toggleWatched, ratingInfo }, ref) => {
     const { t } = useTranslation();
     const [shareModalOpen, openShareModal, closeShareModal] = useBinaryState(false);
     const linksGroups = React.useMemo(() => {
@@ -89,13 +99,6 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
             :
             null;
     }, [deepLinks]);
-    const trailerHref = React.useMemo(() => {
-        if (!Array.isArray(trailerStreams) || trailerStreams.length === 0) {
-            return null;
-        }
-
-        return trailerStreams[0].deepLinks.player;
-    }, [trailerStreams]);
     const renderLogoFallback = React.useCallback(() => (
         <div className={styles['logo-placeholder']}>{name}</div>
     ), [name]);
@@ -135,7 +138,7 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                         renderLogoFallback()
                 }
                 {
-                    (typeof releaseInfo === 'string' && releaseInfo.length > 0) || (released instanceof Date && !isNaN(released.getTime())) || (typeof runtime === 'string' && runtime.length > 0) || linksGroups.has(CONSTANTS.IMDB_LINK_CATEGORY) ?
+                    !compact || (typeof releaseInfo === 'string' && releaseInfo.length > 0) || (released instanceof Date && !isNaN(released.getTime())) || (typeof runtime === 'string' && runtime.length > 0) || linksGroups.has(CONSTANTS.IMDB_LINK_CATEGORY) ?
                         <div className={styles['runtime-release-info-container']}>
                             {
                                 typeof runtime === 'string' && runtime.length > 0 ?
@@ -167,13 +170,69 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                                     :
                                     null
                             }
+                            {
+                                !compact ?
+                                    <div className={styles['meta-actions']}>
+                                        {
+                                            typeof toggleInLibrary === 'function' && typeof toggleWatched === 'function' ?
+                                                <ActionsGroup items={metaItemActions} className={styles['group-container']} />
+                                                :
+                                                null
+                                        }
+                                        {
+                                            ratingInfo !== null && ratingInfo !== undefined ?
+                                                <Ratings
+                                                    ratingInfo={ratingInfo}
+                                                    className={styles['group-container']}
+                                                />
+                                                :
+                                                null
+                                        }
+                                        {
+                                            linksGroups.has(CONSTANTS.SHARE_LINK_CATEGORY) ?
+                                                <React.Fragment>
+                                                    <ActionButton
+                                                        className={styles['action-button']}
+                                                        icon={'share'}
+                                                        label={t('CTX_SHARE')}
+                                                        tooltip={true}
+                                                        tabIndex={0}
+                                                        onClick={openShareModal}
+                                                    />
+                                                    {
+                                                        shareModalOpen ?
+                                                            <ModalDialog title={t('CTX_SHARE')} onCloseRequest={closeShareModal}>
+                                                                <SharePrompt
+                                                                    className={styles['share-prompt']}
+                                                                    url={linksGroups.get(CONSTANTS.SHARE_LINK_CATEGORY).href}
+                                                                />
+                                                            </ModalDialog>
+                                                            :
+                                                            null
+                                                    }
+                                                </React.Fragment>
+                                                :
+                                                null
+                                        }
+                                    </div>
+                                    :
+                                    null
+                            }
                         </div>
                         :
                         null
                 }
                 {
-                    compact && typeof description === 'string' && description.length > 0 ?
+                    typeof description === 'string' && description.length > 0 ?
                         <div className={styles['description-container']}>
+                            {
+                                !compact ?
+                                    <div className={styles['label-container']}>
+                                        {t('SUMMARY')}
+                                    </div>
+                                    :
+                                    null
+                            }
                             {description}
                         </div>
                         :
@@ -181,11 +240,7 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                 }
                 {
                     Array.from(linksGroups.keys())
-                        .filter((category) => {
-                            return category !== CONSTANTS.IMDB_LINK_CATEGORY &&
-                                category !== CONSTANTS.SHARE_LINK_CATEGORY &&
-                                category !== CONSTANTS.WRITERS_LINK_CATEGORY;
-                        })
+                        .filter((category) => !HIDDEN_LINK_CATEGORIES.includes(category))
                         .map((category, index) => (
                             <MetaLinks
                                 key={index}
@@ -195,85 +250,31 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                             />
                         ))
                 }
-                {
-                    !compact && typeof description === 'string' && description.length > 0 ?
-                        <div className={styles['description-container']}>
-                            <div className={styles['label-container']}>
-                                {t('SUMMARY')}
-                            </div>
-                            {description}
-                        </div>
-                        :
-                        null
-                }
             </div>
-            <div className={styles['action-buttons-container']}>
-                {
-                    typeof trailerHref === 'string' ?
-                        <ActionButton
-                            className={styles['action-button']}
-                            icon={'trailer'}
-                            label={t('TRAILER')}
-                            tabIndex={0}
-                            href={trailerHref}
-                            tooltip={compact}
-                        />
-                        :
-                        null
-                }
-                {
-                    typeof toggleInLibrary === 'function' && typeof toggleWatched === 'function'
-                        ? <ActionsGroup items={metaItemActions} className={styles['group-container']} />
-                        : null
-                }
-                {
-                    typeof showHref === 'string' && compact ?
-                        <ActionButton
-                            className={classnames(styles['action-button'], styles['show-button'])}
-                            icon={'play'}
-                            label={t('SHOW')}
-                            tabIndex={0}
-                            href={showHref}
-                        />
-                        :
-                        null
-                }
-                {
-                    !compact && ratingInfo !== null ?
-                        <Ratings
-                            ratingInfo={ratingInfo}
-                            className={styles['group-container']}
-                        />
-                        :
-                        null
-                }
-                {
-                    linksGroups.has(CONSTANTS.SHARE_LINK_CATEGORY) && !compact ?
-                        <React.Fragment>
-                            <ActionButton
-                                className={styles['action-button']}
-                                icon={'share'}
-                                label={t('CTX_SHARE')}
-                                tooltip={true}
-                                tabIndex={0}
-                                onClick={openShareModal}
-                            />
-                            {
-                                shareModalOpen ?
-                                    <ModalDialog title={t('CTX_SHARE')} onCloseRequest={closeShareModal}>
-                                        <SharePrompt
-                                            className={styles['share-prompt']}
-                                            url={linksGroups.get(CONSTANTS.SHARE_LINK_CATEGORY).href}
-                                        />
-                                    </ModalDialog>
-                                    :
-                                    null
-                            }
-                        </React.Fragment>
-                        :
-                        null
-                }
-            </div>
+            {
+                compact ?
+                    <div className={styles['action-buttons-container']}>
+                        {
+                            typeof toggleInLibrary === 'function' && typeof toggleWatched === 'function'
+                                ? <ActionsGroup items={metaItemActions} className={styles['group-container']} />
+                                : null
+                        }
+                        {
+                            typeof showHref === 'string' ?
+                                <ActionButton
+                                    className={classnames(styles['action-button'], styles['show-button'])}
+                                    icon={'play'}
+                                    label={t('SHOW')}
+                                    tabIndex={0}
+                                    href={showHref}
+                                />
+                                :
+                                null
+                        }
+                    </div>
+                    :
+                    null
+            }
         </div>
     );
 });
@@ -300,7 +301,6 @@ MetaPreview.propTypes = {
         name: PropTypes.string,
         url: PropTypes.string
     })),
-    trailerStreams: PropTypes.array,
     inLibrary: PropTypes.bool,
     toggleInLibrary: PropTypes.func,
     watched: PropTypes.bool,

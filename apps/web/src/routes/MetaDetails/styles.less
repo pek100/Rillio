@@ -76,13 +76,14 @@
         }
     }
 
-    // TOP — meta info card on the left, 16:9 trailer/backdrop on the right.
+    // TOP — one section: the details on the left and the video on the right share
+    // the same band. The video's 16:9 sets the height; the details stretch to it.
     .top {
         flex: none;
         align-self: stretch;
         display: flex;
         flex-direction: row;
-        align-items: flex-start;
+        align-items: stretch;
         gap: 2rem;
     }
 
@@ -90,11 +91,14 @@
     .meta-preview {
         flex: 0 0 clamp(20rem, 40%, 38rem);
         min-width: 0;
+        min-height: 0;
+        align-self: stretch;
     }
 
     .hero-media {
         flex: 1 1 0;
         min-width: 0;
+        align-self: flex-start;
     }
 
     // Streams / episodes span the full width beneath the row.

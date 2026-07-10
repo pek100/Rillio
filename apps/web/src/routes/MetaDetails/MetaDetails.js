@@ -204,7 +204,6 @@ const MetaDetails = () => {
                                                             metaDetails.metaItem.content.content.description
                                                     }
                                                     links={metaDetails.metaItem.content.content.links}
-                                                    trailerStreams={metaDetails.metaItem.content.content.trailerStreams}
                                                     inLibrary={metaDetails.metaItem.content.content.inLibrary}
                                                     toggleInLibrary={metaDetails.metaItem.content.content.inLibrary ? removeFromLibrary : addToLibrary}
                                                     watched={metaDetails.metaItem.content.content.watched}

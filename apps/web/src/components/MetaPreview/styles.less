@@ -3,6 +3,13 @@
 @import (reference) '~@stremio/stremio-colors/less/stremio-colors.less';
 @import (reference) '~rillio/common/screen-sizes.less';
 
+// Reach into ActionsGroup so the meta-row actions can be sized down from the
+// 4rem hero pill to something that sits on one line with the runtime/year.
+:import('~rillio/components/ActionsGroup/ActionsGroup.less') {
+    actions-icon-container: icon-container;
+    actions-icon: icon;
+}
+
 .meta-preview-container {
     position: relative;
     z-index: 0;
@@ -92,7 +99,42 @@
             flex-direction: row;
             align-items: center;
             flex-wrap: wrap;
+            gap: 0.5rem 0;
             margin-top: 1rem;
+            overflow: visible;
+
+            // Library / watched / rate / share, right of the runtime + year + rating.
+            .meta-actions {
+                flex: none;
+                margin-left: auto;
+                display: flex;
+                flex-direction: row;
+                align-items: center;
+                gap: 0.5rem;
+                overflow: visible;
+
+                .group-container {
+                    height: 2.5rem;
+
+                    .actions-icon-container {
+                        height: 2.5rem;
+                        width: 2.75rem;
+                        padding: 0 0.5rem;
+
+                        .actions-icon {
+                            width: 1.15rem;
+                            height: 1.15rem;
+                        }
+                    }
+                }
+
+                .action-button {
+                    flex: none;
+                    width: 2.5rem;
+                    height: 2.5rem;
+                    margin: 0;
+                }
+            }
 
             .runtime-label, .release-info-label {
                 flex: 0 1 auto;
