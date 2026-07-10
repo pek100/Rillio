@@ -26,11 +26,10 @@ const SoundOnIcon = () => (
     </svg>
 );
 
-// The full-bleed hero banner. A trailer autoplays MUTED and loops, cover-cropped
-// to the banner so it fills edge to edge. YouTube's own chrome is hidden
-// (controls=0, pointer-events off) and we drive mute/unmute ourselves through
-// the iframe JS API, so the viewer clicks one button to hear it. Falls back to
-// the backdrop, then the poster.
+// The hero's 16:9 media panel, sitting beside the meta card. A trailer autoplays
+// MUTED and loops. YouTube's own chrome is hidden (controls=0, pointer-events
+// off) and we drive mute/unmute ourselves through the iframe JS API, so the
+// viewer clicks one button to hear it. Falls back to the backdrop, then poster.
 const HeroMedia = ({ className, ytId, background, poster, name }: Props) => {
     const iframeRef = React.useRef<HTMLIFrameElement>(null);
     const [muted, setMuted] = React.useState(true);
@@ -70,7 +69,6 @@ const HeroMedia = ({ className, ytId, background, poster, name }: Props) => {
                         :
                         <div className={styles['still-empty']} />
             }
-            <div className={styles['scrim']} />
             {
                 trailerSrc ?
                     <button

@@ -164,19 +164,7 @@ const MetaDetails = () => {
                         null
                 }
                 <div className={styles['main-column']}>
-                    {
-                        metaDetails.metaItem !== null && metaDetails.metaItem.content.type === 'Ready' ?
-                            <HeroMedia
-                                className={classnames(styles['hero-media'], 'animation-fade-in')}
-                                ytId={trailerYtId}
-                                background={metaDetails.metaItem.content.content.background}
-                                poster={metaDetails.metaItem.content.content.poster}
-                                name={metaDetails.metaItem.content.content.name}
-                            />
-                            :
-                            null
-                    }
-                    <div className={styles['below']}>
+                    <div className={styles['top']}>
                         {
                             metaPath === null ?
                                 <DelayedRenderer delay={500}>
@@ -201,53 +189,62 @@ const MetaDetails = () => {
                                         metaDetails.metaItem.content.type === 'Loading' ?
                                             <MetaPreview.Placeholder className={styles['meta-preview']} />
                                             :
-                                            <MetaPreview
-                                                className={classnames(styles['meta-preview'], 'animation-fade-in')}
-                                                name={metaDetails.metaItem.content.content.name}
-                                                logo={metaDetails.metaItem.content.content.logo}
-                                                runtime={metaDetails.metaItem.content.content.runtime}
-                                                releaseInfo={metaDetails.metaItem.content.content.releaseInfo}
-                                                released={metaDetails.metaItem.content.content.released}
-                                                description={
-                                                    video !== null && typeof video.overview === 'string' && video.overview.length > 0 ?
-                                                        video.overview
-                                                        :
-                                                        metaDetails.metaItem.content.content.description
-                                                }
-                                                links={metaDetails.metaItem.content.content.links}
-                                                trailerStreams={metaDetails.metaItem.content.content.trailerStreams}
-                                                inLibrary={metaDetails.metaItem.content.content.inLibrary}
-                                                toggleInLibrary={metaDetails.metaItem.content.content.inLibrary ? removeFromLibrary : addToLibrary}
-                                                watched={metaDetails.metaItem.content.content.watched}
-                                                toggleWatched={toggleWatched}
-                                                metaId={metaDetails.metaItem.content.content.id}
-                                                ratingInfo={metaDetails.ratingInfo}
-                                            />
-                        }
-                        {
-                            streamPath !== null ?
-                                <StreamsList
-                                    className={styles['streams-list']}
-                                    streams={metaDetails.streams}
-                                    video={video}
-                                    type={streamPath.type}
-                                    onEpisodeSearch={handleEpisodeSearch}
-                                />
-                                :
-                                metaPath !== null ?
-                                    <VideosList
-                                        className={styles['videos-list']}
-                                        metaItem={metaDetails.metaItem}
-                                        libraryItem={metaDetails.libraryItem}
-                                        season={season}
-                                        selectedVideoId={metaDetails.libraryItem?.state?.video_id}
-                                        seasonOnSelect={seasonOnSelect}
-                                        toggleNotifications={toggleNotifications}
-                                    />
-                                    :
-                                    null
+                                            <React.Fragment>
+                                                <MetaPreview
+                                                    className={classnames(styles['meta-preview'], 'animation-fade-in')}
+                                                    name={metaDetails.metaItem.content.content.name}
+                                                    logo={metaDetails.metaItem.content.content.logo}
+                                                    runtime={metaDetails.metaItem.content.content.runtime}
+                                                    releaseInfo={metaDetails.metaItem.content.content.releaseInfo}
+                                                    released={metaDetails.metaItem.content.content.released}
+                                                    description={
+                                                        video !== null && typeof video.overview === 'string' && video.overview.length > 0 ?
+                                                            video.overview
+                                                            :
+                                                            metaDetails.metaItem.content.content.description
+                                                    }
+                                                    links={metaDetails.metaItem.content.content.links}
+                                                    trailerStreams={metaDetails.metaItem.content.content.trailerStreams}
+                                                    inLibrary={metaDetails.metaItem.content.content.inLibrary}
+                                                    toggleInLibrary={metaDetails.metaItem.content.content.inLibrary ? removeFromLibrary : addToLibrary}
+                                                    watched={metaDetails.metaItem.content.content.watched}
+                                                    toggleWatched={toggleWatched}
+                                                    metaId={metaDetails.metaItem.content.content.id}
+                                                    ratingInfo={metaDetails.ratingInfo}
+                                                />
+                                                <HeroMedia
+                                                    className={classnames(styles['hero-media'], 'animation-fade-in')}
+                                                    ytId={trailerYtId}
+                                                    background={metaDetails.metaItem.content.content.background}
+                                                    poster={metaDetails.metaItem.content.content.poster}
+                                                    name={metaDetails.metaItem.content.content.name}
+                                                />
+                                            </React.Fragment>
                         }
                     </div>
+                    {
+                        streamPath !== null ?
+                            <StreamsList
+                                className={styles['streams-list']}
+                                streams={metaDetails.streams}
+                                video={video}
+                                type={streamPath.type}
+                                onEpisodeSearch={handleEpisodeSearch}
+                            />
+                            :
+                            metaPath !== null ?
+                                <VideosList
+                                    className={styles['videos-list']}
+                                    metaItem={metaDetails.metaItem}
+                                    libraryItem={metaDetails.libraryItem}
+                                    season={season}
+                                    selectedVideoId={metaDetails.libraryItem?.state?.video_id}
+                                    seasonOnSelect={seasonOnSelect}
+                                    toggleNotifications={toggleNotifications}
+                                />
+                                :
+                                null
+                    }
                 </div>
             </div>
             {

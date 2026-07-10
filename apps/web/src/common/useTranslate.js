@@ -23,8 +23,11 @@ const useTranslate = () => {
             const translatedName = stringWithPrefix(partialKey, 'CATALOG_', name);
 
             if (type && withType) {
-                const translatedType = stringWithPrefix(type, 'TYPE_');
-                return `${translatedName} - ${translatedType}`;
+                // "Popular Movies", not "Popular - Movie": the plural reads as a
+                // phrase, so no dash. Falls back to the singular if a locale is
+                // missing the _PL key.
+                const translatedType = stringWithPrefix(`${type}_PL`, 'TYPE_', stringWithPrefix(type, 'TYPE_'));
+                return `${translatedName} ${translatedType}`;
             }
 
             return translatedName;

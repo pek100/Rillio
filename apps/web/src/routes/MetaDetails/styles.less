@@ -18,8 +18,6 @@
     padding-right: var(--safe-area-inset-right);
     box-sizing: border-box;
 
-    // Fixed backdrop behind the lower half of the page (the hero banner covers
-    // the top), fading into the page background.
     .background-image-layer {
         position: fixed;
         top: 0;
@@ -47,14 +45,10 @@
         }
     }
 
-    // The nav floats OVER the hero banner (its back button reads against the
-    // banner's top scrim), so the banner can run edge to edge from the top.
     .nav-bar {
-        position: absolute;
-        top: 0;
-        right: 0;
-        left: 0;
-        z-index: 2;
+        z-index: 1;
+        flex: none;
+        align-self: stretch;
     }
 
     .metadetails-content {
@@ -70,7 +64,7 @@
             flex: none;
         }
 
-        // The single vertical scroll column: full-bleed banner, then the row.
+        // One vertical scroll column: the [info | trailer] row, then the streams.
         .main-column {
             flex: 1;
             min-width: 0;
@@ -78,36 +72,22 @@
             overflow-y: auto;
             display: flex;
             flex-direction: column;
+            padding: 0.5rem 2rem 2.5rem;
         }
     }
 
-    .hero-media {
+    // TOP — meta info card on the left, 16:9 trailer/backdrop on the right.
+    .top {
         flex: none;
         align-self: stretch;
-    }
-
-    // Meta info card on the left, streams/episodes on the right.
-    .below {
-        flex: none;
-        align-self: stretch;
-        position: relative;
-        z-index: 1;
         display: flex;
         flex-direction: row;
         align-items: flex-start;
         gap: 2rem;
-        padding: 0 2rem 2.5rem;
-        // No banner (message / loading states): clear the floating nav.
-        margin-top: var(--horizontal-nav-bar-size);
-    }
-
-    // With a banner above, pull the row up into the banner's bottom fade.
-    .hero-media + .below {
-        margin-top: -2.5rem;
     }
 
     .meta-preview {
-        flex: 0 0 clamp(20rem, 34%, 32rem);
+        flex: 0 0 clamp(20rem, 40%, 38rem);
         min-width: 0;
         padding: 1.5rem;
         border: 1px solid var(--color-line);
@@ -115,11 +95,17 @@
         background-color: var(--color-surface);
     }
 
-    .streams-list,
-    .videos-list {
+    .hero-media {
         flex: 1 1 0;
         min-width: 0;
+    }
+
+    // Streams / episodes span the full width beneath the row.
+    .streams-list,
+    .videos-list {
+        flex: none;
         align-self: stretch;
+        margin-top: 2rem;
     }
 
     .meta-message-container {
@@ -168,15 +154,20 @@
     }
 }
 
-// Stack the info card above the streams once side-by-side gets cramped.
+// Stack the info card above the trailer once side-by-side gets cramped.
 @media (max-width: 60rem) {
     .metadetails-container {
-        .below {
+        .top {
             flex-direction: column;
             gap: 1.5rem;
         }
 
         .meta-preview {
+            flex: none;
+            align-self: stretch;
+        }
+
+        .hero-media {
             flex: none;
             align-self: stretch;
         }
@@ -191,8 +182,10 @@
             }
         }
 
-        .below {
-            padding: 0 1rem 1.5rem;
+        .metadetails-content {
+            .main-column {
+                padding: 0.5rem 1rem 1.5rem;
+            }
         }
     }
 }

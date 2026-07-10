@@ -20,6 +20,8 @@ const TABS: Tab[] = [
     { id: 'calendar', label: 'Calendar', href: '/calendar' },
 ];
 
+const ICON_BUTTON = 'inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-surface/70 backdrop-blur transition-colors duration-150';
+
 type Props = {
     className?: string;
     route?: string;
@@ -29,9 +31,59 @@ type Props = {
 const TopNav = ({ className, route, query }: Props) => {
     const { t } = useTranslation();
     const activeId = route === 'continue_watching' ? 'library' : route;
+    const isSearchRoute = route === 'search';
 
-    // The Account hub trigger — an island pill that opens the reused NavMenu popup
-    // (identity, Settings, Addons, fullscreen, magnet link, help, log out).
+    // The search field is collapsed to an icon and expands in place, so the
+    // right-hand cluster stays a quiet row of icons. On the search route the
+    // field is the point, so it stays open.
+    const [searchOpen, setSearchOpen] = React.useState(isSearchRoute);
+    const searchRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        if (isSearchRoute) {
+            setSearchOpen(true);
+        }
+    }, [isSearchRoute]);
+
+    React.useEffect(() => {
+        if (!searchOpen) return;
+        const input = searchRef.current?.querySelector('input');
+        if (input instanceof HTMLInputElement) {
+            input.focus();
+        }
+    }, [searchOpen]);
+
+    // Collapse on an outside click or Escape — but only while the field is
+    // empty, so a typed query is never thrown away.
+    React.useEffect(() => {
+        if (!searchOpen || isSearchRoute) return;
+
+        const isEmpty = () => {
+            const input = searchRef.current?.querySelector('input');
+            return !(input instanceof HTMLInputElement) || input.value.length === 0;
+        };
+        const onPointerDown = (event: MouseEvent) => {
+            const element = searchRef.current;
+            if (element && !element.contains(event.target as Node) && isEmpty()) {
+                setSearchOpen(false);
+            }
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape' && isEmpty()) {
+                setSearchOpen(false);
+            }
+        };
+
+        document.addEventListener('mousedown', onPointerDown);
+        document.addEventListener('keydown', onKeyDown);
+        return () => {
+            document.removeEventListener('mousedown', onPointerDown);
+            document.removeEventListener('keydown', onKeyDown);
+        };
+    }, [searchOpen, isSearchRoute]);
+
+    const openSearch = React.useCallback(() => setSearchOpen(true), []);
+
     // Popup passes `className` (its `label-container` positioning context) + the
     // menu itself as `children`; both must be honored or the menu has no anchor
     // and renders clipped inside the button. Button renders a <div>, so it can
@@ -41,10 +93,9 @@ const TopNav = ({ className, route, query }: Props) => {
             ref={ref}
             onClick={onClick}
             title={t('Account')}
-            className={cn(labelClassName, 'inline-flex shrink-0 items-center gap-2 h-10 pl-3 pr-4 rounded-full bg-surface/70 backdrop-blur text-fg-muted whitespace-nowrap hover:text-fg hover:bg-surface-hover transition-colors duration-150')}
+            className={cn(labelClassName, ICON_BUTTON, 'text-fg-muted hover:text-fg hover:bg-surface-hover')}
         >
             <Icon className="size-4" name="person-outline" />
-            <span className="text-sm font-medium">{t('Account')}</span>
             {children}
         </Button>
     ), [t]);
@@ -78,17 +129,24 @@ const TopNav = ({ className, route, query }: Props) => {
             <div className="flex-1" />
 
             <div className="flex shrink-0 items-center gap-2 overflow-visible">
-                <div className="w-60 shrink-0 lg:w-72">
-                    <SearchBar className="w-full" query={query} active={route === 'search'} />
-                </div>
+                {searchOpen ? (
+                    <div ref={searchRef} className="w-60 shrink-0 lg:w-72">
+                        <SearchBar className="w-full" query={query} active={isSearchRoute} />
+                    </div>
+                ) : (
+                    <Button
+                        onClick={openSearch}
+                        title={t('SEARCH')}
+                        className={cn(ICON_BUTTON, 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
+                    >
+                        <Icon className="size-4" name="search" />
+                    </Button>
+                )}
                 <Link
                     to="/addons"
                     title={t('ADDONS')}
                     tabIndex={-1}
-                    className={cn(
-                        'inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-surface/70 backdrop-blur transition-colors duration-150',
-                        route === 'addons' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg'
-                    )}
+                    className={cn(ICON_BUTTON, route === 'addons' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
                 >
                     <Icon className="size-4" name="addons-outline" />
                 </Link>
