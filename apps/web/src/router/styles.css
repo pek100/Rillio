@@ -20,6 +20,11 @@
     display: none;
 }
 
+/* A modal route floats over the page beneath it, which stays visible. */
+.routes-container.modal-top .route-container:nth-last-child(2) {
+    display: block;
+}
+
 .routes-container .route-container .route-content {
     position: absolute;
     top: 0;

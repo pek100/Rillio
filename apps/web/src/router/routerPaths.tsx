@@ -3,7 +3,15 @@
 import React from 'react';
 import routes from 'rillio/routes';
 
-export default [
+type RouterPathDef = {
+    path: string,
+    view: number,
+    element: React.ReactNode,
+    // A modal route floats over the view beneath it, which stays visible.
+    modal?: boolean,
+};
+
+const routerPaths: RouterPathDef[] = [
     {
         path: '/intro',
         view: 1,
@@ -47,6 +55,7 @@ export default [
     {
         path: '/addons/:type?/:transportUrl?/:catalogId?',
         view: 3,
+        modal: true,
         element: <routes.Addons />,
     },
     {
@@ -70,3 +79,5 @@ export default [
         element: <routes.NotFound />,
     },
 ];
+
+export default routerPaths;

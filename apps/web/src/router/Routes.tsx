@@ -73,8 +73,13 @@ const Routes = () => {
 
     const visibleViews = views.filter((view): view is CachedView => view !== null);
 
+    // A modal route (addons) renders over the view beneath it, so that view must
+    // stay visible instead of being hidden as a stale stack entry.
+    const topView = visibleViews[visibleViews.length - 1];
+    const modalTop = visibleViews.length > 1 && !!topView?.route.modal;
+
     return (
-        <div className={'routes-container'}>
+        <div className={modalTop ? 'routes-container modal-top' : 'routes-container'}>
             {
                 visibleViews.map((view, index) => (
                     <RRoutes key={view.key} location={view.location}>

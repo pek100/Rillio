@@ -21,6 +21,45 @@
     filters-modal-content: modal-dialog-content;
 }
 
+// /addons is a modal route: it floats over the page you came from, which the
+// router keeps mounted and visible beneath. Same theme as the search palette.
+.addons-modal {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+
+    .backdrop {
+        position: absolute;
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 0;
+        background-color: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(24px);
+    }
+
+    // Two classes, so these beat the .addons-container rules on the same element.
+    .panel {
+        position: relative;
+        z-index: 1;
+        width: min(72rem, calc(100vw - 4rem));
+        height: min(46rem, calc(100vh - 6rem));
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        border: 1px solid var(--color-line);
+        border-radius: var(--radius-squircle);
+        background-color: var(--color-surface);
+        box-shadow: var(--shadow-elevated);
+    }
+}
+
 .addons-container {
     height: calc(100% - var(--safe-area-inset-bottom));
     background-color: transparent;

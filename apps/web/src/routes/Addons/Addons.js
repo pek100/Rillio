@@ -1,14 +1,14 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
 const React = require('react');
-const { useParams } = require('react-router');
+const { useParams, useNavigate } = require('react-router');
 const { useSearchParams } = require('react-router-dom');
 const classnames = require('classnames');
 const { useTranslation } = require('react-i18next');
 const { default: Icon } = require('@stremio/stremio-icons/react');
 const { useCore } = require('rillio/core');
 const { usePlatform, useBinaryState, withCoreSuspender } = require('rillio/common');
-const { AddonDetailsModal, Button, Image, MainNavBars, ModalDialog, SearchBar, SharePrompt, TextInput, MultiselectMenu } = require('rillio/components');
+const { AddonDetailsModal, Button, Image, ModalDialog, SearchBar, SharePrompt, TextInput, MultiselectMenu } = require('rillio/components');
 const useToast = require('rillio/common/Toast/useToast');
 const Addon = require('./Addon');
 const useInstalledAddons = require('./useInstalledAddons');
@@ -122,8 +122,31 @@ const Addons = () => {
         setSearch('');
         clearSharedAddon();
     }, [urlParams, queryParams]);
+
+    // /addons is a modal route: it floats over whatever page you came from, which
+    // stays mounted and visible beneath. Its filters still navigate (deep links
+    // keep working) because that only swaps this same view.
+    const navigate = useNavigate();
+    const closeAddons = React.useCallback(() => {
+        navigate(-1);
+    }, [navigate]);
+    const nestedModalOpen = filtersModalOpen || addAddonModalOpen || sharedAddon !== null || typeof addonDetailsTransportUrl === 'string';
+    React.useEffect(() => {
+        const onKeyDown = (event) => {
+            // Let a nested dialog take Escape first.
+            if (event.key === 'Escape' && !nestedModalOpen) {
+                closeAddons();
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [closeAddons, nestedModalOpen]);
+
     return (
-        <MainNavBars className={styles['addons-container']} route={'addons'}>
+        <div className={styles['addons-modal']}>
+            <div className={styles['backdrop']} onClick={closeAddons} />
+            <div className={classnames(styles['panel'], styles['addons-container'])} role={'dialog'} aria-modal={'true'} aria-label={t('ADDONS')}>
             <div className={styles['addons-content']}>
                 <div className={styles['selectable-inputs-container']}>
                     {selectInputs.map((selectInput, index) => (
@@ -234,6 +257,7 @@ const Addons = () => {
                             </div>
                 }
             </div>
+            </div>
             {
                 filtersModalOpen ?
                     <ModalDialog title={t('ADDONS_FILTERS')} className={styles['filters-modal']} onCloseRequest={closeFiltersModal}>
@@ -308,12 +332,15 @@ const Addons = () => {
                     :
                     null
             }
-        </MainNavBars>
+        </div>
     );
 };
 
 const AddonsFallback = () => (
-    <MainNavBars className={styles['addons-container']} route={'addons'} />
+    <div className={styles['addons-modal']}>
+        <div className={styles['backdrop']} />
+        <div className={styles['panel']} />
+    </div>
 );
 
 module.exports = withCoreSuspender(Addons, AddonsFallback);
