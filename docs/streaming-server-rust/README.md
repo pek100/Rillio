@@ -6,13 +6,17 @@ related_files:
   - crates/core/src/types/streaming_server/
   - crates/core/src/types/resource/stream.rs
   - packages/video/src/withStreamingServer/
-  - docker/streaming-server/
 checklist: checklists/streaming-server-rust.md
-status: planning
+status: complete
 last_sync: 2026-07-08
 -->
 
 # Replacing `server.js` with a Rust streaming server
+
+> **Archived (post-port).** This is a historical design record; the port is
+> complete and shipping. The oracle scaffolding it references
+> (`docker/streaming-server` and `tests/oracle_diff.rs`) has since been removed.
+> The specs under `specs/` are kept for the same historical reference.
 
 ## Goal
 

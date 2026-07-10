@@ -21,8 +21,6 @@ crates/
   derive/               Model derive macro
   watched-bitfield/     Watched-episode bitfield
   streaming-server/     Auditable Rust streaming/torrent server (replaces server.js)
-docker/
-  streaming-server/     The upstream server.js container, kept only as a test oracle
 landing/                Static marketing site (rillio.app)
 ```
 
@@ -49,14 +47,13 @@ native mpv. The same React app runs both places.
 
 `crates/streaming-server` is an auditable, in-process replacement for Stremio's
 closed-source `server.js`. It uses **librqbit** for the torrent engine and serves
-the same HTTP API, verified byte-for-byte against the reference `server.js`
-container in `docker/streaming-server` (which is kept only as a test oracle, never
-shipped).
+the same HTTP API, which was validated byte-for-byte against the reference
+`server.js` during the port.
 
-Its defaults are privacy-conscious, not an anonymity guarantee: no inbound listen
-port and no UPnP by default, and it never advertises you as a seeder. BitTorrent
-still exposes your IP to peers, so bring your own SOCKS5/VPN if you need that
-hidden.
+Its defaults are privacy-conscious, not an anonymity guarantee: it opens no
+inbound listen port and no UPnP by default, so it isn't left accepting inbound
+connections. BitTorrent still exposes your IP to peers, so bring your own
+SOCKS5/VPN if you need that hidden.
 
 It is a separate cargo workspace because it pulls a large native tree (librqbit,
 rustls, DHT) that needs `url >= 2.5`, which conflicts with the wasm crates'

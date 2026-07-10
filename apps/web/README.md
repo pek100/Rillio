@@ -1,56 +1,22 @@
-# Stremio - Freedom to Stream
+# Rillio web client
 
-[![Build](https://github.com/Stremio/stremio-web/actions/workflows/build.yml/badge.svg)](https://github.com/Stremio/stremio-web/actions/workflows/build.yml)
-[![Github Page](https://img.shields.io/website?label=Page&logo=github&up_message=online&down_message=offline&url=https%3A%2F%2Fstremio.github.io%2Fstremio-web%2F)](https://stremio.github.io/stremio-web/development)
-
-Stremio is a modern media center that's a one-stop solution for your video entertainment. You discover, watch and organize video content from easy to install addons.
+The React + TypeScript client for [Rillio](../../README.md). It is embedded into
+the Tauri desktop app's WebView at build time (`frontendDist`), and the same app
+also runs in a plain browser. See the repo root `README.md` for the full
+architecture, prerequisites, and the desktop build.
 
 ## Build
 
-### Prerequisites
-
-* Node.js 22 or higher
-* [pnpm](https://pnpm.io/installation) 11 or higher
-
-### Install dependencies
-
 ```bash
 pnpm install
+pnpm start                     # webpack dev server
+pnpm run build                 # production build -> apps/web/build
 ```
 
-### Start development server
-
-```bash
-pnpm start
-```
-
-### Production build
-
-```bash
-pnpm run build
-```
-
-### Run with Docker
-
-```bash
-docker build -t stremio-web .
-docker run -p 8080:8080 stremio-web
-```
-
-## Screenshots
-
-### Board
-
-![Board](/assets/screenshots/board.png)
-
-### Discover
-
-![Discover](/assets/screenshots/discover.png)
-
-### Meta Details
-
-![Meta Details](/assets/screenshots/metadetails.png)
+Editing the Rust core (`crates/core`) only changes the app after
+`pnpm build:wasm` from the repo root rebuilds `@rillio/core-web`.
 
 ## License
 
-Stremio is copyright 2017-2023 Smart code and available under GPLv2 license. See the [LICENSE](/LICENSE.md) file in the project for more information.
+GPLv2. See [LICENSE.md](LICENSE.md). This client is a fork of Stremio's
+`stremio-web` (copyright 2017-2023 Smart code), retained under the same license.

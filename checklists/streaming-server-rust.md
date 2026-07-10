@@ -3,16 +3,22 @@ id: streaming-server-rust-checklist
 tags: [streaming-server, rust, checklist, critical]
 related_files: [docs/streaming-server-rust/README.md, docs/streaming-server-rust/decomposition.md]
 doc: docs/streaming-server-rust/README.md
-status: planning
+status: complete
 last_sync: 2026-07-08
 -->
 
 # Checklist — Rust streaming server
 
+> **Archived (post-port).** Milestones M0-M4 are complete and shipping in the
+> desktop app. The oracle scaffolding this checklist references
+> (`docker/streaming-server` and `tests/oracle_diff.rs`) has since been removed;
+> this file is kept only as a historical record of the port.
+
 Status keys: ☐ todo · ◐ in progress · ☑ done · ✗ dropped · ⚠ blocked
 
 Estimates re-baselined after adversarial review. "one engineer familiar with Rust+tokio."
-Every milestone's ship criterion is an **oracle diff** against `docker/streaming-server`.
+Every milestone's ship criterion was an **oracle diff** against the reference
+`server.js` container.
 
 ## Decisions (resolved 2026-07-08)
 
