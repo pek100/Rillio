@@ -1,0 +1,40 @@
+// Copyright (C) 2017-2026 Smart code 203358507
+
+// Shared chrome for MODAL ROUTES — routes flagged `modal: true` in
+// router/routerPaths, which float over the still-visible view beneath them.
+// Import with `@import (reference)` and call the mixins; callers set the
+// panel's own width/height.
+
+.modal-shell-root() {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    z-index: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-shell-backdrop() {
+    position: absolute;
+    top: 0;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    background-color: rgba(0, 0, 0, 0.6);
+    backdrop-filter: blur(24px);
+}
+
+.modal-shell-panel() {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    border: 1px solid var(--color-line);
+    border-radius: var(--radius-squircle);
+    background-color: var(--color-surface);
+    box-shadow: var(--shadow-elevated);
+}

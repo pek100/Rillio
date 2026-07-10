@@ -1,6 +1,24 @@
 // Copyright (C) 2017-2024 Smart code 203358507
 
 @import (reference) '~rillio/common/screen-sizes.less';
+@import (reference) '~rillio/common/modal-shell.less';
+
+// /settings is a modal route: it floats over the page you came from, which the
+// router keeps mounted and visible beneath.
+.settings-modal {
+    .modal-shell-root();
+
+    .backdrop {
+        .modal-shell-backdrop();
+    }
+
+    // Two classes, so these beat the .settings-container rules on the same element.
+    .panel {
+        .modal-shell-panel();
+        width: min(64rem, calc(100vw - 4rem));
+        height: min(46rem, calc(100vh - 6rem));
+    }
+}
 
 .settings-container {
     height: calc(100% - var(--safe-area-inset-bottom));

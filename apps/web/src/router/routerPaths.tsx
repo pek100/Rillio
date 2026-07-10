@@ -61,6 +61,7 @@ const routerPaths: RouterPathDef[] = [
     {
         path: '/settings',
         view: 3,
+        modal: true,
         element: <routes.Settings />,
     },
     {

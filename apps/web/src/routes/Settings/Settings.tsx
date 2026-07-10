@@ -1,10 +1,10 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
-import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import classnames from 'classnames';
 import throttle from 'lodash.throttle';
 import { usePlatform, useProfile, useStreamingServer, useRouteFocused, withCoreSuspender } from 'rillio/common';
-import { MainNavBars } from 'rillio/components';
 import { SECTIONS } from './constants';
 import Menu from './Menu';
 import General from './General';
@@ -84,8 +84,32 @@ const Settings = () => {
         }
     }, [routeFocused]);
 
+    // /settings is a modal route: it floats over whatever page you came from.
+    const navigate = useNavigate();
+    const closeSettings = useCallback(() => {
+        navigate(-1);
+    }, [navigate]);
+
+    useEffect(() => {
+        const onKeyDown = (event: KeyboardEvent) => {
+            if (event.key === 'Escape') {
+                closeSettings();
+            }
+        };
+
+        document.addEventListener('keydown', onKeyDown);
+        return () => document.removeEventListener('keydown', onKeyDown);
+    }, [closeSettings]);
+
     return (
-        <MainNavBars className={styles['settings-container']} route={'settings'}>
+        <div className={styles['settings-modal']}>
+            <div className={styles['backdrop']} onClick={closeSettings} />
+            <div
+                className={classnames(styles['panel'], styles['settings-container'])}
+                role={'dialog'}
+                aria-modal={'true'}
+                aria-label={'Settings'}
+            >
             <div className={classnames(styles['settings-content'], 'animation-fade-in')}>
                 <Menu
                     selected={selectedSectionId}
@@ -117,12 +141,16 @@ const Settings = () => {
                     <Info streamingServer={streamingServer} />
                 </div>
             </div>
-        </MainNavBars>
+            </div>
+        </div>
     );
 };
 
 const SettingsFallback = () => (
-    <MainNavBars className={styles['settings-container']} route={'settings'} />
+    <div className={styles['settings-modal']}>
+        <div className={styles['backdrop']} />
+        <div className={classnames(styles['panel'], styles['settings-container'])} />
+    </div>
 );
 
 export default withCoreSuspender(Settings, SettingsFallback);
