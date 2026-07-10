@@ -8,8 +8,7 @@
     overflow: hidden;
     background-color: var(--color-surface);
 
-    // pointer-events are off so YouTube's hidden chrome can't be poked; the
-    // sound button below is the only control.
+    // The iframe stays interactive: YouTube's own controls are the controls.
     .trailer,
     .still,
     .still-empty {
@@ -23,10 +22,6 @@
         border: none;
     }
 
-    .trailer {
-        pointer-events: none;
-    }
-
     .still {
         object-fit: cover;
         object-position: center;
@@ -34,33 +29,5 @@
 
     .still-empty {
         background-color: var(--color-surface);
-    }
-
-    .sound-button {
-        position: absolute;
-        right: 1rem;
-        bottom: 1rem;
-        z-index: 1;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 2.5rem;
-        height: 2.5rem;
-        border: 1px solid var(--color-line);
-        border-radius: 50%;
-        background-color: rgba(2, 4, 7, 0.55);
-        backdrop-filter: blur(6px);
-        color: var(--color-fg-muted);
-        cursor: pointer;
-        transition:
-            color 0.15s var(--ease-smooth, ease),
-            background-color 0.15s var(--ease-smooth, ease);
-
-        &:hover,
-        &:focus {
-            outline: none;
-            color: var(--color-fg);
-            background-color: var(--color-surface-hover);
-        }
     }
 }
