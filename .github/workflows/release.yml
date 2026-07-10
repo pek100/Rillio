@@ -102,16 +102,18 @@ jobs:
           releaseDraft: true
           prerelease: false
 
-      # Also publish the installer under a version-stable name so the website's
-      # download button can link straight to the file via
-      # releases/latest/download/Rillio-Setup.exe (works once the draft above is
-      # published).
-      - name: Publish stable-named installer
+      # Publish the installer under clean names: RillioSetup-<version>.exe (the
+      # human-facing versioned file) and RillioSetup.exe (a version-stable copy so
+      # the website can link to releases/latest/download/RillioSetup.exe). Works
+      # once the draft above is published.
+      - name: Publish named installers
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $exe = Get-ChildItem apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $exe) { throw "no NSIS installer produced" }
-          Copy-Item $exe.FullName Rillio-Setup.exe
-          gh release upload ${{ github.ref_name }} Rillio-Setup.exe --clobber --repo ${{ github.repository }}
+          $ver = "${{ github.ref_name }}".TrimStart('v')
+          Copy-Item $exe.FullName "RillioSetup-$ver.exe"
+          Copy-Item $exe.FullName "RillioSetup.exe"
+          gh release upload ${{ github.ref_name }} "RillioSetup-$ver.exe" "RillioSetup.exe" --clobber --repo ${{ github.repository }}
