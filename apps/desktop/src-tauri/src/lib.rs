@@ -151,10 +151,17 @@ fn build_main_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
         .and_then(|u| tauri::Url::parse(&u).ok())
         .map(tauri::WebviewUrl::External)
         .unwrap_or_default();
-    tauri::WebviewWindowBuilder::new(app, "main", start_url)
+    let window = tauri::WebviewWindowBuilder::new(app, "main", start_url)
         .title("Rillio")
         .inner_size(1280.0, 800.0)
         .resizable(true)
+        // Frameless: the web app draws its own window controls + drag region
+        // (apps/web WindowControls), gated to the shell. Edge-resize still works.
+        .decorations(false)
+        // Created hidden; the web loading screen calls window.show() once it has
+        // painted (index.html), so the transparent window never flashes the
+        // desktop through. A Rust fallback below reveals it if that never fires.
+        .visible(false)
         .transparent(mpv_embed_enabled())
         .additional_browser_args(&browser_args())
         .on_navigation(|url| {
@@ -169,7 +176,18 @@ fn build_main_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
                 }
             }
         })
-        .build()
+        .build()?;
+
+    // Fallback reveal: if the web layer never calls show() (e.g. a startup error
+    // before the loading screen paints), don't leave an invisible window. show()
+    // is idempotent, so racing the JS path is harmless.
+    let fallback = window.clone();
+    std::thread::spawn(move || {
+        std::thread::sleep(std::time::Duration::from_millis(2500));
+        let _ = fallback.show();
+    });
+
+    Ok(window)
 }
 
 /// On launch, ask GitHub Releases (see `plugins.updater.endpoints` in
@@ -209,6 +227,7 @@ fn spawn_update_check(app: tauri::AppHandle) {
 /// stale handle.
 #[tauri::command]
 async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
+    use tauri::Emitter;
     use tauri_plugin_updater::UpdaterExt;
 
     let update = app
@@ -219,8 +238,21 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
         .map_err(|e| e.to_string())?
         .ok_or_else(|| "no update available".to_string())?;
 
+    // Stream download progress to the web UI's updating overlay
+    // (apps/web App/UpdatingOverlay); `content_len` is the total size when known.
+    let app_cb = app.clone();
+    let mut downloaded: u64 = 0;
     update
-        .download_and_install(|_, _| {}, || {})
+        .download_and_install(
+            move |chunk_len, content_len| {
+                downloaded += chunk_len as u64;
+                let _ = app_cb.emit(
+                    "update-progress",
+                    serde_json::json!({ "downloaded": downloaded, "total": content_len }),
+                );
+            },
+            || {},
+        )
         .await
         .map_err(|e| e.to_string())?;
 

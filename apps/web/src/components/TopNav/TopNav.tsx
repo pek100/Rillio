@@ -5,6 +5,7 @@ import Icon from '@stremio/stremio-icons/react';
 import Logo from 'rillio/common/Logo/Logo';
 import { cn } from 'rillio/common/cn';
 import SearchModal from 'rillio/components/SearchModal';
+import { isShell } from 'rillio/components/WindowControls/WindowControls';
 
 // Reused legacy components (all the auth/account logic lives here).
 const NavMenu = require('rillio/components/NavBar/HorizontalNavBar/NavMenu');
@@ -34,6 +35,11 @@ type Props = {
 
 const TopNav = ({ className, route }: Props) => {
     const { t } = useTranslation();
+    // In the frameless desktop shell the nav doubles as the window drag handle:
+    // the bar and its empty spacer are drag regions, while the links/buttons
+    // (never tagged) stay clickable. `shell` is false in the browser build.
+    const shell = isShell();
+    const dragProps = shell ? { 'data-tauri-drag-region': '' } : {};
     const activeId = route === 'continue_watching' ? 'library' : route;
     const [searchOpen, setSearchOpen] = React.useState(false);
 
@@ -62,7 +68,7 @@ const TopNav = ({ className, route }: Props) => {
     ), [t]);
 
     return (
-        <nav className={cn(className, 'flex items-center gap-5 h-full px-6 overflow-visible')}>
+        <nav {...dragProps} className={cn(className, 'flex items-center gap-5 h-full px-6 overflow-visible')}>
             <Link to="/" title="Rillio" tabIndex={-1} className="flex items-center gap-2.5 shrink-0">
                 <Logo className="h-8 w-auto" />
                 <span className="hidden text-lg font-semibold tracking-tight text-fg sm:block">Rillio</span>
@@ -87,9 +93,9 @@ const TopNav = ({ className, route }: Props) => {
                 })}
             </div>
 
-            <div className="flex-1" />
+            <div {...dragProps} className="flex-1" />
 
-            <div className="flex shrink-0 items-center gap-2 overflow-visible">
+            <div className={cn('flex shrink-0 items-center gap-2 overflow-visible', shell && 'pr-[8.25rem]')}>
                 <Button
                     onClick={openSearch}
                     title={t('SEARCH')}

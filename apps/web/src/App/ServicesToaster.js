@@ -90,7 +90,11 @@ const ServicesToaster = () => {
                 message: 'Click to install and restart',
                 timeout: 60000,
                 onSelect: () => {
+                    // Show the full-screen updating overlay (App/UpdatingOverlay)
+                    // for the duration; install_update ends by restarting the app.
+                    window.dispatchEvent(new CustomEvent('rillio:update-start'));
                     TAURI.core.invoke('install_update').catch((e) => {
+                        window.dispatchEvent(new CustomEvent('rillio:update-error'));
                         toast.show({ type: 'error', title: 'Update failed', message: String(e), timeout: 5000 });
                     });
                 },

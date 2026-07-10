@@ -15,6 +15,8 @@ const DeepLinkHandler = require('./DeepLinkHandler');
 const { default: UpdaterBanner } = require('./UpdaterBanner');
 const { default: ShortcutsModal } = require('./ShortcutsModal');
 const { default: GamepadModal } = require('./GamepadModal');
+const { default: WindowControls } = require('rillio/components/WindowControls/WindowControls');
+const UpdatingOverlay = require('./UpdatingOverlay/UpdatingOverlay');
 const { OPEN_SEARCH_EVENT } = require('rillio/components/TopNav/TopNav');
 const styles = require('./styles');
 
@@ -59,6 +61,16 @@ const App = () => {
                 break;
         }
     }, [toggleShortcutModal, toggleGamepadModal]);
+
+    // Dismiss the pre-bundle loading screen (index.html) now that the app has
+    // mounted and the core is ready. Fade, then remove.
+    React.useEffect(() => {
+        const el = document.getElementById('rillio-loading');
+        if (!el) return;
+        el.classList.add('rl-hide');
+        const timer = setTimeout(() => el.remove(), 500);
+        return () => clearTimeout(timer);
+    }, []);
 
     onFileDrop(['application/x-bittorrent'], (file, buffer) => {
         core.transport.dispatch({
@@ -191,6 +203,8 @@ const App = () => {
                         <ShortcutsProvider onShortcut={onShortcut}>
                             <FullscreenProvider>
                                 <DiscordProvider>
+                                    <WindowControls />
+                                    <UpdatingOverlay />
                                     {
                                         shortcutModalOpen && <ShortcutsModal onClose={closeShortcutsModal}/>
                                     }
