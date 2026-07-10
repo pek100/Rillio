@@ -10,6 +10,9 @@ const useBoard = require('./useBoard');
 const useContinueWatchingPreview = require('./useContinueWatchingPreview');
 const styles = require('./styles');
 const { default: StreamingServerWarning } = require('./StreamingServerWarning');
+const { default: HeroCarousel } = require('./HeroCarousel');
+
+const HERO_SLIDES = 6;
 
 const THRESHOLD = 5;
 
@@ -20,13 +23,31 @@ const Board = () => {
     const [board, loadBoardRows] = useBoard();
     const notifications = useNotifications();
     const profile = useProfile();
-    const boardCatalogsOffset = continueWatchingPreview.items.length > 0 ? 1 : 0;
     const scrollContainerRef = React.useRef();
     const showStreamingServerWarning = React.useMemo(() => {
         return streamingServer.settings !== null && streamingServer.settings.type === 'Err' && (
             isNaN(profile.settings.streamingServerWarningDismissed.getTime()) ||
             profile.settings.streamingServerWarningDismissed.getTime() < Date.now());
     }, [profile.settings, streamingServer.settings]);
+    // Feed the hero from the first catalog that has loaded (Cinemeta's Popular
+    // /Top row), so it costs no extra fetch. Only items with a backdrop qualify.
+    const heroItems = React.useMemo(() => {
+        const catalog = board.catalogs.find((catalog) => (
+            catalog.content?.type === 'Ready' &&
+            Array.isArray(catalog.content.content) &&
+            catalog.content.content.length > 0
+        ));
+        if (!catalog) {
+            return [];
+        }
+
+        return catalog.content.content
+            .filter((item) => typeof item.background === 'string' && item.background.length > 0)
+            .slice(0, HERO_SLIDES);
+    }, [board.catalogs]);
+    // The hero and the continue-watching row precede the catalog rows inside the
+    // scroll container, so they shift the visible-child -> catalog index mapping.
+    const boardCatalogsOffset = (continueWatchingPreview.items.length > 0 ? 1 : 0) + (heroItems.length > 0 ? 1 : 0);
     const onVisibleRangeChange = React.useCallback(() => {
         const range = getVisibleChildrenRange(scrollContainerRef.current);
         if (range === null) {
@@ -50,6 +71,12 @@ const Board = () => {
             <EventModal />
             <MainNavBars className={styles['board-content-container']} route={'board'}>
                 <div ref={scrollContainerRef} className={styles['board-content']} onScroll={onScroll}>
+                    {
+                        heroItems.length > 0 ?
+                            <HeroCarousel className={classnames(styles['hero-carousel'], 'animation-fade-in')} items={heroItems} />
+                            :
+                            null
+                    }
                     {
                         continueWatchingPreview.items.length > 0 ?
                             <MetaRow
