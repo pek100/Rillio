@@ -86,6 +86,7 @@ const ServicesToaster = () => {
             const version = typeof event?.payload === 'string' ? event.payload : null;
             toast.show({
                 type: 'info',
+                icon: 'download',
                 title: version ? `Rillio ${version} is available` : 'An update is available',
                 message: 'Click to install and restart',
                 timeout: 60000,

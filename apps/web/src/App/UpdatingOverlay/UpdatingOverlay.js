@@ -1,7 +1,7 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
 const React = require('react');
-const { default: Logo } = require('rillio/common/Logo/Logo');
+const { default: Icon } = require('@stremio/stremio-icons/react');
 const styles = require('./styles.less');
 
 // Full-screen overlay shown after the user accepts a desktop update. It stays up
@@ -42,8 +42,12 @@ const UpdatingOverlay = () => {
     if (!active) return null;
 
     return (
-        <div className={styles['overlay']}>
-            <Logo className={styles['mark']} size={72} />
+        // The whole bare surface is a window drag region (it has no other
+        // interactive elements); the floating window controls sit above it.
+        <div className={styles['overlay']} data-tauri-drag-region>
+            <div className={styles['mark']}>
+                <Icon className={styles['mark-icon']} name={'download'} />
+            </div>
             <div className={styles['title']}>Updating Rillio</div>
             <div className={styles['track']}>
                 <div

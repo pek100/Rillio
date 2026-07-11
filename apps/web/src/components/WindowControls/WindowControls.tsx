@@ -44,12 +44,15 @@ const WindowControls = () => {
 
     return (
         <>
-            {/* Thin top-edge grab so the window drags on any route (kept short so
-                it never overlaps the nav's own controls below it). */}
-            <div data-tauri-drag-region className="fixed left-0 right-[8.25rem] top-0 z-[9000] h-2.5" />
+            {/* Draggable header strip along the very top edge, present on every
+                route (kept short so it never overlaps the nav's own controls
+                below it). z sits just under the loading screen so the controls
+                stay grabbable even over the full-screen loading/updating
+                overlays. */}
+            <div data-tauri-drag-region className="fixed left-0 right-[8.25rem] top-0 z-[2147483646] h-2.5" />
 
             {/* Controls: always on top, always clickable (no drag region). */}
-            <div className="fixed right-0 top-0 z-[100000] flex h-8 select-none">
+            <div className="fixed right-0 top-0 z-[2147483646] flex h-8 select-none">
                 <button
                     type="button"
                     className={`${btn} hover:bg-white/10 hover:text-fg`}
