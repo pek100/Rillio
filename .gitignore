@@ -33,3 +33,6 @@ Thumbs.db
 # libmpv dev DLL (dropped in locally; distribution bundles an official build)
 /apps/desktop/src-tauri/libmpv-2.dll
 /apps/desktop/src-tauri/*.dll
+
+# cargo-run session log (dev harness)
+apps/desktop/src-tauri/.cargo-run.log
