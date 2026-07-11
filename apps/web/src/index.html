@@ -21,15 +21,10 @@
         }
         #rillio-loading.rl-hide { opacity: 0; pointer-events: none; }
         #rl-canvas, #rillio-loading svg { width: 118px; height: 122px; filter: drop-shadow(0 8px 30px rgba(255, 160, 51, .2)); }
-        /* Frameless-shell chrome for the pre-bundle screen: a top drag strip and
-           minimize/close controls, so the window is movable and closable even if
-           the bundle hangs. Hidden until the Tauri global confirms the shell. */
-        #rl-drag { position: fixed; top: 0; left: 0; right: 132px; height: 10px; }
-        #rl-chrome { position: fixed; top: 0; right: 0; height: 32px; display: none; }
-        #rl-chrome.rl-on { display: flex; }
-        #rl-chrome button { width: 44px; height: 32px; padding: 0; border: 0; background: transparent; color: rgba(255, 255, 255, .55); display: flex; align-items: center; justify-content: center; }
-        #rl-chrome button:hover { background: rgba(255, 255, 255, .1); color: #fff; }
-        #rl-chrome button.rl-x:hover { background: #e5484d; color: #fff; }
+        /* Frameless-shell drag strip for the pre-bundle screen, so the window is
+           movable while loading. Deliberately no window controls here: they show
+           only once the app's own chrome mounts. */
+        #rl-drag { position: fixed; top: 0; left: 0; right: 0; height: 10px; }
     </style>
     <%= htmlWebpackPlugin.tags.headTags %>
 </head>
@@ -39,10 +34,6 @@
     <div id="rillio-loading" aria-hidden="true">
         <canvas id="rl-canvas" width="360" height="371"></canvas>
         <div id="rl-drag" data-tauri-drag-region></div>
-        <div id="rl-chrome">
-            <button id="rl-min" type="button" aria-label="Minimize"><svg width="11" height="11" viewBox="0 0 11 11"><rect x="1" y="5" width="9" height="1" fill="currentColor"/></svg></button>
-            <button id="rl-close" class="rl-x" type="button" aria-label="Close"><svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" stroke-width="1.2"><path d="M1.5 1.5l8 8M9.5 1.5l-8 8"/></svg></button>
-        </div>
     </div>
     <script>
         // Reveal the frameless/transparent shell window as soon as this loading
@@ -50,16 +41,8 @@
         (function () {
             var t = window.__TAURI__;
             if (t && t.window && typeof t.window.getCurrentWindow === 'function') {
-                var win = function () { try { return t.window.getCurrentWindow(); } catch (e) { return null; } };
-                var show = function () { var w = win(); if (w) w.show(); };
+                var show = function () { try { t.window.getCurrentWindow().show(); } catch (e) { } };
                 requestAnimationFrame(function () { requestAnimationFrame(show); });
-                // Reveal + wire the frameless-shell controls (only inside Tauri).
-                var chrome = document.getElementById('rl-chrome');
-                if (chrome) chrome.classList.add('rl-on');
-                var min = document.getElementById('rl-min');
-                var close = document.getElementById('rl-close');
-                if (min) min.addEventListener('click', function () { var w = win(); if (w && w.minimize) w.minimize(); });
-                if (close) close.addEventListener('click', function () { var w = win(); if (w && w.close) w.close(); });
             }
         })();
         // Loading animation: the Rillio mark colours itself with a fluid fill that
