@@ -36,6 +36,11 @@
     }
   },
   "plugins": {
+    "deep-link": {
+      "desktop": {
+        "schemes": ["stremio", "rillio"]
+      }
+    },
     "updater": {
       "endpoints": [
         "https://github.com/pek100/rillio/releases/latest/download/latest.json"

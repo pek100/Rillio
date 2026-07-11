@@ -24,8 +24,15 @@ tauri = { version = "2", features = [] }
 tauri-plugin-updater = "2"
 # Single-instance guard: a second launch would fail to bind the streaming
 # server's :11470 and fight over the shared WebView2 profile, so instead we
-# focus the already-running window and let the second process exit.
-tauri-plugin-single-instance = "2"
+# focus the already-running window and let the second process exit. The
+# `deep-link` feature makes it forward a deep link opened while we're already
+# running to the running instance (fires the deep-link plugin's on_open_url).
+tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
+# OS deep links: register stremio:// (ecosystem links, e.g. stremio-addons.net
+# "Install" buttons) and rillio:// (canonical) so clicking one opens Rillio and
+# navigates. Schemes + installer registration are configured in tauri.conf.json;
+# we forward each opened URL to the web client (see lib::queue_or_emit_deep_link).
+tauri-plugin-deep-link = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tracing = "0.1"

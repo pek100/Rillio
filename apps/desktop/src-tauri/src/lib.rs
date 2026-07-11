@@ -15,6 +15,22 @@ use tauri::Manager;
 #[derive(Default)]
 struct MpvState(Mutex<Option<mpv::Mpv>>);
 
+/// Buffer for OS deep links (stremio:// / rillio://). A link can arrive before
+/// the WebView has mounted its listener (cold start: the app is launched BY the
+/// link) or while the app is already running (warm: forwarded by the
+/// single-instance + deep-link plugin integration). We forward each URL to the
+/// web client as the `deep-link-open` signal; until the web reports it is ready
+/// (`app-ready` over the shell bridge) we buffer them so a cold-start link is
+/// not dropped on the floor.
+#[derive(Default)]
+struct DeepLinkQueue {
+    web_ready: bool,
+    pending: Vec<String>,
+}
+
+#[derive(Default)]
+struct DeepLinkState(Mutex<DeepLinkQueue>);
+
 /// Whether to embed mpv inside the app window (S4 compositing: video renders
 /// into the main window behind the transparent WebView, controls overlaid) vs a
 /// separate mpv output window. Embedded is the default; opt out with
@@ -115,6 +131,97 @@ fn open_external(url: String) -> Result<(), String> {
     open::that(&url).map_err(|e| format!("open_external({url}): {e}"))
 }
 
+/// The only schemes we accept from the OS. The deep-link plugin is configured
+/// for exactly these (see tauri.conf.json), but deep links are untrusted input,
+/// so we re-check the scheme at the boundary before forwarding anything.
+fn is_deep_link_scheme(scheme: &str) -> bool {
+    matches!(scheme.to_ascii_lowercase().as_str(), "stremio" | "rillio")
+}
+
+/// Forward one deep-link URL to the web client. We reuse the existing shell
+/// signal bus (`shell-signal` carries `{event, payload}`; useShell re-emits it
+/// as the named event), so the web listens with `shell.on('deep-link-open')`.
+/// The web side (DeepLinkOpenHandler) validates + routes it.
+fn emit_deep_link(app: &tauri::AppHandle, url: &str) {
+    use tauri::Emitter;
+    if let Err(e) = app.emit(
+        "shell-signal",
+        serde_json::json!({ "event": "deep-link-open", "payload": url }),
+    ) {
+        tracing::warn!("deep-link: emit failed for {url}: {e}");
+    }
+}
+
+/// Accept a deep link from the OS: emit it now if the web client is ready,
+/// otherwise buffer it until `app-ready`. The scheme is assumed pre-checked by
+/// the caller (via [`is_deep_link_scheme`]).
+fn queue_or_emit_deep_link(app: &tauri::AppHandle, url: &str) {
+    let ready = {
+        let state = app.state::<DeepLinkState>();
+        let mut q = state.0.lock().unwrap();
+        if q.web_ready {
+            true
+        } else {
+            tracing::info!("deep-link: buffering {url} until web is ready");
+            q.pending.push(url.to_string());
+            false
+        }
+    };
+    if ready {
+        tracing::info!("deep-link: forwarding {url}");
+        emit_deep_link(app, url);
+    }
+}
+
+/// Called when the web client reports it has mounted its listeners (`app-ready`
+/// over the shell bridge, see `shell::shell_send`). Marks the web ready and
+/// flushes any deep links that arrived during startup.
+pub(crate) fn mark_web_ready_and_flush(app: &tauri::AppHandle) {
+    let pending: Vec<String> = {
+        let state = app.state::<DeepLinkState>();
+        let mut q = state.0.lock().unwrap();
+        q.web_ready = true;
+        std::mem::take(&mut q.pending)
+    };
+    for url in pending {
+        tracing::info!("deep-link: flushing buffered {url}");
+        emit_deep_link(app, &url);
+    }
+}
+
+/// Register the OS-deep-link handlers. `get_current()` captures a cold-start
+/// launch URL (the app was opened BY the link); `on_open_url` fires for links
+/// opened while running (delivered here by the single-instance `deep-link`
+/// integration on Windows). Both funnel through [`queue_or_emit_deep_link`].
+///
+/// NOTE: we deliberately do NOT call `register_all()` here. That writes the
+/// scheme handlers into the Windows registry at runtime, which would hijack the
+/// machine's real `stremio://` handler to point at a dev build. Production
+/// registration is done by the NSIS installer from the `plugins.deep-link`
+/// config in tauri.conf.json.
+fn setup_deep_links(app: &tauri::App) {
+    use tauri_plugin_deep_link::DeepLinkExt;
+
+    if let Ok(Some(urls)) = app.deep_link().get_current() {
+        for url in urls {
+            if is_deep_link_scheme(url.scheme()) {
+                queue_or_emit_deep_link(app.handle(), url.as_str());
+            }
+        }
+    }
+
+    let handle = app.handle().clone();
+    app.deep_link().on_open_url(move |event| {
+        for url in event.urls() {
+            if is_deep_link_scheme(url.scheme()) {
+                queue_or_emit_deep_link(&handle, url.as_str());
+            } else {
+                tracing::warn!("deep-link: ignoring non-stremio/rillio url {url}");
+            }
+        }
+    });
+}
+
 /// Build and run the Tauri application.
 pub fn run() {
     let _ = tracing_subscriber::fmt()
@@ -146,13 +253,19 @@ pub fn run() {
                 let _ = window.set_focus();
             }
         }))
+        // Deep-link plugin MUST be registered after single-instance (above) so
+        // the single-instance `deep-link` feature can forward a warm-launch URL
+        // into this plugin's on_open_url. See setup_deep_links.
+        .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(MpvState::default())
         .manage(shell::ShellState::default())
+        .manage(DeepLinkState::default())
         .setup(|app| {
             start_streaming_server(app.handle());
             let window = build_main_window(app)?;
             spawn_update_check(app.handle().clone());
+            setup_deep_links(app);
             // S3 part-2 render proof: RILLIO_MPV_TEST=<url|"test"> embeds mpv in
             // the window and plays it. "test" = a generated color pattern.
             if let Ok(src) = std::env::var("RILLIO_MPV_TEST") {
@@ -490,6 +603,19 @@ mod tests {
             "javascript:alert(1)",
         ] {
             assert!(validate_external_url(bad).is_err(), "should reject {bad:?}");
+        }
+    }
+
+    /// The deep-link scheme boundary accepts only stremio/rillio (any case) and
+    /// denies everything else, so an OS-supplied URL of another scheme is never
+    /// forwarded to the web client.
+    #[test]
+    fn deep_link_scheme_is_allowlisted() {
+        for ok in ["stremio", "rillio", "STREMIO", "Rillio"] {
+            assert!(is_deep_link_scheme(ok), "should accept {ok}");
+        }
+        for bad in ["", "http", "https", "magnet", "file", "javascript", "ms-msdt"] {
+            assert!(!is_deep_link_scheme(bad), "should reject {bad}");
         }
     }
 

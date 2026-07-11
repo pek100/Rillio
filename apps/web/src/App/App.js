@@ -12,6 +12,7 @@ const ServicesToaster = require('./ServicesToaster');
 const NotificationsToaster = require('./NotificationsToaster');
 const SearchParamsHandler = require('./SearchParamsHandler');
 const DeepLinkHandler = require('./DeepLinkHandler');
+const DeepLinkOpenHandler = require('./DeepLinkOpenHandler');
 const { default: UpdaterBanner } = require('./UpdaterBanner');
 const { default: ShortcutsModal } = require('./ShortcutsModal');
 const { default: GamepadModal } = require('./GamepadModal');
@@ -210,6 +211,7 @@ const App = () => {
                                     <NotificationsToaster />
                                     <SearchParamsHandler />
                                     <DeepLinkHandler />
+                                    <DeepLinkOpenHandler />
                                     <UpdaterBanner className={styles['updater-banner-container']} />
                                     <ErrorBoundary>
                                         <ProtectedRoutes />

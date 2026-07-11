@@ -526,6 +526,13 @@ pub fn shell_send(
             );
             Ok(())
         }
+        // The web client has mounted and registered its listeners. Flush any OS
+        // deep links (stremio:// / rillio://) that arrived during startup, before
+        // the `deep-link-open` listener existed (see crate::DeepLinkState).
+        "app-ready" => {
+            crate::mark_web_ready_and_flush(&app);
+            Ok(())
+        }
         other => {
             tracing::debug!("shell_send: unhandled method {other}");
             Ok(())
