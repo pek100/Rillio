@@ -58,7 +58,10 @@ jobs:
 
       - uses: jetli/wasm-pack-action@0d096b08b4e5a7de8c28de67e11e945404e9eefa # v0.4.0
         with:
-          version: latest
+          # Pin the wasm-pack version, not `latest`. `latest` is non-deterministic
+          # and the action mis-resolves newer releases (e.g. 0.15.0) to an old
+          # wasm-pack that lacks the `--no-pack` flag build.mjs uses.
+          version: v0.13.1
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
