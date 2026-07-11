@@ -342,10 +342,10 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
 /// Spawn the embedded streaming server on Tauri's async (tokio) runtime. It
 /// binds 127.0.0.1:11470 and owns the torrent cache under the app data dir.
 fn start_streaming_server(app: &tauri::AppHandle) {
-    // STREMIO_STREAMING_CACHE_DIR overrides the cache/session root. Use it to run
+    // RILLIO_STREAMING_CACHE_DIR overrides the cache/session root. Use it to run
     // a dev build against an ISOLATED cache so it never opens (or evicts from) the
     // installed app's real torrent cache. Unset in production => the app data dir.
-    let cache_dir = match std::env::var_os("STREMIO_STREAMING_CACHE_DIR") {
+    let cache_dir = match std::env::var_os("RILLIO_STREAMING_CACHE_DIR") {
         Some(dir) => std::path::PathBuf::from(dir),
         None => app
             .path()
