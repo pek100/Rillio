@@ -1,0 +1,56 @@
+// Defaults fit the account menu; the Settings page overrides the
+// --display-name-* custom properties on its wrapper class.
+.display-name-edit {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+
+    .name-label {
+        font-size: var(--display-name-size, 1.05rem);
+        font-weight: 700;
+        color: var(--primary-foreground-color);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: var(--display-name-max-width, 13rem);
+    }
+
+    .edit-button {
+        flex: none;
+        opacity: 0.5;
+        transition: opacity 150ms ease;
+
+        .edit-icon {
+            display: block;
+            width: var(--display-name-icon-size, 0.85rem);
+            height: var(--display-name-icon-size, 0.85rem);
+            color: var(--color-fg-subtle);
+            transition: color 150ms ease;
+        }
+
+        &:hover .edit-icon {
+            color: var(--color-fg);
+        }
+    }
+
+    &:hover .edit-button {
+        opacity: 1;
+    }
+
+    .name-input {
+        flex: 1;
+        min-width: 0;
+        font-size: var(--display-name-size, 1.05rem);
+        font-weight: 700;
+        color: var(--primary-foreground-color);
+        background: var(--overlay-color);
+        border: 1px solid var(--color-line);
+        border-radius: 0.4rem;
+        padding: 0.15rem 0.45rem;
+        outline: none;
+
+        &:focus {
+            border-color: var(--color-accent);
+        }
+    }
+}

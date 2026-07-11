@@ -37,12 +37,28 @@ const CORE_KEYS = [
 const NAME_KEY = 'rillio.displayName';
 const ALL_KEYS = [...CORE_KEYS, NAME_KEY];
 
-// Encode the local account into a paste/scan-friendly base64 string.
+// Encode the local account into a paste/scan-friendly base64 string. The profile
+// bucket is embedded with `auth` nulled (same shape the post-Stremio-import
+// anonymize step rewrites): a code exported right after a Stremio import must
+// never carry a live Stremio token. Local accounts have null auth anyway, so the
+// restored account works the same.
 export const exportLocalData = (): string => {
     const data: Record<string, string> = {};
     for (const k of ALL_KEYS) {
         const v = window.localStorage.getItem(k);
         if (v !== null) data[k] = v;
+    }
+    if (typeof data['profile'] === 'string') {
+        let profile: unknown;
+        try {
+            profile = JSON.parse(data['profile']);
+        } catch {
+            throw new Error('The profile data on this device is not valid JSON, cannot export.');
+        }
+        if (profile !== null && typeof profile === 'object' && 'auth' in profile) {
+            (profile as { auth: unknown }).auth = null;
+            data['profile'] = JSON.stringify(profile);
+        }
     }
     const json = JSON.stringify({ v: 1, data });
     const gz = gzipSync(strToU8(json), { level: 9 });
@@ -50,7 +66,10 @@ export const exportLocalData = (): string => {
 };
 
 // Decode a code and write the buckets back. Only known keys are written; anything
-// else in the payload is ignored. Caller should reload the page on success.
+// else in the payload is ignored. The import is all-or-nothing: every bucket is
+// validated up front, the current buckets are backed up before the first write,
+// and any write failure rolls everything back. Caller should reload the page on
+// success.
 export const importLocalData = (code: string): { ok: boolean; error?: string; keys?: number } => {
     const trimmed = (code || '').trim();
     if (!trimmed) return { ok: false, error: 'Paste a sync code first.' };
@@ -58,19 +77,70 @@ export const importLocalData = (code: string): { ok: boolean; error?: string; ke
     try {
         parsed = JSON.parse(strFromU8(gunzipSync(base64ToBytes(trimmed))));
     } catch {
-        return { ok: false, error: 'Could not read that code — it may be truncated or corrupted.' };
+        return { ok: false, error: 'Could not read that code, it may be truncated or corrupted.' };
     }
-    if (!parsed || parsed.v !== 1 || typeof parsed.data !== 'object') {
+    if (!parsed || parsed.v !== 1 || typeof parsed.data !== 'object' || parsed.data === null) {
         return { ok: false, error: 'This does not look like a Rillio sync code.' };
     }
-    let keys = 0;
-    for (const k of ALL_KEYS) {
-        if (typeof parsed.data[k] === 'string') {
-            try { window.localStorage.setItem(k, parsed.data[k]); keys++; } catch { /* full/blocked */ }
+    // Validate every incoming bucket before touching storage. Core buckets must be
+    // parseable JSON (the Rust core JSON-parses them on boot); the display name is
+    // a plain string.
+    const incoming: Record<string, string> = {};
+    for (const k of CORE_KEYS) {
+        const v = parsed.data[k];
+        if (typeof v !== 'string') continue;
+        try {
+            JSON.parse(v);
+        } catch {
+            return { ok: false, error: `The "${k}" data in this code is not valid JSON, refusing to import.` };
+        }
+        incoming[k] = v;
+    }
+    if (typeof parsed.data[NAME_KEY] === 'string') incoming[NAME_KEY] = parsed.data[NAME_KEY];
+    const keys = Object.keys(incoming);
+    if (keys.length === 0) return { ok: false, error: 'The code contained no account data.' };
+    // Reject codes exported by a newer core schema. The local `schema_version`
+    // bucket is written by this app's core from SCHEMA_VERSION in
+    // crates/core/src/constants.rs; the core migrates older buckets forward on
+    // boot but refuses newer ones, which would brick the app after the reload.
+    if (typeof incoming['schema_version'] === 'string') {
+        const incomingSchema = Number(incoming['schema_version']);
+        if (!Number.isFinite(incomingSchema)) {
+            return { ok: false, error: 'The schema version in this code is unreadable, refusing to import.' };
+        }
+        const localRaw = window.localStorage.getItem('schema_version');
+        const localSchema = localRaw === null ? NaN : Number(localRaw);
+        if (!Number.isFinite(localSchema)) {
+            return { ok: false, error: 'Could not read this device\'s schema version to check compatibility, refusing to import.' };
+        }
+        if (incomingSchema > localSchema) {
+            return { ok: false, error: 'This code was exported by a newer version of Rillio. Update this app, then restore.' };
         }
     }
-    if (keys === 0) return { ok: false, error: 'The code contained no account data.' };
-    return { ok: true, keys };
+    // All-or-nothing write: back up every bucket about to be overwritten, and on
+    // any failure restore all of them. A failed write is a failed import, never a
+    // partial success.
+    const backup: Record<string, string | null> = {};
+    for (const k of keys) backup[k] = window.localStorage.getItem(k);
+    try {
+        for (const k of keys) window.localStorage.setItem(k, incoming[k]);
+    } catch (e) {
+        const rollbackFailures: string[] = [];
+        for (const k of keys) {
+            try {
+                if (backup[k] === null) window.localStorage.removeItem(k);
+                else window.localStorage.setItem(k, backup[k] as string);
+            } catch {
+                rollbackFailures.push(k);
+            }
+        }
+        const reason = e instanceof Error ? e.message : String(e);
+        const restored = rollbackFailures.length === 0 ?
+            'Your previous data was restored.' :
+            `Restoring your previous data also failed for: ${rollbackFailures.join(', ')}.`;
+        return { ok: false, error: `Import failed while writing (${reason}). ${restored}` };
+    }
+    return { ok: true, keys: keys.length };
 };
 
 // Rewrite a persisted bucket's owner id to anonymous (null). Used after a one-time

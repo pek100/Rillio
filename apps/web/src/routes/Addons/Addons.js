@@ -1,12 +1,13 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
 const React = require('react');
-const { useParams, useNavigate } = require('react-router');
+const { useParams } = require('react-router');
 const { useSearchParams } = require('react-router-dom');
 const classnames = require('classnames');
 const { useTranslation } = require('react-i18next');
 const { default: Icon } = require('@stremio/stremio-icons/react');
 const { useCore } = require('rillio/core');
+const { useCloseModalRoute } = require('rillio-router');
 const { usePlatform, useBinaryState, withCoreSuspender } = require('rillio/common');
 const { AddonDetailsModal, Button, Image, ModalDialog, SearchBar, SharePrompt, TextInput, MultiselectMenu } = require('rillio/components');
 const useToast = require('rillio/common/Toast/useToast');
@@ -101,6 +102,9 @@ const Addons = () => {
     const onAddonConfigure = React.useCallback((event) => {
         platform.openExternal(event.dataset.addon.transportUrl.replace('manifest.json', 'configure'));
     }, []);
+    const openAddonDirectory = React.useCallback(() => {
+        platform.openExternal('https://stremio-addons.net/addons');
+    }, [platform]);
     const onAddonOpen = React.useCallback((event) => {
         setAddonDetailsTransportUrl(event.dataset.addon.transportUrl);
     }, [setAddonDetailsTransportUrl]);
@@ -126,10 +130,7 @@ const Addons = () => {
     // /addons is a modal route: it floats over whatever page you came from, which
     // stays mounted and visible beneath. Its filters still navigate (deep links
     // keep working) because that only swaps this same view.
-    const navigate = useNavigate();
-    const closeAddons = React.useCallback(() => {
-        navigate(-1);
-    }, [navigate]);
+    const closeAddons = useCloseModalRoute();
     const nestedModalOpen = filtersModalOpen || addAddonModalOpen || sharedAddon !== null || typeof addonDetailsTransportUrl === 'string';
     React.useEffect(() => {
         const onKeyDown = (event) => {
@@ -288,6 +289,10 @@ const Addons = () => {
                             autoFocus={true}
                             onSubmit={addAddonOnSubmit}
                         />
+                        <Button className={styles['directory-link']} title={t('ADD_ADDON_DIRECTORY')} onClick={openAddonDirectory}>
+                            <Icon className={styles['directory-icon']} name={'link'} />
+                            <div className={styles['directory-label']}>{t('ADD_ADDON_DIRECTORY')}</div>
+                        </Button>
                     </ModalDialog>
                     :
                     null

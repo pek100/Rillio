@@ -1,11 +1,14 @@
 <!--
 id: desktop-shell
-tags: [shell, tauri, mpv, vlc, playback, roadmap, deferred]
-status: deferred
-last_sync: 2026-07-09
+tags: [shell, tauri, mpv, vlc, playback, roadmap, archived]
+status: archived
+last_sync: 2026-07-11
 -->
 
 # Desktop shell — decision & deferred plan
+
+> **Archived (post-ship).** This is a historical design record; the shell was
+> built as planned and ships self-updating (see `apps/desktop/src-tauri`).
 
 **Status: DEFERRED.** Not started until the streaming-server plan
 (`checklists/streaming-server-rust.md`, M2–M6) is finished. Recorded here so the

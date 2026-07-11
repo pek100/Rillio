@@ -1,10 +1,6 @@
 var ChromecastSenderVideo = require('../ChromecastSenderVideo');
 var ShellVideo = require('../ShellVideo');
 var HTMLVideo = require('../HTMLVideo');
-var TizenVideo = require('../TizenVideo');
-var TitanVideo = require('../TitanVideo');
-var VidaaVideo = require('../VidaaVideo');
-var WebOsVideo = require('../WebOsVideo');
 var IFrameVideo = require('../IFrameVideo');
 var YouTubeVideo = require('../YouTubeVideo');
 var withStreamingServer = require('../withStreamingServer');
@@ -33,34 +29,10 @@ function selectVideoImplementation(commandArgs, options) {
     }
 
     if (typeof commandArgs.streamingServerURL === 'string') {
-        if (commandArgs.platform === 'Tizen') {
-            return withStreamingServer(withHTMLSubtitles(TizenVideo));
-        }
-        if (commandArgs.platform === 'webOS') {
-            return withStreamingServer(withHTMLSubtitles(WebOsVideo));
-        }
-        if (commandArgs.platform === 'Titan' || commandArgs.platform === 'NetTV') {
-            return withStreamingServer(withHTMLSubtitles(TitanVideo));
-        }
-        if (commandArgs.platform === 'Vidaa') {
-            return withStreamingServer(withHTMLSubtitles(VidaaVideo));
-        }
         return withStreamingServer(withHTMLSubtitles(HTMLVideo));
     }
 
     if (typeof commandArgs.stream.url === 'string') {
-        if (commandArgs.platform === 'Tizen') {
-            return withVideoParams(withHTMLSubtitles(TizenVideo));
-        }
-        if (commandArgs.platform === 'webOS') {
-            return withVideoParams(withHTMLSubtitles(WebOsVideo));
-        }
-        if (commandArgs.platform === 'Titan' || commandArgs.platform === 'NetTV') {
-            return withVideoParams(withHTMLSubtitles(TitanVideo));
-        }
-        if (commandArgs.platform === 'Vidaa') {
-            return withVideoParams(withHTMLSubtitles(VidaaVideo));
-        }
         return withVideoParams(withHTMLSubtitles(HTMLVideo));
     }
 

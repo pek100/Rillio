@@ -54,6 +54,13 @@
     line-height: 1.6; -webkit-font-smoothing: antialiased; overflow-x: hidden;
   }
   a { color: inherit; text-decoration: none; }
+  /* Inline text link: the one accent, a faint underline that lights up on hover. */
+  .ilink {
+    color: var(--accent); font-weight: 700;
+    border-bottom: 1px solid var(--accent-soft);
+    transition: filter 0.15s var(--ease), border-color 0.15s var(--ease);
+  }
+  .ilink:hover { filter: brightness(1.12); border-color: var(--accent); }
   .wrap { width: 100%; max-width: var(--max); margin: 0 auto; padding: 0 var(--sx); }
   h1, h2, h3 { letter-spacing: -0.03em; line-height: 1.05; }
 
@@ -86,6 +93,14 @@
   .brand { display: inline-flex; align-items: center; gap: 0.6rem; }
   .brand .logo-mark { height: 1.9rem; }
   .brand .word { font-weight: 900; font-size: 1.2rem; letter-spacing: -0.02em; }
+  /* Wordmark re-fades in on brand hover, timed with the mark's fluid pour
+     (same behavior as the app's nav). */
+  .brand:hover .word { animation: wordmark-fade 0.5s var(--ease); }
+  @keyframes wordmark-fade {
+    0% { opacity: 0; transform: translateX(-0.25rem); }
+    100% { opacity: 1; transform: translateX(0); }
+  }
+  @media (prefers-reduced-motion: reduce) { .brand:hover .word { animation: none; } }
   .nav-links { display: flex; align-items: center; gap: 1.75rem; }
   .nav-links a:not(.btn) { color: var(--fg-2); font-weight: 600; font-size: 0.95rem; transition: color 0.15s var(--ease); }
   .nav-links a:not(.btn):hover { color: var(--fg); }
@@ -314,7 +329,7 @@
       <div class="step">
         <div class="num">02</div>
         <h3>Plug in add-ons</h3>
-        <p>Rillio ships empty. Choose the catalogs and sources you want from the community's add-ons, or write your own.</p>
+        <p>Rillio ships empty. Choose the catalogs and sources you want from the <a class="ilink" href="https://stremio-addons.net/addons" target="_blank" rel="noopener noreferrer">community add-on directory</a>, or write your own.</p>
       </div>
       <div class="step">
         <div class="num">03</div>
@@ -336,7 +351,7 @@
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3 9 5-9 5-9-5 9-5Z"/><path d="m3 13 9 5 9-5"/></svg>
             <h3>Open add-ons</h3>
           </div>
-          <p>Catalogs, subtitles and streams come from third-party add-ons you choose to install. Nothing is bundled, and Rillio itself hosts no content, it is the player and the shelf.</p>
+          <p>Catalogs, subtitles and streams come from third-party add-ons you choose to install, browsable at the <a class="ilink" href="https://stremio-addons.net/addons" target="_blank" rel="noopener noreferrer">community directory</a>. Nothing is bundled, and Rillio itself hosts no content, it is the player and the shelf.</p>
         </div>
         <div class="feature-row reveal">
           <div class="lead">
@@ -418,7 +433,7 @@
         </details>
         <details>
           <summary>Where does the content come from?</summary>
-          <p class="a">Rillio ships empty. It is a player and an organizer; catalogs and streams come from third-party add-ons that you choose to install. Rillio does not host, index or provide any media, and no add-ons are bundled. What you access through add-ons is your choice and your responsibility, so stick to sources you have the right to use.</p>
+          <p class="a">Rillio ships empty. It is a player and an organizer; catalogs and streams come from third-party add-ons that you choose to install, which you can browse at the <a class="ilink" href="https://stremio-addons.net/addons" target="_blank" rel="noopener noreferrer">community add-on directory</a>. Rillio does not host, index or provide any media, and no add-ons are bundled. What you access through add-ons is your choice and your responsibility, so stick to sources you have the right to use.</p>
         </details>
         <details>
           <summary>Can I bring my Stremio library?</summary>

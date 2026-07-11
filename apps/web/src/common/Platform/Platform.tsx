@@ -2,6 +2,7 @@ import React, { createContext, useContext } from 'react';
 import { WHITELISTED_HOSTS } from 'rillio/common/CONSTANTS';
 import { name, isMobile } from './device';
 import useShell from './shell/useShell';
+import { getTauri } from './shell/isShell';
 
 interface PlatformContext {
     name: string;
@@ -23,7 +24,7 @@ const PlatformProvider = ({ children }: Props) => {
         // Desktop shell (Tauri): open natively in the OS default handler /
         // external player. The browser safety-warning wrapper below is a
         // web-only guard; in the trusted shell we hand the URL straight to the OS.
-        const tauri = (globalThis as any).__TAURI__;
+        const tauri = getTauri();
         if (tauri?.core?.invoke) {
             tauri.core.invoke('open_external', { url })
                 .catch((e: unknown) => console.error('Shell openExternal failed:', e));

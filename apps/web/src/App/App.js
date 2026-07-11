@@ -16,6 +16,7 @@ const { default: UpdaterBanner } = require('./UpdaterBanner');
 const { default: ShortcutsModal } = require('./ShortcutsModal');
 const { default: GamepadModal } = require('./GamepadModal');
 const { default: WindowControls } = require('rillio/components/WindowControls/WindowControls');
+const { default: ErrorBoundary } = require('rillio/components/ErrorBoundary/ErrorBoundary');
 const UpdatingOverlay = require('./UpdatingOverlay/UpdatingOverlay');
 const SyncModal = require('./SyncModal/SyncModal');
 const { ensureDisplayName } = require('rillio/common/useDisplayName');
@@ -194,19 +195,25 @@ const App = () => {
                                 <DiscordProvider>
                                     <WindowControls />
                                     <UpdatingOverlay />
-                                    <SyncModal />
-                                    {
-                                        shortcutModalOpen && <ShortcutsModal onClose={closeShortcutsModal}/>
-                                    }
-                                    {
-                                        gamepadModalOpen && <GamepadModal onClose={closeGamepadModal}/>
-                                    }
+                                    {/* Modal layer and routes get their own boundaries, so a crash
+                                        in either one cannot white-screen the whole shell. */}
+                                    <ErrorBoundary>
+                                        <SyncModal />
+                                        {
+                                            shortcutModalOpen && <ShortcutsModal onClose={closeShortcutsModal}/>
+                                        }
+                                        {
+                                            gamepadModalOpen && <GamepadModal onClose={closeGamepadModal}/>
+                                        }
+                                    </ErrorBoundary>
                                     <ServicesToaster />
                                     <NotificationsToaster />
                                     <SearchParamsHandler />
                                     <DeepLinkHandler />
                                     <UpdaterBanner className={styles['updater-banner-container']} />
-                                    <ProtectedRoutes />
+                                    <ErrorBoundary>
+                                        <ProtectedRoutes />
+                                    </ErrorBoundary>
                                 </DiscordProvider>
                             </FullscreenProvider>
                         </ShortcutsProvider>

@@ -3,6 +3,7 @@
 const React = require('react');
 const { useCore } = require('rillio/core');
 const { useToast, useFileDrop } = require('rillio/common');
+const { getTauri } = require('rillio/common/Platform/shell/isShell');
 
 const ServicesToaster = () => {
     const core = useCore();
@@ -78,7 +79,7 @@ const ServicesToaster = () => {
     // clickable toast (click installs + restarts). Reappears each startup until
     // the update is taken. No-op outside the Tauri shell.
     React.useEffect(() => {
-        const TAURI = globalThis?.__TAURI__;
+        const TAURI = getTauri();
         if (!TAURI?.event?.listen || !TAURI?.core?.invoke) return;
         let unlisten;
         let cancelled = false;

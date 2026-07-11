@@ -80,7 +80,11 @@ const SearchModal = ({ onClose }: Props) => {
 
     return createPortal((
         <div className="fixed inset-0 z-50">
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-xl animation-fade-in" onClick={onClose} />
+            {/* No entrance animation on the backdrop: animating opacity/transform on
+                a backdrop-filter element forces the full-viewport blur to re-rasterize
+                every frame (visible as a delayed, janky backdrop). The addon modal's
+                backdrop is smooth precisely because it just appears, so match it. */}
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" onClick={onClose} />
 
             <div
                 role="dialog"

@@ -133,18 +133,20 @@ async fn handle_stream(
         }
     }
 
-    let (status, start, end) = match range {
+    let (status, start, content_len) = match range {
         Some((s, e)) => {
             resp_headers.insert(
                 header::CONTENT_RANGE,
                 HeaderValue::from_str(&format!("bytes {s}-{e}/{total}")).unwrap(),
             );
-            (StatusCode::PARTIAL_CONTENT, s, e)
+            // parse_range guarantees size > 0 and s <= e, so this is >= 1.
+            (StatusCode::PARTIAL_CONTENT, s, e - s + 1)
         }
         // No/unsatisfiable/malformed range ⇒ 200 full body. There is NO 416.
-        None => (StatusCode::OK, 0, total.saturating_sub(1)),
+        // Content-Length is the file length directly, so a 0-byte file reports
+        // Content-Length: 0 (not 1, which the old end-start+1 gave when total==0).
+        None => (StatusCode::OK, 0, total),
     };
-    let content_len = end - start + 1;
     resp_headers.insert(header::CONTENT_LENGTH, HeaderValue::from(content_len));
 
     // HEAD: headers only, never open the FileStream (server.js:18269-18270).

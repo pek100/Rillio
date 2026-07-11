@@ -2,9 +2,9 @@
 
 // Local-account Sync modal, opened from the account menu via a window event
 // (OPEN_SYNC_EVENT). Two jobs, no server of our own:
-//   Backup & restore — export the whole local account as one compact code (+ a QR
+//   Backup & restore - export the whole local account as one compact code (+ a QR
 //     when it fits) and restore from a pasted code.
-//   Import from Stremio — a one-time sign-in (email, Facebook, or Apple, the same
+//   Import from Stremio - a one-time sign-in (email, Facebook, or Apple, the same
 //     options Stremio offers) that pulls the Stremio library + add-ons into the
 //     local store, then drops the connection (kept anonymous, local).
 const React = require('react');
@@ -23,6 +23,16 @@ const { default: useAppleLogin } = require('rillio/routes/Intro/useAppleLogin');
 // Buckets pulled from Stremio that carry an owner id; rewritten to anonymous.
 const OWNED_BUCKETS = ['library', 'library_recent', 'notifications', 'calendar', 'streams', 'search_history'];
 
+// UserAuthenticated only means the core pulled the profile + library into memory;
+// the writes to storage are async effects that complete with these events
+// (crates/core/src/models/ctx/update_profile.rs and update_library.rs). Both
+// always fire after a successful login (auth and the library owner change), so
+// wait for them instead of guessing with a timer.
+const PERSIST_EVENTS = ['ProfilePushedToStorage', 'LibraryItemsPushedToStorage'];
+// Generous ceiling for those storage writes; hitting it is an error, not a signal
+// to proceed.
+const PERSIST_TIMEOUT_MS = 30000;
+
 const LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-fg-subtle';
 const HINT = 'mt-1.5 mb-3 text-sm leading-snug text-fg-muted';
 const FIELD = 'w-full h-11 rounded-xl border border-line bg-black/20 px-3.5 text-sm text-fg outline-none transition placeholder:text-fg-subtle focus:border-accent focus:ring-[3px] focus:ring-accent/25 disabled:opacity-50';
@@ -39,6 +49,7 @@ const SyncModal = () => {
     const [tab, setTab] = React.useState('backup');
 
     const [code, setCode] = React.useState('');
+    const [exportError, setExportError] = React.useState(null);
     const [restoreDraft, setRestoreDraft] = React.useState('');
     const [copied, setCopied] = React.useState(false);
 
@@ -48,9 +59,24 @@ const SyncModal = () => {
     const [error, setError] = React.useState(null);
     const detachRef = React.useRef(null);
 
+    // Mirrors for the auth listeners, which outlive renders (and, mid-login, the
+    // modal itself).
+    const openRef = React.useRef(false);
+    const busyRef = React.useRef(false);
+    React.useEffect(() => { openRef.current = open; }, [open]);
+    React.useEffect(() => { busyRef.current = busy; }, [busy]);
+
     const close = React.useCallback(() => {
-        if (detachRef.current) { detachRef.current(); detachRef.current = null; }
-        setOpen(false); setError(null); setBusy(false);
+        // While a Stremio login is in flight, keep its listeners attached: if
+        // UserAuthenticated fires after the modal is gone, the same
+        // anonymize-and-reload cleanup still runs, so the app can never be left
+        // silently signed in to Stremio. `busy` stays on so reopening shows the
+        // in-flight state.
+        if (!busyRef.current) {
+            if (detachRef.current) { detachRef.current(); detachRef.current = null; }
+            setBusy(false);
+        }
+        setOpen(false); setError(null);
     }, []);
 
     React.useEffect(() => {
@@ -59,7 +85,13 @@ const SyncModal = () => {
             setTab(requested === 'stremio' ? 'stremio' : 'backup');
             setError(null);
             setRestoreDraft('');
-            try { setCode(exportLocalData()); } catch { setCode(''); }
+            try {
+                setCode(exportLocalData());
+                setExportError(null);
+            } catch (e) {
+                setCode('');
+                setExportError((e && e.message) || 'Could not read the local account data.');
+            }
             setOpen(true);
         };
         window.addEventListener(OPEN_SYNC_EVENT, onOpen);
@@ -114,23 +146,53 @@ const SyncModal = () => {
     }, []);
 
     const attachAuth = React.useCallback(() => {
-        const onEvent = (name) => {
-            if (name === 'UserAuthenticated') {
-                if (detachRef.current) { detachRef.current(); detachRef.current = null; }
-                toast.show({ type: 'success', title: 'Imported from Stremio', message: 'Saving locally…', timeout: 2500 });
-                setTimeout(finishStremioImport, 1200);
+        const pending = new Set(PERSIST_EVENTS);
+        let authenticated = false;
+        let timeoutId = null;
+        const detach = () => {
+            core.off('event', onEvent);
+            core.off('error', onError);
+            if (timeoutId !== null) { clearTimeout(timeoutId); timeoutId = null; }
+            detachRef.current = null;
+        };
+        const fail = (message) => {
+            detach();
+            setBusy(false);
+            setError(message);
+            // The modal may have been closed mid-login; make the failure visible.
+            if (!openRef.current) {
+                toast.show({ type: 'error', title: 'Stremio import failed', message, timeout: 6000 });
             }
         };
-        const onError = (source) => {
-            if (source && source.event === 'UserAuthenticated') {
-                if (detachRef.current) { detachRef.current(); detachRef.current = null; }
-                setBusy(false);
-                setError((source.error && source.error.message) || 'Sign-in failed. Check your details and try again.');
+        const onEvent = (name) => {
+            if (name === 'UserAuthenticated') {
+                authenticated = true;
+                timeoutId = setTimeout(() => {
+                    fail('Signed in, but saving the imported data locally did not finish. Nothing was switched over, please try again.');
+                }, PERSIST_TIMEOUT_MS);
+                return;
+            }
+            if (authenticated && pending.has(name)) {
+                pending.delete(name);
+                if (pending.size === 0) {
+                    detach();
+                    toast.show({ type: 'success', title: 'Imported from Stremio', message: 'Reloading…', timeout: 2500 });
+                    finishStremioImport();
+                }
+            }
+        };
+        const onError = (source, error) => {
+            const event = source && source.event;
+            const message = error && error.message;
+            if (event === 'UserAuthenticated') {
+                fail(message || 'Sign-in failed. Check your details and try again.');
+            } else if (authenticated && PERSIST_EVENTS.indexOf(event) !== -1) {
+                fail(message ? `Could not save the imported data: ${message}` : 'Could not save the imported data.');
             }
         };
         core.on('event', onEvent);
         core.on('error', onError);
-        detachRef.current = () => { core.off('event', onEvent); core.off('error', onError); };
+        detachRef.current = detach;
     }, [core, toast, finishStremioImport]);
 
     const importWithEmail = React.useCallback(() => {
@@ -207,9 +269,13 @@ const SyncModal = () => {
                             <div className={HINT}>Copy this to move your library, calendar and add-ons to another device, or keep it as a backup.</div>
                             {
                                 qrSvg ?
+                                    // The SVG comes from the local qrcode-generator output of the user's own export string, never remote data.
                                     <div className="mx-auto mb-3.5 w-[200px] rounded-xl bg-white p-2.5 [&>svg]:block [&>svg]:h-auto [&>svg]:w-full" dangerouslySetInnerHTML={{ __html: qrSvg }} />
                                     :
-                                    <div className="mb-3.5 rounded-lg bg-warning/10 px-3 py-2.5 text-[0.82rem] text-warning">Your library is too large to show as a scannable code — copy the code below instead.</div>
+                                    exportError ?
+                                        <div className="mb-3.5 rounded-lg bg-danger/10 px-3 py-2.5 text-[0.82rem] text-danger">Could not create your sync code: {exportError}</div>
+                                        :
+                                        <div className="mb-3.5 rounded-lg bg-warning/10 px-3 py-2.5 text-[0.82rem] text-warning">Your library is too large to show as a scannable code - copy the code below instead.</div>
                             }
                             <input className={cn(FIELD, 'mb-2.5 font-mono text-xs text-fg-muted')} readOnly value={code} onFocus={(e) => e.target.select()} />
                             <Button className={PRIMARY} onClick={copyCode}>
@@ -227,7 +293,7 @@ const SyncModal = () => {
                         :
                         <div className="flex flex-col px-5 pb-6 pt-1">
                             <div className={LABEL}>Import from Stremio</div>
-                            <div className={HINT}>Sign in once. We pull your library and add-ons into Rillio, store them locally, and don&apos;t stay connected — your Stremio session is untouched.</div>
+                            <div className={HINT}>Sign in once. We pull your library and add-ons into Rillio, store them locally, and don&apos;t stay connected, your Stremio session is untouched.</div>
                             <input className={cn(FIELD, 'mb-2.5')} type="email" placeholder="Stremio email" value={email} autoComplete="off" disabled={busy} onChange={(e) => setEmail(e.target.value)} />
                             <input className={cn(FIELD, 'mb-3')} type="password" placeholder="Stremio password" value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') importWithEmail(); }} />
                             <Button className={cn(PRIMARY, busy && 'pointer-events-none opacity-70')} onClick={importWithEmail}>

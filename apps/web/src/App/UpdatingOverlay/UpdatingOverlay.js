@@ -2,6 +2,7 @@
 
 const React = require('react');
 const { default: Logo } = require('rillio/common/Logo/Logo');
+const { getTauri } = require('rillio/common/Platform/shell/isShell');
 const styles = require('./styles.less');
 
 // Full-screen overlay shown after the user accepts a desktop update. It stays up
@@ -34,7 +35,7 @@ const UpdatingOverlay = () => {
         window.addEventListener('rillio:update-start', onStart);
         window.addEventListener('rillio:update-error', onError);
 
-        const TAURI = globalThis?.__TAURI__;
+        const TAURI = getTauri();
         let unlisten;
         let cancelled = false;
         if (TAURI?.event?.listen) {

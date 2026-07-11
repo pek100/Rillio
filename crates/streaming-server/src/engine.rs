@@ -213,11 +213,13 @@ impl Engine {
 
     /// Refuse a torrent whose files would resolve outside the cache root. A
     /// belt-and-suspenders assertion over librqbit-core's own parse-time
-    /// rejection; a no-op until the torrent's metadata has resolved.
+    /// rejection. If metadata has not resolved we cannot enumerate the files, so
+    /// we fail loud (deny) rather than let the check pass vacuously on an empty
+    /// list; callers only run this once metadata is expected to be present.
     fn assert_confined(&self, handle: &Handle) -> anyhow::Result<()> {
         let files: Vec<PathBuf> = handle
             .with_metadata(|m| m.file_infos.iter().map(|fi| fi.relative_filename.clone()).collect())
-            .unwrap_or_default();
+            .context("assert_confined: torrent metadata not resolved, cannot verify confinement")?;
         storage::assert_confined(&self.cache_root, files.iter().map(PathBuf::as_path))
     }
 
@@ -277,9 +279,11 @@ impl Engine {
         self.add_magnet(&magnet).await
     }
 
-    /// Lowercase hex infohash of a handle.
+    /// Lowercase hex infohash of a handle. Uses librqbit-core's stable
+    /// `Id20::as_string` (`hex::encode` of the raw 20 bytes), NOT Debug
+    /// formatting, since every `Engine::get`/`remove`/stats lookup keys off this.
     pub fn info_hash_hex(handle: &Handle) -> String {
-        format!("{:?}", handle.info_hash()).to_lowercase()
+        handle.info_hash().as_string()
     }
 
     /// Look up an already-managed torrent by infohash WITHOUT creating one.

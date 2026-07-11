@@ -16,8 +16,9 @@
 # review before publishing — the updater resolves `releases/latest/...` only once
 # the release is published).
 #
-# NOTE: playback needs libmpv-2.dll at runtime. It is gitignored and NOT bundled
-# here yet — wire it as a bundle resource before shipping to end users.
+# NOTE: playback needs libmpv-2.dll at runtime. It is gitignored; the "Fetch and
+# bundle libmpv" step below downloads a pinned, sha256-verified build and injects
+# it as a bundle resource.
 
 name: release
 
@@ -38,21 +39,24 @@ jobs:
     runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
 
       # No version here: it is read from package.json's packageManager field.
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
           node-version: 22
           cache: pnpm
 
-      - uses: dtolnay/rust-toolchain@stable
+      # This action normally reads the toolchain from its ref name; pinning to a
+      # SHA loses that, so the toolchain input below is required.
+      - uses: dtolnay/rust-toolchain@4be7066ada62dd38de10e7b70166bc74ed198c30 # stable
         with:
+          toolchain: stable
           targets: wasm32-unknown-unknown
 
-      - uses: jetli/wasm-pack-action@v0.4.0
+      - uses: jetli/wasm-pack-action@0d096b08b4e5a7de8c28de67e11e945404e9eefa # v0.4.0
         with:
           version: latest
 
@@ -72,15 +76,28 @@ jobs:
       # and inject it as a bundle resource here rather than in the committed
       # config, so a normal `cargo build` (no DLL on disk) still works locally.
       # NOTE: these builds are GPL; shipping the DLL carries the usual GPL source
-      # obligations. This step is unverified end-to-end, expect to adjust it.
+      # obligations.
       - name: Fetch and bundle libmpv
         shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Bumping mpv: update these three values together. The sha256 is the
+          # asset's `digest` field on
+          # api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/tags/<tag>
+          MPV_RELEASE_TAG: '20260610'
+          MPV_ASSET_NAME: 'mpv-dev-x86_64-20260610-git-304426c.7z'
+          MPV_SHA256: '8cbb25ea784f01afbb3f904217cab1317430a8bcfd5680fd827a866367f71cc9'
         run: |
-          $rel = Invoke-RestMethod "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/latest" -Headers @{ Authorization = "Bearer ${{ secrets.GITHUB_TOKEN }}"; 'User-Agent' = 'rillio-ci' }
-          $asset = $rel.assets | Where-Object { $_.name -match '^mpv-dev-x86_64-\d' } | Select-Object -First 1
-          if (-not $asset) { throw "no mpv-dev-x86_64 asset in latest shinchiro release" }
+          $rel = Invoke-RestMethod "https://api.github.com/repos/shinchiro/mpv-winbuild-cmake/releases/tags/$($env:MPV_RELEASE_TAG)" -Headers @{ Authorization = "Bearer $env:GITHUB_TOKEN"; 'User-Agent' = 'rillio-ci' }
+          $asset = $rel.assets | Where-Object { $_.name -eq $env:MPV_ASSET_NAME } | Select-Object -First 1
+          if (-not $asset) { throw "asset $($env:MPV_ASSET_NAME) not found in shinchiro release $($env:MPV_RELEASE_TAG)" }
           Write-Host "downloading $($asset.name)"
           Invoke-WebRequest $asset.browser_download_url -OutFile mpv-dev.7z
+          $actual = (Get-FileHash mpv-dev.7z -Algorithm SHA256).Hash.ToLowerInvariant()
+          if ($actual -ne $env:MPV_SHA256) {
+            Write-Host "SHA256 mismatch for $($env:MPV_ASSET_NAME): expected $($env:MPV_SHA256), got $actual"
+            exit 1
+          }
           7z e mpv-dev.7z libmpv-2.dll -o"apps/desktop/src-tauri" -y
           if (-not (Test-Path apps/desktop/src-tauri/libmpv-2.dll)) { throw "libmpv-2.dll not extracted" }
           $cfgPath = "apps/desktop/src-tauri/tauri.conf.json"
@@ -89,7 +106,7 @@ jobs:
           $cfg | ConvertTo-Json -Depth 30 | Set-Content $cfgPath -Encoding utf8
           Write-Host "injected libmpv-2.dll into bundle.resources"
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -110,10 +127,29 @@ jobs:
         shell: pwsh
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
         run: |
           $exe = Get-ChildItem apps/desktop/src-tauri/target/release/bundle/nsis/*-setup.exe -ErrorAction SilentlyContinue | Select-Object -First 1
           if (-not $exe) { throw "no NSIS installer produced" }
-          $ver = "${{ github.ref_name }}".TrimStart('v')
+          $ver = ($env:TAG_NAME).TrimStart('v')
           Copy-Item $exe.FullName "RillioSetup-$ver.exe"
           Copy-Item $exe.FullName "RillioSetup.exe"
-          gh release upload ${{ github.ref_name }} "RillioSetup-$ver.exe" "RillioSetup.exe" --clobber --repo ${{ github.repository }}
+          gh release upload $env:TAG_NAME "RillioSetup-$ver.exe" "RillioSetup.exe" --clobber --repo ${{ github.repository }}
+
+      # First-install integrity: the updater verifies signatures on updates, but
+      # the initial download from the website has no check without this file.
+      - name: Publish SHA256SUMS
+        shell: pwsh
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          $ver = ($env:TAG_NAME).TrimStart('v')
+          $lines = foreach ($f in @("RillioSetup-$ver.exe", 'RillioSetup.exe')) {
+            if (-not (Test-Path $f)) { throw "$f not found, cannot hash" }
+            $hash = (Get-FileHash $f -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$hash  $f"
+          }
+          [IO.File]::WriteAllText((Join-Path $PWD 'SHA256SUMS.txt'), (($lines -join "`n") + "`n"))
+          Get-Content SHA256SUMS.txt
+          gh release upload $env:TAG_NAME SHA256SUMS.txt --clobber --repo ${{ github.repository }}

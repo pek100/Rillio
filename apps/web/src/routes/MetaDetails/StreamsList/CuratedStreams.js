@@ -4,7 +4,7 @@
 // horizontal carousel with the single best pick per quality tier (4K HDR / 1080p
 // HDR / 4K / 1080p), a small preset switch (Auto / Quality / Speed), and a small
 // centered Watch button that plays the recommendation. Everything else collapses
-// behind "Show all". No card chrome anywhere — transparent tiles, hover reveal.
+// behind "Show all". No card chrome anywhere - transparent tiles, hover reveal.
 const React = require('react');
 const { default: Icon } = require('@stremio/stremio-icons/react');
 const { Button } = require('rillio/components');
@@ -12,20 +12,13 @@ const { cn } = require('rillio/common/cn');
 const { useCore } = require('rillio/core');
 const { useProfile, languages } = require('rillio/common');
 const { useScreenCapability } = require('rillio/common/useScreenCapability');
-const { curateStreams, recommendStream, flagFor, availableLanguages } = require('./streamQuality');
+const { curateStreams, recommendStream, flagFor, availableLanguages, formatSize } = require('./streamQuality');
 
 const PRESETS = [
     { key: 'auto', label: 'Auto' },
     { key: 'quality', label: 'Quality' },
     { key: 'speed', label: 'Speed' },
 ];
-
-const fmtSize = (bytes) => {
-    if (!bytes) return null;
-    const gb = bytes / 1073741824;
-    if (gb >= 1) return `${gb.toFixed(1)} GB`;
-    return `${Math.round(bytes / 1048576)} MB`;
-};
 
 const badgeFor = (quality) => {
     const r = quality.resolution >= 2160 ? '4K' : quality.resolution === 1080 ? '1080p' : quality.resolution ? `${quality.resolution}p` : 'SD';
@@ -115,7 +108,7 @@ const LanguagePicker = ({ value, options, onSelect }) => {
 // Transparent at rest; the highlighted (recommended) one gets the accent tint.
 const Tile = ({ label, entry, highlighted }) => {
     const { stream, quality } = entry;
-    const size = fmtSize(quality.size);
+    const size = formatSize(quality.size);
     return (
         <Button
             href={playHref(stream)}
@@ -143,7 +136,7 @@ const Tile = ({ label, entry, highlighted }) => {
 // A compact row for the expanded "all streams" list (grid on wide screens).
 const Row = ({ entry }) => {
     const { stream, quality } = entry;
-    const size = fmtSize(quality.size);
+    const size = formatSize(quality.size);
     return (
         <Button
             href={playHref(stream)}
@@ -186,9 +179,15 @@ const CuratedStreams = ({ streams }) => {
 
     // First run: persist the interface-language default so the player downloads
     // matching subtitles out of the box (the core treats null as "no default").
+    // Fires at most once per mount (ref guard), but goes through real deps so
+    // the dispatched settings spread is the CURRENT profile, never a stale
+    // mount-time snapshot.
+    const defaultedLang = React.useRef(false);
     React.useEffect(() => {
+        if (defaultedLang.current) return;
+        defaultedLang.current = true;
         if (profile.settings.subtitlesLanguage === null) setLang(lang);
-    }, []);
+    }, [profile.settings.subtitlesLanguage, lang, setLang]);
 
     const langOptions = React.useMemo(() => {
         const available = availableLanguages(streams);

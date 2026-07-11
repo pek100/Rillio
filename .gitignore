@@ -14,18 +14,11 @@ node_modules/
 /apps/web/build/
 /apps/web/dist/
 
-# Original upstream clones, kept as a reference until the fork is verified.
-# Safe to delete once `pnpm build` passes — reclaims ~5.2 GB of .git history.
-/source/
-
 # Editor / OS
 .DS_Store
 Thumbs.db
 .idea/
 .vscode/
-
-# Scratch space for the server.js reverse-engineering effort (blob + notes)
-/.research/
 
 # Tauri generated schemas
 /apps/desktop/src-tauri/gen/

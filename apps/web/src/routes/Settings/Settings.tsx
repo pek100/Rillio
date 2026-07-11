@@ -1,7 +1,7 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useCloseModalRoute } from 'rillio-router';
 import classnames from 'classnames';
 import throttle from 'lodash.throttle';
 import { usePlatform, useProfile, useStreamingServer, useRouteFocused, withCoreSuspender } from 'rillio/common';
@@ -85,10 +85,7 @@ const Settings = () => {
     }, [routeFocused]);
 
     // /settings is a modal route: it floats over whatever page you came from.
-    const navigate = useNavigate();
-    const closeSettings = useCallback(() => {
-        navigate(-1);
-    }, [navigate]);
+    const closeSettings = useCloseModalRoute();
 
     useEffect(() => {
         const onKeyDown = (event: KeyboardEvent) => {

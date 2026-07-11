@@ -1,32 +1,11 @@
 import React from 'react';
+import { getTauri, isShell, useIsShell } from 'rillio/common/Platform/shell/isShell';
 
-// True only inside the Tauri desktop shell. Tauri always injects
-// `__TAURI_INTERNALS__` into every webview (before any page script), and
-// `withGlobalTauri` additionally exposes the JS API on `window.__TAURI__`.
-// Detect on either signal rather than the narrower `__TAURI__.core.invoke`,
-// which can read false if the global attaches a tick after first render. The
-// web build has neither global, so the custom chrome never renders there.
-const tauri = () => (globalThis as any).__TAURI__;
-export const isShell = (): boolean => {
-    const w = globalThis as any;
-    return !!(w.__TAURI_INTERNALS__ || w.__TAURI__);
-};
+// Re-exported for existing consumers (NavBar, TopNav); shell detection lives
+// in common/Platform/shell/isShell.ts, the single source of truth.
+export { isShell, useIsShell };
 
-// Hook form: seeds from isShell() and re-checks briefly after mount, so a
-// component that first rendered before the Tauri global attached still flips
-// into shell mode (the plain isShell() is evaluated once and never re-runs).
-export const useIsShell = (): boolean => {
-    const [shell, setShell] = React.useState(isShell);
-    React.useEffect(() => {
-        if (shell) return undefined;
-        if (isShell()) { setShell(true); return undefined; }
-        const id = setInterval(() => { if (isShell()) { setShell(true); clearInterval(id); } }, 200);
-        const stop = setTimeout(() => clearInterval(id), 3000);
-        return () => { clearInterval(id); clearTimeout(stop); };
-    }, [shell]);
-    return shell;
-};
-const currentWindow = () => tauri()?.window?.getCurrentWindow?.();
+const currentWindow = () => getTauri()?.window?.getCurrentWindow?.();
 
 // The window is frameless (decorations off in the Tauri shell), so the web app
 // draws its own controls. They float in the top-right on every route and stay
@@ -37,10 +16,13 @@ const WindowControls = () => {
     const [maximized, setMaximized] = React.useState(false);
     const [fullscreen, setFullscreen] = React.useState(false);
 
+    // Depends on the reactive `shell` so it attaches once useIsShell() flips
+    // true, even when the Tauri global appeared after the first render (the
+    // exact case the hook exists for).
     React.useEffect(() => {
-        if (!isShell()) return;
+        if (!shell) return undefined;
         const win = currentWindow();
-        if (!win) return;
+        if (!win) return undefined;
 
         let unlisten: (() => void) | undefined;
         let cancelled = false;
@@ -60,10 +42,10 @@ const WindowControls = () => {
             .catch(() => { /* no resize events, icon just won't flip */ });
 
         return () => { cancelled = true; if (unlisten) unlisten(); };
-    }, []);
+    }, [shell]);
 
     // Any attempt to drag the window (mousedown on any drag region, incl. the
-    // navbars') collapses fullscreen first — dragging a fullscreen window is
+    // navbars') collapses fullscreen first, dragging a fullscreen window is
     // what corrupts the window state. Capture phase so it runs before the
     // native drag begins.
     React.useEffect(() => {
@@ -175,7 +157,7 @@ const WindowControls = () => {
                 </button>
                 <button
                     type="button"
-                    className={`${btn} hover:bg-[#e5484d] hover:text-white`}
+                    className={`${btn} hover:bg-danger hover:text-white`}
                     onClick={close}
                     title="Close"
                     aria-label="Close"

@@ -3,6 +3,7 @@
 //! these routes never auto-create.
 
 use axum::extract::{Path, State};
+use axum::http::StatusCode;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde_json::{Map, Value};
@@ -20,8 +21,20 @@ pub(crate) async fn stats_file(
     let Some(handle) = engine.get(&info_hash.to_lowercase()) else {
         return Json(Value::Null).into_response();
     };
-    let idx = idx.parse::<usize>().ok();
-    Json(statistics(&engine, &handle, idx)).into_response()
+    // The route contract is a resolved numeric file index. A non-numeric segment
+    // is a bad request, not a request for torrent-level stats: fail loud rather
+    // than silently changing the response shape.
+    let idx = match idx.parse::<usize>() {
+        Ok(i) => i,
+        Err(_) => {
+            return (
+                StatusCode::BAD_REQUEST,
+                format!("stats: non-numeric file index {idx:?}"),
+            )
+                .into_response();
+        }
+    };
+    Json(statistics(&engine, &handle, Some(idx))).into_response()
 }
 
 /// `GET /:ih/stats.json` — torrent-level stats (video's filename/OpenSubtitles

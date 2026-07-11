@@ -2,11 +2,6 @@
 
 require('./styles/tailwind.css');
 
-if (typeof process.env.SENTRY_DSN === 'string') {
-    const Sentry = require('@sentry/browser');
-    Sentry.init({ dsn: process.env.SENTRY_DSN });
-}
-
 const Bowser = require('bowser');
 const browser = Bowser.parse(window.navigator?.userAgent || '');
 if (browser?.platform?.type === 'desktop') {
@@ -64,8 +59,9 @@ const SERVICE_WORKER_DISABLED = process.env.SERVICE_WORKER_DISABLED === 'true' |
 // assets are embedded and swapped in whole by the native updater, and the asset
 // path is prefixed with the (stable-between-rebuilds) commit hash — so a
 // cache-first SW keeps serving the OLD bundle after every update, and the new UI
-// never appears. Detect the shell on the always-present Tauri global.
-const inShell = !!(window.__TAURI_INTERNALS__ || window.__TAURI__);
+// never appears. Detect the shell via the shared predicate.
+const { isShell } = require('./common/Platform/shell/isShell');
+const inShell = isShell();
 
 if (process.env.NODE_ENV === 'production' && !SERVICE_WORKER_DISABLED && !inShell && 'serviceWorker' in navigator) {
     window.addEventListener('load', () => {

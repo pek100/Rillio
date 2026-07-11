@@ -55,6 +55,12 @@ const RES_ALLOW: &[&str] = &[
 
 const MAX_REDIRECTS: u32 = 5;
 
+/// Cap on the request body we buffer before forwarding it upstream. These are
+/// client-supplied bodies for addon API requests (small JSON/form posts), NOT
+/// media, so 32 MiB sits far above any legitimate request while bounding
+/// worst-case memory per in-flight proxy call (no unbounded buffering / OOM).
+const MAX_PROXY_BODY_BYTES: usize = 32 * 1024 * 1024;
+
 /// Parsed `<opts>` blob: `d` (destination origin), `h`/`r` = "Name:Value" header
 /// directives (repeatable). `form_urlencoded::parse` accepts `+` and `%20`.
 struct ProxyOpts {
@@ -168,8 +174,13 @@ async fn handle(
     target.set_path(&format!("/{}", tail.trim_start_matches('/')));
     target.set_query(original.query());
 
-    // Collect the request body once (proxied verbatim for non-GET).
-    let body_bytes = axum::body::to_bytes(body, usize::MAX).await.unwrap_or_default();
+    // Collect the request body once (proxied verbatim for non-GET). Bounded so a
+    // hostile/huge body cannot OOM us; a read error or an over-cap body fails
+    // loud (413) rather than silently proxying an empty body.
+    let body_bytes = match axum::body::to_bytes(body, MAX_PROXY_BODY_BYTES).await {
+        Ok(b) => b,
+        Err(_) => return err(StatusCode::PAYLOAD_TOO_LARGE),
+    };
 
     let fetched = fetch_following_redirects(&client, &cfg, &method, target, &headers, &opts, body_bytes).await;
     let (resp, final_url) = match fetched {

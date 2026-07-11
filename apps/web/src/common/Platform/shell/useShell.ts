@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import EventEmitter from 'eventemitter3';
+import { useTauriApi } from './isShell';
 
 const IPC = globalThis?.chrome?.webview;
 const LEGACY_IPC = globalThis?.qt?.webChannelTransport;
@@ -8,10 +9,8 @@ if (LEGACY_IPC) LEGACY_IPC.onmessage = () => { /* empty */ };
 // Desktop shell (Tauri): when running inside the native shell we carry the
 // ShellVideo IPC over Tauri's invoke/event bridge instead of chrome.webview.
 // The native side (apps/desktop src/shell.rs) drives libmpv, so playback is
-// fully native (HEVC/HDR/10-bit) and the stream is fetched by mpv directly —
+// fully native (HEVC/HDR/10-bit) and the stream is fetched by mpv directly,
 // no WebView codec gate, no CORS/Private-Network preflight.
-const TAURI = (globalThis as any)?.__TAURI__;
-const USE_TAURI = !!TAURI?.core?.invoke;
 
 const events = new EventEmitter();
 
@@ -43,6 +42,11 @@ type ShellMessage = {
 };
 
 const useShell = (): Shell => {
+    // This bridge needs a WORKING Tauri API (core.invoke + event.listen), not
+    // mere shell presence, so it keys on the reactive API accessor instead of
+    // isShell(); the global can attach a tick after first render.
+    const TAURI = useTauriApi();
+    const USE_TAURI = !!TAURI;
     const [state, setState] = useState<ShellState>({
         initialized: false,
         version: null,
@@ -133,7 +137,7 @@ const useShell = (): Shell => {
         }).catch((e: unknown) => console.error('Shell', 'shell_init failed', e));
 
         return () => { cancelled = true; if (unlisten) unlisten(); };
-    }, []);
+    }, [TAURI]);
 
     useEffect(() => {
         if (USE_TAURI) return;
@@ -173,7 +177,7 @@ const useShell = (): Shell => {
         }));
 
         return () => IPC?.removeEventListener('message', onMessage);
-    }, []);
+    }, [TAURI]);
 
     return {
         active: USE_TAURI || !!IPC,

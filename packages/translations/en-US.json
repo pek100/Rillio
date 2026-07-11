@@ -424,6 +424,7 @@
 	"INSTALL_ADDON": "Install addon",
 	"ADD_ADDON": "Add addon",
 	"ADD_ADDON_DESCRIPTION": "You can add an addon via an external link, which will appear under Installed addons.",
+	"ADD_ADDON_DIRECTORY": "Browse the community add-on directory",
 	"PASTE_ADDON_URL": "Paste addon URL",
 	"ADDONS_FILTERS": "Addons filters",
 	"WHATS_NEW": "What's new",

@@ -16,7 +16,8 @@ const useToast = require('rillio/common/Toast/useToast');
 const { withCoreSuspender } = require('rillio/common/CoreSuspender');
 const useStreamingServer = require('rillio/common/useStreamingServer');
 const { useDisplayName } = require('rillio/common/useDisplayName');
-const { OPEN_SYNC_EVENT } = require('rillio/common/syncEvents');
+const { openSync } = require('rillio/common/syncEvents');
+const { default: DisplayNameEdit } = require('rillio/components/DisplayNameEdit');
 const { useIsShell } = require('rillio/components/WindowControls/WindowControls');
 const styles = require('./styles');
 
@@ -26,9 +27,6 @@ const NavMenuContent = ({ onClick }) => {
     const core = useCore();
     const profile = useProfile();
     const [displayName, setDisplayName] = useDisplayName();
-    const [editingName, setEditingName] = React.useState(false);
-    const [nameDraft, setNameDraft] = React.useState('');
-    const nameInputRef = React.useRef(null);
     const streamingServer = useStreamingServer();
     const { handlePlayUrl } = usePlayUrl();
     const toast = useToast();
@@ -73,30 +71,6 @@ const NavMenuContent = ({ onClick }) => {
             : navigate('/intro');
     }, [profile.auth, logoutButtonOnClick, navigate]);
 
-    const startEditName = React.useCallback((event) => {
-        if (event) event.stopPropagation();
-        setNameDraft(displayName);
-        setEditingName(true);
-    }, [displayName]);
-    const commitName = React.useCallback(() => {
-        setDisplayName(nameDraft);
-        setEditingName(false);
-    }, [nameDraft, setDisplayName]);
-    const onNameKeyDown = React.useCallback((event) => {
-        event.stopPropagation();
-        if (event.key === 'Enter') { event.preventDefault(); commitName(); }
-        else if (event.key === 'Escape') { event.preventDefault(); setEditingName(false); }
-    }, [commitName]);
-    React.useEffect(() => {
-        if (editingName && nameInputRef.current) {
-            nameInputRef.current.focus();
-            nameInputRef.current.select();
-        }
-    }, [editingName]);
-    const openSyncModal = React.useCallback((tab) => () => {
-        window.dispatchEvent(new CustomEvent(OPEN_SYNC_EVENT, { detail: { tab } }));
-    }, []);
-
     return (
         <div className={classnames(styles['nav-menu-container'], 'animation-fade-in', { [styles['with-warning']]: !streamingServerWarningDismissed } )} onClick={onClick}>
             <div className={styles['user-info-container']}>
@@ -113,28 +87,7 @@ const NavMenuContent = ({ onClick }) => {
                     }}
                 />
                 <div className={styles['user-info-details']}>
-                    <div className={styles['name-container']}>
-                        {
-                            editingName ?
-                                <input
-                                    ref={nameInputRef}
-                                    className={styles['name-input']}
-                                    value={nameDraft}
-                                    maxLength={40}
-                                    onChange={(e) => setNameDraft(e.target.value)}
-                                    onKeyDown={onNameKeyDown}
-                                    onBlur={commitName}
-                                    onClick={(e) => e.stopPropagation()}
-                                />
-                                :
-                                <React.Fragment>
-                                    <div className={styles['name-label']} title={displayName}>{displayName}</div>
-                                    <Button className={styles['name-edit-button']} title={t('EDIT') || 'Edit name'} onClick={startEditName}>
-                                        <Icon className={styles['name-edit-icon']} name={'edit'} />
-                                    </Button>
-                                </React.Fragment>
-                        }
-                    </div>
+                    <DisplayNameEdit className={styles['name-container']} value={displayName} onCommit={setDisplayName} />
                     {
                         profile.auth !== null ?
                             <div className={styles['email-container']}>
@@ -166,11 +119,11 @@ const NavMenuContent = ({ onClick }) => {
                     <Icon className={styles['icon']} name={'settings'} />
                     <div className={styles['nav-menu-option-label']}>{ t('SETTINGS') }</div>
                 </Button>
-                <Button className={styles['nav-menu-option-container']} title={'Sync & backup'} onClick={openSyncModal('export')}>
+                <Button className={styles['nav-menu-option-container']} title={'Sync & backup'} onClick={() => openSync('backup')}>
                     <Icon className={styles['icon']} name={'cloud-sync'} />
                     <div className={styles['nav-menu-option-label']}>Sync & backup</div>
                 </Button>
-                <Button className={styles['nav-menu-option-container']} title={'Import from Stremio'} onClick={openSyncModal('stremio')}>
+                <Button className={styles['nav-menu-option-container']} title={'Import from Stremio'} onClick={() => openSync('stremio')}>
                     <Icon className={styles['icon']} name={'download'} />
                     <div className={styles['nav-menu-option-label']}>Import from Stremio</div>
                 </Button>

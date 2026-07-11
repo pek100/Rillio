@@ -243,6 +243,40 @@
                 outline-color: var(--primary-accent-color);
             }
         }
+
+        // A quiet pointer to the community directory, for when you do not have a
+        // link to paste yet. Opens externally.
+        .directory-link {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            margin-top: 1rem;
+            padding: 0.5rem 0;
+            transition: filter 0.15s var(--ease-smooth);
+
+            &:hover {
+                filter: brightness(1.1);
+            }
+
+            &:focus-visible {
+                outline: var(--focus-outline-size) solid var(--primary-accent-color);
+                outline-offset: calc(-1 * var(--focus-outline-size));
+            }
+
+            .directory-icon {
+                flex: none;
+                width: 1rem;
+                height: 1rem;
+                margin-right: 0.5rem;
+                color: var(--primary-accent-color);
+            }
+
+            .directory-label {
+                font-size: 0.9rem;
+                font-weight: 600;
+                color: var(--primary-accent-color);
+            }
+        }
     }
 
     .cancel-button {

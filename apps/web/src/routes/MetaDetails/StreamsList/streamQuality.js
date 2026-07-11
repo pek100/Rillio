@@ -8,6 +8,14 @@
 
 const SIZE_UNITS = { tb: 1099511627776, tib: 1099511627776, gb: 1073741824, gib: 1073741824, mb: 1048576, mib: 1048576 };
 
+// Human-readable size for a byte count (the display counterpart of parseSize).
+const formatSize = (bytes) => {
+    if (!bytes) return null;
+    const gb = bytes / SIZE_UNITS.gb;
+    if (gb >= 1) return `${gb.toFixed(1)} GB`;
+    return `${Math.round(bytes / SIZE_UNITS.mb)} MB`;
+};
+
 const parseSize = (text) => {
     const m = /([\d.]+)\s*(tib|tb|gib|gb|mib|mb)/i.exec(text);
     if (!m) return null;
@@ -112,7 +120,7 @@ const curateStreams = (streams, lang) => {
     const used = new Set();
     const picks = [];
 
-    // Pass 1 — wanted language, per tier.
+    // Pass 1 - wanted language, per tier.
     for (const tier of TIERS) {
         const candidates = withQuality
             .filter((s) => !used.has(s.stream) && tier.match(s.quality) && langScore(s.quality, lang) === 2)
@@ -123,7 +131,7 @@ const curateStreams = (streams, lang) => {
         }
     }
 
-    // Pass 2 — the overall best per tier (computed over ALL candidates, so it is
+    // Pass 2 - the overall best per tier (computed over ALL candidates, so it is
     // genuinely the top stream regardless of language); skipped when it already
     // appears as a language pick (dedup).
     for (const tier of TIERS) {
@@ -146,8 +154,8 @@ const curateStreams = (streams, lang) => {
 };
 
 // Choose what a preset recommends (highlighted + what "Watch" plays).
-//   quality: the highest tier present (picks are tier-ordered) — pure quality.
-//   speed:   the most-seeded stream of the WHOLE list (picks + rest) — pure speed,
+//   quality: the highest tier present (picks are tier-ordered), pure quality.
+//   speed:   the most-seeded stream of the WHOLE list (picks + rest), pure speed,
 //            deliberately ignoring quality; ties broken by smaller file (lighter
 //            downloads start faster).
 //   auto:    the tier the screen can show; if the exact tier is absent, take the
@@ -217,4 +225,4 @@ const availableLanguages = (streams) => {
     return [...out];
 };
 
-module.exports = { parseStream, curateStreams, recommendStream, flagFor, availableLanguages, TIERS };
+module.exports = { parseStream, curateStreams, recommendStream, flagFor, availableLanguages, formatSize, TIERS };
