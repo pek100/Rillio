@@ -1,7 +1,7 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
 const React = require('react');
-const { default: Icon } = require('@stremio/stremio-icons/react');
+const { default: Logo } = require('rillio/common/Logo/Logo');
 const styles = require('./styles.less');
 
 // Full-screen overlay shown after the user accepts a desktop update. It stays up
@@ -11,6 +11,22 @@ const styles = require('./styles.less');
 const UpdatingOverlay = () => {
     const [active, setActive] = React.useState(false);
     const [pct, setPct] = React.useState(null);
+    const [fellBack, setFellBack] = React.useState(false);
+    const canvasRef = React.useRef(null);
+
+    // Drive the looping fluid-fill mark (the same animation as the pre-bundle
+    // loading screen, exposed on window) once the overlay is showing. The frame
+    // loop stops itself when the canvas leaves the DOM (overlay hidden).
+    React.useEffect(() => {
+        if (!active) return;
+        const canvas = canvasRef.current;
+        const run = globalThis.__rillioFluidLogo;
+        if (canvas && typeof run === 'function') {
+            run(canvas, { fallback: () => setFellBack(true) });
+        } else {
+            setFellBack(true);
+        }
+    }, [active]);
 
     React.useEffect(() => {
         const onStart = () => { setPct(null); setActive(true); };
@@ -46,7 +62,9 @@ const UpdatingOverlay = () => {
         // interactive elements); the floating window controls sit above it.
         <div className={styles['overlay']} data-tauri-drag-region>
             <div className={styles['mark']}>
-                <Icon className={styles['mark-icon']} name={'download'} />
+                {fellBack
+                    ? <Logo className={styles['mark-fallback']} size={92} />
+                    : <canvas ref={canvasRef} className={styles['mark-canvas']} width={360} height={371} />}
             </div>
             <div className={styles['title']}>Updating Rillio</div>
             <div className={styles['track']}>

@@ -5,7 +5,7 @@ import Icon from '@stremio/stremio-icons/react';
 import Logo from 'rillio/common/Logo/Logo';
 import { cn } from 'rillio/common/cn';
 import SearchModal from 'rillio/components/SearchModal';
-import { isShell } from 'rillio/components/WindowControls/WindowControls';
+import { useIsShell } from 'rillio/components/WindowControls/WindowControls';
 
 // Reused legacy components (all the auth/account logic lives here).
 const NavMenu = require('rillio/components/NavBar/HorizontalNavBar/NavMenu');
@@ -38,7 +38,7 @@ const TopNav = ({ className, route }: Props) => {
     // In the frameless desktop shell the nav doubles as the window drag handle:
     // the bar and its empty spacer are drag regions, while the links/buttons
     // (never tagged) stay clickable. `shell` is false in the browser build.
-    const shell = isShell();
+    const shell = useIsShell();
     const dragProps = shell ? { 'data-tauri-drag-region': '' } : {};
     const activeId = route === 'continue_watching' ? 'library' : route;
     const [searchOpen, setSearchOpen] = React.useState(false);
@@ -95,7 +95,7 @@ const TopNav = ({ className, route }: Props) => {
 
             <div {...dragProps} className="flex-1" />
 
-            <div className={cn('flex shrink-0 items-center gap-2 overflow-visible', shell && 'pr-[8.25rem]')}>
+            <div className="flex shrink-0 items-center gap-2 overflow-visible">
                 <Button
                     onClick={openSearch}
                     title={t('SEARCH')}

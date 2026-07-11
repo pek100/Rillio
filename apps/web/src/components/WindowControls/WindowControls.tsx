@@ -1,10 +1,31 @@
 import React from 'react';
 
-// True only inside the Tauri desktop shell. `withGlobalTauri` exposes the API
-// on `window.__TAURI__`; the web build has no such global, so the custom chrome
-// simply never renders there (the browser/OS draws its own).
+// True only inside the Tauri desktop shell. Tauri always injects
+// `__TAURI_INTERNALS__` into every webview (before any page script), and
+// `withGlobalTauri` additionally exposes the JS API on `window.__TAURI__`.
+// Detect on either signal rather than the narrower `__TAURI__.core.invoke`,
+// which can read false if the global attaches a tick after first render. The
+// web build has neither global, so the custom chrome never renders there.
 const tauri = () => (globalThis as any).__TAURI__;
-export const isShell = (): boolean => !!tauri()?.core?.invoke;
+export const isShell = (): boolean => {
+    const w = globalThis as any;
+    return !!(w.__TAURI_INTERNALS__ || w.__TAURI__);
+};
+
+// Hook form: seeds from isShell() and re-checks briefly after mount, so a
+// component that first rendered before the Tauri global attached still flips
+// into shell mode (the plain isShell() is evaluated once and never re-runs).
+export const useIsShell = (): boolean => {
+    const [shell, setShell] = React.useState(isShell);
+    React.useEffect(() => {
+        if (shell) return undefined;
+        if (isShell()) { setShell(true); return undefined; }
+        const id = setInterval(() => { if (isShell()) { setShell(true); clearInterval(id); } }, 200);
+        const stop = setTimeout(() => clearInterval(id), 3000);
+        return () => { clearInterval(id); clearTimeout(stop); };
+    }, [shell]);
+    return shell;
+};
 const currentWindow = () => tauri()?.window?.getCurrentWindow?.();
 
 // The window is frameless (decorations off in the Tauri shell), so the web app
@@ -12,6 +33,7 @@ const currentWindow = () => tauri()?.window?.getCurrentWindow?.();
 // clickable (never a drag region); a thin strip along the very top edge, plus
 // the draggable nav on the main routes, moves the window.
 const WindowControls = () => {
+    const shell = useIsShell();
     const [maximized, setMaximized] = React.useState(false);
 
     React.useEffect(() => {
@@ -34,7 +56,7 @@ const WindowControls = () => {
         return () => { cancelled = true; if (unlisten) unlisten(); };
     }, []);
 
-    if (!isShell()) return null;
+    if (!shell) return null;
 
     const minimize = () => currentWindow()?.minimize?.();
     const toggleMaximize = () => currentWindow()?.toggleMaximize?.();
