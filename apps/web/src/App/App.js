@@ -17,6 +17,8 @@ const { default: ShortcutsModal } = require('./ShortcutsModal');
 const { default: GamepadModal } = require('./GamepadModal');
 const { default: WindowControls } = require('rillio/components/WindowControls/WindowControls');
 const UpdatingOverlay = require('./UpdatingOverlay/UpdatingOverlay');
+const SyncModal = require('./SyncModal/SyncModal');
+const { ensureDisplayName } = require('rillio/common/useDisplayName');
 const { OPEN_SEARCH_EVENT } = require('rillio/components/TopNav/TopNav');
 const styles = require('./styles');
 
@@ -65,6 +67,8 @@ const App = () => {
     // Dismiss the pre-bundle loading screen (index.html) now that the app has
     // mounted and the core is ready. Fade, then remove.
     React.useEffect(() => {
+        // Anonymous accounts get a local identity out of the box.
+        ensureDisplayName();
         const el = document.getElementById('rillio-loading');
         if (!el) return;
         el.classList.add('rl-hide');
@@ -205,6 +209,7 @@ const App = () => {
                                 <DiscordProvider>
                                     <WindowControls />
                                     <UpdatingOverlay />
+                                    <SyncModal />
                                     {
                                         shortcutModalOpen && <ShortcutsModal onClose={closeShortcutsModal}/>
                                     }

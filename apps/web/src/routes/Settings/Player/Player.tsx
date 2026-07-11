@@ -13,7 +13,6 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
     const platform = usePlatform();
 
     const {
-        subtitlesLanguageSelect,
         subtitlesSizeSelect,
         subtitlesTextColorInput,
         subtitlesBackgroundColorInput,
@@ -35,13 +34,10 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
 
     return (
         <Section ref={ref} label={'SETTINGS_NAV_PLAYER'}>
+            {/* Subtitles language deliberately lives on the movie page (the streams
+                language picker), not here — one language control drives stream
+                priority AND default subtitles. */}
             <Category icon={'subtitles'} label={'SETTINGS_SECTION_SUBTITLES'}>
-                <Option label={'SETTINGS_SUBTITLES_LANGUAGE'}>
-                    <MultiselectMenu
-                        className={'multiselect'}
-                        {...subtitlesLanguageSelect}
-                    />
-                </Option>
                 <Option label={'SETTINGS_SUBTITLES_SIZE'}>
                     <MultiselectMenu
                         className={'multiselect'}

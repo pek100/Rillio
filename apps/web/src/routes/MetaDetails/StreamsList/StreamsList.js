@@ -10,6 +10,7 @@ const { default: Icon } = require('@stremio/stremio-icons/react');
 const { Button, Image, MultiselectMenu } = require('rillio/components');
 const { useCore } = require('rillio/core');
 const Stream = require('./Stream');
+const CuratedStreams = require('./CuratedStreams');
 const styles = require('./styles');
 const { usePlatform, useProfile } = require('rillio/common');
 const { default: SeasonEpisodePicker } = require('../EpisodePicker');
@@ -122,7 +123,7 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }) => {
                     Object.keys(streamsByAddon).length > 1 ?
                         <MultiselectMenu
                             {...selectableOptions}
-                            className={styles['select-input-container']}
+                            className={classnames(styles['select-input-container'], 'compact')}
                         />
                         :
                         null
@@ -173,25 +174,14 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }) => {
                             :
                             <React.Fragment>
                                 <div className={styles['streams-container']} ref={streamsContainerRef}>
-                                    {filteredStreams.map((stream, index) => (
-                                        <Stream
-                                            key={index}
-                                            videoId={video?.id}
-                                            videoReleased={video?.released}
-                                            addonName={stream.addonName}
-                                            name={stream.name}
-                                            description={stream.description}
-                                            thumbnail={stream.thumbnail}
-                                            progress={stream.progress}
-                                            deepLinks={stream.deepLinks}
-                                            onClick={stream.onClick}
-                                        />
-                                    ))}
+                                    <CuratedStreams streams={filteredStreams} />
                                     {
+                                        // Streams exist, so addons are already installed: a quiet
+                                        // little link, not the yellow call-to-action.
                                         showInstallAddonsButton ?
-                                            <Button className={styles['install-button-container']} title={t('ADDON_CATALOGUE_MORE')} href={'#/addons'}>
-                                                <Icon className={styles['icon']} name={'addons'} />
-                                                <div className={styles['label']}>{t('ADDON_CATALOGUE_MORE')}</div>
+                                            <Button className={'mx-auto mt-1 inline-flex h-7 items-center gap-1.5 rounded-full bg-white/5 px-3 text-xs font-medium text-fg-muted transition hover:bg-white/10 hover:text-fg'} title={t('ADDON_CATALOGUE_MORE')} href={'#/addons'}>
+                                                <Icon className={'size-3.5'} name={'addons'} />
+                                                {t('ADDON_CATALOGUE_MORE')}
                                             </Button>
                                             :
                                             null

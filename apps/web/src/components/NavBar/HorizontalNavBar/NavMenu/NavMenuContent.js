@@ -15,6 +15,9 @@ const { default: usePlayUrl } = require('rillio/common/usePlayUrl');
 const useToast = require('rillio/common/Toast/useToast');
 const { withCoreSuspender } = require('rillio/common/CoreSuspender');
 const useStreamingServer = require('rillio/common/useStreamingServer');
+const { useDisplayName } = require('rillio/common/useDisplayName');
+const { OPEN_SYNC_EVENT } = require('rillio/common/syncEvents');
+const { useIsShell } = require('rillio/components/WindowControls/WindowControls');
 const styles = require('./styles');
 
 const NavMenuContent = ({ onClick }) => {
@@ -22,11 +25,19 @@ const NavMenuContent = ({ onClick }) => {
     const navigate = useNavigate();
     const core = useCore();
     const profile = useProfile();
+    const [displayName, setDisplayName] = useDisplayName();
+    const [editingName, setEditingName] = React.useState(false);
+    const [nameDraft, setNameDraft] = React.useState('');
+    const nameInputRef = React.useRef(null);
     const streamingServer = useStreamingServer();
     const { handlePlayUrl } = usePlayUrl();
     const toast = useToast();
     const [fullscreen, requestFullscreen, exitFullscreen, , supported] = useFullscreen();
     const [, isAndroidPWA] = usePWA();
+    // In the desktop shell the window header owns fullscreen (native, actually
+    // fullscreens the window); this browser-API entry would only fullscreen the
+    // webview inside the frame.
+    const inShell = useIsShell();
     const streamingServerWarningDismissed = React.useMemo(() => {
         return streamingServer.settings !== null && streamingServer.settings.type === 'Ready' || (
             !isNaN(profile.settings.streamingServerWarningDismissed.getTime()) &&
@@ -62,6 +73,30 @@ const NavMenuContent = ({ onClick }) => {
             : navigate('/intro');
     }, [profile.auth, logoutButtonOnClick, navigate]);
 
+    const startEditName = React.useCallback((event) => {
+        if (event) event.stopPropagation();
+        setNameDraft(displayName);
+        setEditingName(true);
+    }, [displayName]);
+    const commitName = React.useCallback(() => {
+        setDisplayName(nameDraft);
+        setEditingName(false);
+    }, [nameDraft, setDisplayName]);
+    const onNameKeyDown = React.useCallback((event) => {
+        event.stopPropagation();
+        if (event.key === 'Enter') { event.preventDefault(); commitName(); }
+        else if (event.key === 'Escape') { event.preventDefault(); setEditingName(false); }
+    }, [commitName]);
+    React.useEffect(() => {
+        if (editingName && nameInputRef.current) {
+            nameInputRef.current.focus();
+            nameInputRef.current.select();
+        }
+    }, [editingName]);
+    const openSyncModal = React.useCallback((tab) => () => {
+        window.dispatchEvent(new CustomEvent(OPEN_SYNC_EVENT, { detail: { tab } }));
+    }, []);
+
     return (
         <div className={classnames(styles['nav-menu-container'], 'animation-fade-in', { [styles['with-warning']]: !streamingServerWarningDismissed } )} onClick={onClick}>
             <div className={styles['user-info-container']}>
@@ -78,16 +113,45 @@ const NavMenuContent = ({ onClick }) => {
                     }}
                 />
                 <div className={styles['user-info-details']}>
-                    <div className={styles['email-container']}>
-                        <div className={styles['email-label']}>{profile.auth === null ? t('ANONYMOUS_USER') : profile.auth.user.email}</div>
+                    <div className={styles['name-container']}>
+                        {
+                            editingName ?
+                                <input
+                                    ref={nameInputRef}
+                                    className={styles['name-input']}
+                                    value={nameDraft}
+                                    maxLength={40}
+                                    onChange={(e) => setNameDraft(e.target.value)}
+                                    onKeyDown={onNameKeyDown}
+                                    onBlur={commitName}
+                                    onClick={(e) => e.stopPropagation()}
+                                />
+                                :
+                                <React.Fragment>
+                                    <div className={styles['name-label']} title={displayName}>{displayName}</div>
+                                    <Button className={styles['name-edit-button']} title={t('EDIT') || 'Edit name'} onClick={startEditName}>
+                                        <Icon className={styles['name-edit-icon']} name={'edit'} />
+                                    </Button>
+                                </React.Fragment>
+                        }
                     </div>
-                    <Button className={styles['logout-button-container']} title={profile.auth === null ? `${t('LOG_IN')} / ${t('SIGN_UP')}` : t('LOG_OUT')} onClick={handleAuth}>
-                        <div className={styles['logout-label']}>{profile.auth === null ? `${t('LOG_IN')} / ${t('SIGN_UP')}` : t('LOG_OUT')}</div>
-                    </Button>
+                    {
+                        profile.auth !== null ?
+                            <div className={styles['email-container']}>
+                                <div className={styles['email-label']} title={profile.auth.user.email}>{profile.auth.user.email}</div>
+                                <Button className={styles['logout-button-container']} title={t('LOG_OUT')} onClick={handleAuth}>
+                                    <div className={styles['logout-label']}>{t('LOG_OUT')}</div>
+                                </Button>
+                            </div>
+                            :
+                            <div className={styles['email-container']}>
+                                <div className={styles['anon-label']}>{t('ANONYMOUS_USER')}</div>
+                            </div>
+                    }
                 </div>
             </div>
             {
-                supported && !isAndroidPWA ?
+                supported && !isAndroidPWA && !inShell ?
                     <div className={styles['nav-menu-section']}>
                         <Button className={styles['nav-menu-option-container']} title={fullscreen ? t('EXIT_FULLSCREEN') : t('ENTER_FULLSCREEN')} onClick={fullscreen ? exitFullscreen : requestFullscreen}>
                             <Icon className={styles['icon']} name={fullscreen ? 'minimize' : 'maximize'} />
@@ -101,6 +165,14 @@ const NavMenuContent = ({ onClick }) => {
                 <Button className={styles['nav-menu-option-container']} title={ t('SETTINGS') } href={'#/settings'}>
                     <Icon className={styles['icon']} name={'settings'} />
                     <div className={styles['nav-menu-option-label']}>{ t('SETTINGS') }</div>
+                </Button>
+                <Button className={styles['nav-menu-option-container']} title={'Sync & backup'} onClick={openSyncModal('export')}>
+                    <Icon className={styles['icon']} name={'cloud-sync'} />
+                    <div className={styles['nav-menu-option-label']}>Sync & backup</div>
+                </Button>
+                <Button className={styles['nav-menu-option-container']} title={'Import from Stremio'} onClick={openSyncModal('stremio')}>
+                    <Icon className={styles['icon']} name={'download'} />
+                    <div className={styles['nav-menu-option-label']}>Import from Stremio</div>
                 </Button>
                 <Button className={styles['nav-menu-option-container']} title={ t('PLAY_URL_MAGNET_LINK') } onClick={onPlayMagnetLinkClick}>
                     <Icon className={styles['icon']} name={'magnet-link'} />

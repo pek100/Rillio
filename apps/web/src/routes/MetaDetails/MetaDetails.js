@@ -124,9 +124,12 @@ const MetaDetails = () => {
         metaDetails.metaItem.content.content.background.length > 0
     ), [metaPath, metaDetails]);
     const originPath = React.useMemo(() => getStoredOrigin(), [getStoredOrigin]);
-    const trailerYtId = React.useMemo(() => {
+    const trailerYtIds = React.useMemo(() => {
         const ts = metaDetails.metaItem?.content?.content?.trailerStreams;
-        return Array.isArray(ts) && ts.length > 0 && typeof ts[0].ytId === 'string' && ts[0].ytId.length > 0 ? ts[0].ytId : null;
+        return Array.isArray(ts) ?
+            ts.map((t) => t.ytId).filter((id) => typeof id === 'string' && id.length > 0)
+            :
+            [];
     }, [metaDetails.metaItem]);
 
     useContentGamepadNavigation(contentRef, GAMEPAD_HANDLER_ID);
@@ -213,7 +216,7 @@ const MetaDetails = () => {
                                                 />
                                                 <HeroMedia
                                                     className={classnames(styles['hero-media'], 'animation-fade-in')}
-                                                    ytId={trailerYtId}
+                                                    ytIds={trailerYtIds}
                                                     background={metaDetails.metaItem.content.content.background}
                                                     poster={metaDetails.metaItem.content.content.poster}
                                                     name={metaDetails.metaItem.content.content.name}

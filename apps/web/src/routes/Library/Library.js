@@ -10,7 +10,6 @@ const NotFound = require('rillio/routes/NotFound');
 const { useProfile, useNotifications, useOnScrollToBottom, withCoreSuspender } = require('rillio/common');
 const { default: toPath } = require('rillio-router/toPath');
 const { DelayedRenderer, Chips, Image, MainNavBars, LibItem, MultiselectMenu } = require('rillio/components');
-const { default: Placeholder } = require('./Placeholder');
 const useLibrary = require('./useLibrary');
 const useSelectableInputs = require('./useSelectableInputs');
 const styles = require('./styles');
@@ -73,8 +72,7 @@ const Library = ({ model }) => {
     return (
         <MainNavBars className={styles['library-container']} route={model}>
             {
-                profile.auth !== null ?
-                    <div className={styles['library-content']}>
+                <div className={styles['library-content']}>
                         <div className={styles['selectable-inputs-container']}>
                             <MultiselectMenu {...typeSelect} className={styles['select-input-container']} />
                             <Chips {...sortChips} className={styles['select-input-container']} />
@@ -111,8 +109,6 @@ const Library = ({ model }) => {
                                     </div>
                         }
                     </div>
-                    :
-                    <Placeholder />
             }
         </MainNavBars>
     );

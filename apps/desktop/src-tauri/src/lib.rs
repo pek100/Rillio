@@ -240,6 +240,12 @@ fn build_main_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
         })
         .build()?;
 
+    // Self-heal a stuck fullscreen state: if a previous session died while
+    // fullscreen, the OS can restore the window fullscreen, which silently
+    // disables resizing and Windows' drag-to-top (Aero snap) maximize. The app
+    // always starts windowed; fullscreen is only entered via its header button.
+    let _ = window.set_fullscreen(false);
+
     // Fallback reveal: if the web layer never calls show() (e.g. a startup error
     // before the loading screen paints), don't leave an invisible window. show()
     // is idempotent, so racing the JS path is harmless.

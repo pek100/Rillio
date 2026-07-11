@@ -45,4 +45,23 @@
     &:hover, &.active {
         background-color: var(--overlay-color);
     }
+
+    // Small-pill variant (opt in with className="compact"): shrinks the trigger
+    // to chip size; the dropdown keeps a readable width and hangs right-aligned.
+    &:global(.compact) {
+        min-width: 0;
+
+        .multiselect-button {
+            height: 1.75rem;
+            padding: 0 0.9rem;
+
+            .label {
+                font-size: 0.8rem;
+            }
+
+            .icon {
+                width: 0.75rem;
+            }
+        }
+    }
 }

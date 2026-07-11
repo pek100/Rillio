@@ -6,6 +6,7 @@
     width: 100%;
     aspect-ratio: 16 / 9;
     overflow: hidden;
+    border-radius: 12px;
     background-color: var(--color-surface);
 
     // The iframe stays interactive: YouTube's own controls are the controls.
@@ -24,10 +25,94 @@
 
     .still {
         object-fit: cover;
-        object-position: center;
+        // Same crop rule as the home banner: anchor on the image's top
+        // two-thirds so tall crops zoom to top-center (faces/title art).
+        object-position: center 25%;
+        opacity: 1;
+        transition: opacity 400ms ease;
+    }
+
+    .slide-hidden {
+        opacity: 0;
+        pointer-events: none;
     }
 
     .still-empty {
         background-color: var(--color-surface);
+    }
+
+    .arrow {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 2;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border: none;
+        border-radius: 9999px;
+        background: rgba(2, 4, 7, 0.55);
+        backdrop-filter: blur(4px);
+        cursor: pointer;
+        opacity: 0;
+        transition: opacity 150ms ease, background-color 150ms ease;
+
+        .arrow-icon {
+            width: 1rem;
+            height: 1rem;
+            color: var(--color-fg);
+        }
+
+        &:hover {
+            background: rgba(2, 4, 7, 0.75);
+        }
+    }
+
+    .arrow-left { left: 0.6rem; }
+    .arrow-right { right: 0.6rem; }
+
+    &:hover .arrow {
+        opacity: 1;
+    }
+
+    .dots {
+        position: absolute;
+        bottom: 0.6rem;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 2;
+        display: flex;
+        gap: 0.4rem;
+        padding: 0.3rem 0.55rem;
+        border-radius: 9999px;
+        background: rgba(2, 4, 7, 0.45);
+        backdrop-filter: blur(4px);
+
+        .dot {
+            width: 0.4rem;
+            height: 0.4rem;
+            padding: 0;
+            border: none;
+            border-radius: 9999px;
+            background: rgba(255, 255, 255, 0.35);
+            cursor: pointer;
+            transition: background-color 150ms ease, width 150ms ease;
+
+            // The trailer slide's dot is a tiny play glyph shape (wider pill) so it
+            // reads as "there is a video here".
+            &.dot-video {
+                width: 0.75rem;
+            }
+
+            &.dot-active {
+                background: var(--color-accent);
+            }
+
+            &:hover:not(.dot-active) {
+                background: rgba(255, 255, 255, 0.6);
+            }
+        }
     }
 }

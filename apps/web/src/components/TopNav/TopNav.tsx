@@ -2,7 +2,7 @@ import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import Icon from '@stremio/stremio-icons/react';
-import Logo from 'rillio/common/Logo/Logo';
+import LogoMark from 'rillio/common/LogoMark/LogoMark';
 import { cn } from 'rillio/common/cn';
 import SearchModal from 'rillio/components/SearchModal';
 import { useIsShell } from 'rillio/components/WindowControls/WindowControls';
@@ -42,6 +42,7 @@ const TopNav = ({ className, route }: Props) => {
     const dragProps = shell ? { 'data-tauri-drag-region': '' } : {};
     const activeId = route === 'continue_watching' ? 'library' : route;
     const [searchOpen, setSearchOpen] = React.useState(false);
+    const brandRef = React.useRef<HTMLAnchorElement>(null);
 
     const openSearch = React.useCallback(() => setSearchOpen(true), []);
     const closeSearch = React.useCallback(() => setSearchOpen(false), []);
@@ -69,9 +70,11 @@ const TopNav = ({ className, route }: Props) => {
 
     return (
         <nav {...dragProps} className={cn(className, 'flex items-center gap-5 h-full px-6 overflow-visible')}>
-            <Link to="/" title="Rillio" tabIndex={-1} className="flex items-center gap-2.5 shrink-0">
-                <Logo className="h-8 w-auto" />
-                <span className="hidden text-lg font-semibold tracking-tight text-fg sm:block">Rillio</span>
+            <Link ref={brandRef} to="/" title="Rillio" tabIndex={-1} className="group flex items-center gap-2.5 shrink-0">
+                <LogoMark className="h-8" hoverRef={brandRef} />
+                {/* Visible at rest; on brand hover it re-fades in (a quick dip
+                    then back), timed with the mark's fluid pour. */}
+                <span className="hidden text-lg font-semibold tracking-tight text-fg group-hover:animate-[rillio-wordmark-fade_0.5s_var(--ease-smooth)] sm:block">Rillio</span>
             </Link>
 
             <div className="flex items-center gap-1 shrink-0">

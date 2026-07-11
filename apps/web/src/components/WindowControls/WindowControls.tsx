@@ -35,6 +35,7 @@ const currentWindow = () => tauri()?.window?.getCurrentWindow?.();
 const WindowControls = () => {
     const shell = useIsShell();
     const [maximized, setMaximized] = React.useState(false);
+    const [fullscreen, setFullscreen] = React.useState(false);
 
     React.useEffect(() => {
         if (!isShell()) return;
@@ -44,9 +45,14 @@ const WindowControls = () => {
         let unlisten: (() => void) | undefined;
         let cancelled = false;
 
-        const sync = () => win.isMaximized?.()
-            .then((m: boolean) => { if (!cancelled) setMaximized(!!m); })
-            .catch(() => { /* getter unavailable, keep last state */ });
+        const sync = () => {
+            win.isMaximized?.()
+                .then((m: boolean) => { if (!cancelled) setMaximized(!!m); })
+                .catch(() => { /* getter unavailable, keep last state */ });
+            win.isFullscreen?.()
+                .then((f: boolean) => { if (!cancelled) setFullscreen(!!f); })
+                .catch(() => { /* getter unavailable, keep last state */ });
+        };
 
         sync();
         win.onResized?.(sync)
@@ -56,11 +62,57 @@ const WindowControls = () => {
         return () => { cancelled = true; if (unlisten) unlisten(); };
     }, []);
 
+    // Any attempt to drag the window (mousedown on any drag region, incl. the
+    // navbars') collapses fullscreen first — dragging a fullscreen window is
+    // what corrupts the window state. Capture phase so it runs before the
+    // native drag begins.
+    React.useEffect(() => {
+        if (!shell) return undefined;
+        const onDown = (e: MouseEvent) => {
+            const target = e.target as HTMLElement | null;
+            if (!target || !target.hasAttribute || !target.hasAttribute('data-tauri-drag-region')) return;
+            const win = currentWindow();
+            win?.isFullscreen?.()
+                .then((f: boolean) => {
+                    if (f) return win.setFullscreen(false).then(() => setFullscreen(false));
+                })
+                .catch(() => { /* no-op */ });
+        };
+        window.addEventListener('mousedown', onDown, true);
+        return () => window.removeEventListener('mousedown', onDown, true);
+    }, [shell]);
+
     if (!shell) return null;
 
-    const minimize = () => currentWindow()?.minimize?.();
-    const toggleMaximize = () => currentWindow()?.toggleMaximize?.();
+    // Fullscreen is fragile: any other window operation (drag, minimize,
+    // maximize) performed while fullscreen leaves Windows in a stuck half-state
+    // (no resize, no Aero snap). So fullscreen COLLAPSES on any window change:
+    // every control exits it first, and grabbing any drag region exits it too.
+    const collapseFullscreen = () => {
+        const win = currentWindow();
+        if (!win?.isFullscreen) return Promise.resolve();
+        return win.isFullscreen()
+            .then((f: boolean) => {
+                if (f) return win.setFullscreen(false).then(() => setFullscreen(false));
+            })
+            .catch(() => { /* no-op */ });
+    };
+
+    const minimize = () => { collapseFullscreen().then(() => currentWindow()?.minimize?.()); };
+    const toggleMaximize = () => {
+        // While fullscreen, "maximize" just returns to the windowed state.
+        if (fullscreen) { collapseFullscreen(); return; }
+        currentWindow()?.toggleMaximize?.();
+    };
     const close = () => currentWindow()?.close?.();
+    // Native window fullscreen: the browser Fullscreen API only fullscreens the
+    // webview INSIDE the frameless window, which reads as broken. This is the one
+    // fullscreen control; the account-menu entry is hidden in the shell.
+    const toggleFullscreen = () => {
+        const win = currentWindow();
+        if (!win?.setFullscreen) return;
+        win.setFullscreen(!fullscreen).then(() => setFullscreen(!fullscreen)).catch(() => { /* no-op */ });
+    };
 
     const btn = 'flex h-full w-11 items-center justify-center text-fg-muted outline-none transition-colors duration-150';
 
@@ -71,10 +123,27 @@ const WindowControls = () => {
                 below it). z sits just under the loading screen so the controls
                 stay grabbable even over the full-screen loading/updating
                 overlays. */}
-            <div data-tauri-drag-region className="fixed left-0 right-[8.25rem] top-0 z-[2147483646] h-2.5" />
+            <div data-tauri-drag-region className="fixed left-0 right-44 top-0 z-[2147483646] h-2.5" />
 
             {/* Controls: always on top, always clickable (no drag region). */}
             <div className="fixed right-0 top-0 z-[2147483646] flex h-8 select-none">
+                <button
+                    type="button"
+                    className={`${btn} hover:bg-white/10 hover:text-fg`}
+                    onClick={toggleFullscreen}
+                    title={fullscreen ? 'Exit full screen' : 'Full screen'}
+                    aria-label={fullscreen ? 'Exit full screen' : 'Full screen'}
+                >
+                    {fullscreen ? (
+                        <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1">
+                            <path d="M4 1v3H1M7 1v3h3M4 10V7H1M7 10V7h3" />
+                        </svg>
+                    ) : (
+                        <svg width="11" height="11" viewBox="0 0 11 11" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="1">
+                            <path d="M1 4V1h3M10 4V1H7M1 7v3h3M10 7v3H7" />
+                        </svg>
+                    )}
+                </button>
                 <button
                     type="button"
                     className={`${btn} hover:bg-white/10 hover:text-fg`}

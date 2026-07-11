@@ -1,20 +1,15 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" fill="none" role="img" aria-label="Nothing here yet">
-  <!-- dry ground: one soft line and a couple of pebbles -->
-  <ellipse cx="100" cy="178" rx="48" ry="4.5" fill="#FFFFFF" fill-opacity="0.05"/>
-  <circle cx="54" cy="176" r="2.6" fill="#FFFFFF" fill-opacity="0.09"/>
-  <circle cx="149" cy="178" r="2" fill="#FFFFFF" fill-opacity="0.07"/>
+  <!-- The rill alone: one living accent line meandering through, fading in from
+       the left and out past the right. "The stream has not reached here yet." -->
+  <defs>
+    <linearGradient id="rl-empty-fade" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#FFA033" stop-opacity="0"/>
+      <stop offset="0.18" stop-color="#FFA033" stop-opacity="0.9"/>
+      <stop offset="0.72" stop-color="#FFA033" stop-opacity="0.9"/>
+      <stop offset="1" stop-color="#FFA033" stop-opacity="0"/>
+    </linearGradient>
+  </defs>
 
-  <!-- cactus: one flat silhouette. Group opacity flattens the trunk + arms
-       first, so their overlaps read as a single solid shape (per-stroke
-       opacity would double up and seam at the joints). -->
-  <g opacity="0.16">
-    <g fill="none" stroke="#FFFFFF" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
-      <path d="M100 174V72"/>
-      <path d="M100 126H78v-24"/>
-      <path d="M100 142h22v-26"/>
-    </g>
-  </g>
-
-  <!-- a hint of a ridge down the trunk -->
-  <path d="M100 158V90" stroke="#FFFFFF" stroke-opacity="0.06" stroke-width="2" stroke-linecap="round"/>
+  <path d="M10 103 C46 93, 68 112, 100 102 S152 94, 190 103"
+        stroke="url(#rl-empty-fade)" stroke-width="3" stroke-linecap="round"/>
 </svg>

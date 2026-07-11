@@ -46,18 +46,84 @@
 
         .user-info-details {
             flex: auto;
+            min-width: 0;
             display: flex;
             flex-direction: column;
             justify-content: center;
             margin-left: 1rem;
 
+            .name-container {
+                display: flex;
+                align-items: center;
+                gap: 0.4rem;
+                min-height: 1.6rem;
+
+                .name-label {
+                    font-size: 1.05rem;
+                    font-weight: 700;
+                    color: var(--primary-foreground-color);
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                    max-width: 13rem;
+                }
+
+                .name-edit-button {
+                    flex: none;
+                    opacity: 0.5;
+                    transition: opacity 150ms ease;
+
+                    .name-edit-icon {
+                        display: block;
+                        width: 0.85rem;
+                        height: 0.85rem;
+                        color: var(--color-fg-subtle);
+                        transition: color 150ms ease;
+                    }
+
+                    &:hover .name-edit-icon {
+                        color: var(--color-fg);
+                    }
+                }
+
+                &:hover .name-edit-button {
+                    opacity: 1;
+                }
+
+                .name-input {
+                    flex: 1;
+                    min-width: 0;
+                    font-size: 1.05rem;
+                    font-weight: 700;
+                    color: var(--primary-foreground-color);
+                    background: var(--overlay-color);
+                    border: 1px solid var(--color-line);
+                    border-radius: 0.4rem;
+                    padding: 0.15rem 0.45rem;
+                    outline: none;
+                }
+            }
+
             .email-container {
                 flex: none;
-                margin-bottom: 0.5rem;
+                display: flex;
+                align-items: center;
+                gap: 0.5rem;
+                margin-top: 0.2rem;
 
                 .email-label {
                     flex: 1;
-                    color: var(--primary-foreground-color);
+                    min-width: 0;
+                    font-size: 0.85rem;
+                    color: var(--color-fg-subtle);
+                    overflow: hidden;
+                    text-overflow: ellipsis;
+                    white-space: nowrap;
+                }
+
+                .anon-label {
+                    font-size: 0.85rem;
+                    color: var(--color-fg-subtle);
                 }
             }
 
@@ -74,7 +140,7 @@
 
                 .logout-label {
                     flex: 1;
-                    font-size: 0.9rem;
+                    font-size: 0.85rem;
                     font-weight: 600;
                     color: var(--primary-accent-color);
                     transition: filter 150ms ease;

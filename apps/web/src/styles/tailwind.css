@@ -50,3 +50,10 @@
     --shadow-island: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-elevated: 0 8px 30px rgba(0, 0, 0, 0.5);
 }
+
+/* Brand-hover wordmark: visible at rest, re-fades in (slight slide) on hover,
+ * timed with the mark's fluid pour. Outside @theme so v4 never tree-shakes it. */
+@keyframes rillio-wordmark-fade {
+    0%   { opacity: 0; transform: translateX(-0.25rem); }
+    100% { opacity: 1; transform: translateX(0); }
+}

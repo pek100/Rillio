@@ -9,15 +9,19 @@ import styles from './styles.less';
 const Button = require('rillio/components/Button').default;
 
 const ROTATE_MS = 7000;
+// How many cards are visible on each side of the front one.
+const VISIBLE_SIDES = 3;
 
 type Props = {
     className?: string,
     items: any[],
 };
 
-// A rotating, Netflix-style hero above the board's catalog rows. Fed by the
-// first loaded catalog, it crossfades between backdrops every 7s, pauses while
-// the pointer is over it, and can be driven by the arrows or the dots.
+// The board's hero: the active title's backdrop fills the banner as ambience
+// (cover + scrim, so odd crops never matter), the copy sits on the left, and the
+// right side is a 3D poster coverflow — every item's poster fans out in
+// perspective, the front card is the active one, side cards click to select.
+// Rotates every 7s, pauses on hover.
 const HeroCarousel = ({ className, items }: Props) => {
     const { t } = useTranslation();
     const [index, setIndex] = React.useState(0);
@@ -39,8 +43,6 @@ const HeroCarousel = ({ className, items }: Props) => {
         return () => clearInterval(id);
     }, [paused, count]);
 
-    const goPrev = React.useCallback(() => setIndex((i) => (i - 1 + count) % count), [count]);
-    const goNext = React.useCallback(() => setIndex((i) => (i + 1) % count), [count]);
     const pause = React.useCallback(() => setPaused(true), []);
     const resume = React.useCallback(() => setPaused(false), []);
 
@@ -103,28 +105,52 @@ const HeroCarousel = ({ className, items }: Props) => {
                 </div>
             </div>
 
+            {/* Poster coverflow: signed circular distance from the active card
+                drives each card's translate/rotate/scale. The front card links to
+                the title; side cards select on click. */}
+            <div className={styles['coverflow']}>
+                {
+                    items.map((it, i) => {
+                        let d = (((i - index) % count) + count) % count;
+                        if (d > count / 2) d -= count;
+                        const abs = Math.abs(d);
+                        const hidden = abs > VISIBLE_SIDES;
+                        const front = d === 0;
+                        return (
+                            <Button
+                                key={it.id || i}
+                                className={classnames(styles['card'], { [styles['front']]: front })}
+                                title={it.name}
+                                href={front ? (it.deepLinks?.metaDetailsVideos || it.deepLinks?.metaDetailsStreams || null) : null}
+                                onClick={front ? undefined : () => setIndex(i)}
+                                style={{
+                                    transform: `translate(-50%, -50%) translateX(${d * 58}%) translateZ(${-abs * 5}rem) rotateY(${d * -24}deg)`,
+                                    zIndex: 30 - abs,
+                                    opacity: hidden ? 0 : 1,
+                                    pointerEvents: hidden ? 'none' : 'auto',
+                                }}
+                            >
+                                <img className={styles['card-poster']} src={it.poster || it.background || ''} alt={''} loading={'lazy'} />
+                            </Button>
+                        );
+                    })
+                }
+            </div>
+
             {
                 count > 1 ?
-                    <React.Fragment>
-                        <Button className={classnames(styles['arrow'], styles['prev'])} title={t('BUTTON_PREV')} onClick={goPrev}>
-                            <Icon className={styles['arrow-icon']} name={'chevron-back'} />
-                        </Button>
-                        <Button className={classnames(styles['arrow'], styles['next'])} title={t('BUTTON_NEXT')} onClick={goNext}>
-                            <Icon className={styles['arrow-icon']} name={'chevron-back'} />
-                        </Button>
-                        <div className={styles['dots']}>
-                            {
-                                items.map((it, i) => (
-                                    <Button
-                                        key={it.id || i}
-                                        className={classnames(styles['dot'], { [styles['active']]: i === index })}
-                                        title={it.name}
-                                        onClick={() => setIndex(i)}
-                                    />
-                                ))
-                            }
-                        </div>
-                    </React.Fragment>
+                    <div className={styles['dots']}>
+                        {
+                            items.map((it, i) => (
+                                <Button
+                                    key={it.id || i}
+                                    className={classnames(styles['dot'], { [styles['active']]: i === index })}
+                                    title={it.name}
+                                    onClick={() => setIndex(i)}
+                                />
+                            ))
+                        }
+                    </div>
                     :
                     null
             }

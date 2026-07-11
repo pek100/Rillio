@@ -25,7 +25,10 @@
         width: 100%;
         height: 100%;
         object-fit: cover;
-        object-position: center;
+        // Crop anchored on the image's top two-thirds (faces/title art live
+        // there): the visible window centers on that band, so tall crops zoom
+        // to top-center instead of the dead middle.
+        object-position: center 25%;
         opacity: 0;
         transition: opacity 0.7s var(--ease-smooth, ease);
 
@@ -51,8 +54,8 @@
         position: absolute;
         left: 3rem;
         bottom: 3rem;
-        z-index: 1;
-        max-width: 34rem;
+        z-index: 2;
+        max-width: min(34rem, 40%);
         display: flex;
         flex-direction: column;
         align-items: flex-start;
@@ -149,50 +152,57 @@
         }
     }
 
-    .arrow {
+    // The 3D poster fan on the right half. Cards are absolutely centered and
+    // fanned out by inline transforms (translateX/Z + rotateY per distance from
+    // the front card); this container only supplies the stage + perspective.
+    .coverflow {
         position: absolute;
-        top: 50%;
-        transform: translateY(-50%);
-        z-index: 2;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        width: 2.75rem;
-        height: 2.75rem;
-        border: 1px solid var(--color-line);
-        border-radius: 50%;
-        background-color: rgba(2, 4, 7, 0.5);
-        backdrop-filter: blur(6px);
-        transition: background-color 0.15s var(--ease-smooth, ease);
+        top: 0;
+        right: 0;
+        bottom: 0;
+        left: 46%;
+        z-index: 1;
+        perspective: 1100px;
+        transform-style: preserve-3d;
 
-        .arrow-icon {
-            flex: none;
-            width: 1.1rem;
-            height: 1.1rem;
-            color: var(--color-fg-muted);
-            transition: color 0.15s var(--ease-smooth, ease);
-        }
+        .card {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            height: 72%;
+            aspect-ratio: 2 / 3;
+            border-radius: 0.75rem;
+            overflow: hidden;
+            box-shadow: 0 14px 40px rgba(0, 0, 0, 0.55);
+            transition:
+                transform 0.65s var(--ease-smooth, ease),
+                opacity 0.65s var(--ease-smooth, ease),
+                filter 0.3s var(--ease-smooth, ease);
 
-        &:hover,
-        &:focus {
-            outline: none;
-            background-color: var(--color-surface-hover);
+            .card-poster {
+                display: block;
+                width: 100%;
+                height: 100%;
+                object-fit: cover;
+            }
 
-            .arrow-icon {
-                color: var(--color-fg);
+            // Side cards recede: slightly dimmed until the front.
+            filter: brightness(0.55);
+
+            &.front {
+                filter: brightness(1);
+                box-shadow: 0 18px 50px rgba(0, 0, 0, 0.65);
+            }
+
+            &:hover:not(.front) {
+                filter: brightness(0.8);
             }
         }
     }
 
-    .prev {
-        left: 1rem;
-    }
-
-    .next {
-        right: 1rem;
-
-        .arrow-icon {
-            transform: rotate(180deg);
+    @media only screen and (max-width: 60rem) {
+        .coverflow {
+            display: none;
         }
     }
 

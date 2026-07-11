@@ -17,26 +17,8 @@ const usePlayerOptions = (profile: Profile) => {
 
     const { sortedOptions: sortedLanguageOptions } = useLanguageSorting(languageOptions);
 
-    const subtitlesLanguageSelect = useMemo(() => ({
-        options: [
-            { value: null, label: t('NONE') },
-            ...sortedLanguageOptions
-        ],
-        value: profile.settings.subtitlesLanguage,
-        onSelect: (value: string) => {
-            core.transport.dispatch({
-                action: 'Ctx',
-                args: {
-                    action: 'UpdateSettings',
-                    args: {
-                        ...profile.settings,
-                        subtitlesLanguage: value
-                    }
-                }
-            });
-        }
-    }), [profile.settings, sortedLanguageOptions]);
-
+    // Subtitles language intentionally has no Settings control: the streams
+    // language picker on the movie page owns that setting.
     const subtitlesSizeSelect = useMemo(() => ({
         options: CONSTANTS.SUBTITLES_SIZES.map((size) => ({
             value: `${size}`,
@@ -368,7 +350,6 @@ const usePlayerOptions = (profile: Profile) => {
     }), [profile.settings]);
 
     return {
-        subtitlesLanguageSelect,
         subtitlesSizeSelect,
         subtitlesTextColorInput,
         subtitlesBackgroundColorInput,

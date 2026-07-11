@@ -8,6 +8,7 @@ const { default: Icon } = require('@stremio/stremio-icons/react');
 const { Button } = require('rillio/components');
 const { default: Logo } = require('rillio/common/Logo/Logo');
 const { useFullscreen } = require('rillio/common/Fullscreen');
+const { useIsShell } = require('rillio/components/WindowControls/WindowControls');
 const { useHorizontalNavGamepadNavigation } = require('rillio/services/GamepadNavigation');
 const SearchBar = require('./SearchBar');
 const NavMenu = require('./NavMenu');
@@ -24,6 +25,11 @@ const HorizontalNavBar = React.memo(({ className, route, query, title, backButto
         }
     }, [originPath, navigate]);
     const [fullscreen, requestFullscreen, exitFullscreen, , supported] = useFullscreen();
+    // Frameless shell: this navbar (used by details/player/settings routes) is a
+    // window drag handle, exactly like TopNav on the main routes. The attribute
+    // only fires on the bar itself, so buttons/search stay clickable.
+    const shell = useIsShell();
+    const dragProps = shell ? { 'data-tauri-drag-region': '' } : {};
     const renderNavMenuLabel = React.useCallback(({ ref, className, onClick, children, }) => (
         <Button ref={ref} className={classnames(className, styles['button-container'], styles['menu-button-container'])} tabIndex={-1} onClick={onClick}>
             <Icon className={styles['icon']} name={'person-outline'} />
@@ -32,7 +38,7 @@ const HorizontalNavBar = React.memo(({ className, route, query, title, backButto
     ), []);
     useHorizontalNavGamepadNavigation(route || className, backButton);
     return (
-        <nav {...props} className={classnames(className, styles['horizontal-nav-bar-container'])}>
+        <nav {...props} {...dragProps} className={classnames(className, styles['horizontal-nav-bar-container'])}>
             {
                 backButton ?
                     <Button className={classnames(styles['button-container'], styles['back-button-container'])} tabIndex={-1} onClick={backButtonOnClick}>
@@ -45,7 +51,7 @@ const HorizontalNavBar = React.memo(({ className, route, query, title, backButto
             }
             {
                 typeof title === 'string' && title.length > 0 ?
-                    <h2 className={styles['title']}>{title}</h2>
+                    <h2 {...dragProps} className={styles['title']}>{title}</h2>
                     :
                     null
             }

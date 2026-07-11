@@ -23,6 +23,15 @@
         overflow: auto;
     }
 
+    // Under a compact trigger the 100%-width rule would collapse the menu to
+    // chip width and wrap every label; keep it readable and hang it right.
+    :global(.compact) & {
+        width: auto;
+        min-width: 11rem;
+        left: auto;
+        right: 0;
+    }
+
     .back-button {
         display: flex;
         align-items: center;
