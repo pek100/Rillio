@@ -227,16 +227,25 @@
   .vs-list svg { flex: none; color: var(--fg-3); }
   .vs-list .yes { color: var(--fg); font-weight: 700; }
   .vs-list .yes svg { color: var(--accent); }
-  /* Footnote star: muted superscript, links down to the FAQ entry. */
-  .vs-list .fn {
-    color: var(--fg-3); font-weight: 700; font-size: 0.72em;
-    vertical-align: super; line-height: 1; margin-left: 0.1em;
+  /* Expandable VLC line: the summary IS the row (same flex recipe as the
+     other items), a dotted underline marks it clickable, and the open state
+     reveals a small muted explanation indented past the icon. */
+  .vs-list li.more { display: block; }
+  .vs-list .more summary {
+    display: flex; align-items: center; gap: 0.7rem;
+    cursor: pointer; list-style: none;
     transition: color 0.15s var(--ease);
   }
-  .vs-list .fn:hover { color: var(--accent); }
-  /* The star's target is the (hidden) answer, so fragment navigation
-     auto-expands the entry; the margin keeps its summary in view too. */
-  .faq .a[id] { scroll-margin-top: 12rem; }
+  .vs-list .more summary::-webkit-details-marker { display: none; }
+  .vs-list .more summary span {
+    text-decoration: underline dotted var(--fg-3) 1px;
+    text-underline-offset: 0.25em;
+  }
+  .vs-list .more summary:hover { color: var(--fg); }
+  .vs-list .more .why {
+    margin: 0.45rem 0 0.25rem calc(15px + 0.7rem);
+    color: var(--fg-3); font-size: 0.9em; line-height: 1.6; max-width: 34rem;
+  }
   .feature-row .vs-note { color: var(--fg-3); font-size: 0.98rem; }
 
   /* Privacy: an honest statement, then a tight two-column list, no boxes. */
@@ -317,7 +326,7 @@
     <svg class="hero-rill reveal" viewBox="0 0 260 24" aria-hidden="true" style="transition-delay:0.14s">
       <path d="M4 14 C58 4, 92 22, 130 12 S 208 4, 256 12" pathLength="1"/>
     </svg>
-    <p class="lede reveal" style="transition-delay:0.16s">Movies, series and live TV, brought together by <a href="#addons">add-ons you choose</a> and played in the <a href="#hdr">highest quality there is</a>.</p>
+    <p class="lede reveal" style="transition-delay:0.16s">Movies, series and live TV, brought together by <a href="#addons">add-ons you choose</a> and played in a <a href="#hdr">native 4K player</a>.</p>
     <p class="lede lede-strong reveal" style="transition-delay:0.19s">Your library lives on your device, and it stays yours.</p>
     <div class="cta-row reveal" style="transition-delay:0.22s">
       <a class="btn btn-primary" href="https://github.com/pek100/rillio/releases/latest/download/RillioSetup.exe">
@@ -382,7 +391,12 @@
           <div>
             <ul class="vs-list">
               <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>Stremio hands these streams to an external player</li>
-              <li><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>VLC skips their Dolby Vision metadata<a class="fn" href="#faq-dv" aria-label="How does Rillio render Dolby Vision when VLC does not?">*</a></li>
+              <li class="more">
+                <details>
+                  <summary><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg><span>VLC skips their Dolby Vision metadata</span></summary>
+                  <p class="why">VLC's pipeline does not process the Dolby Vision RPU metadata in these streams, so playback falls back to the base layer. Rillio renders through mpv and libplacebo, whose open-source implementation applies it. Rillio is not Dolby certified and does not claim to be.</p>
+                </details>
+              </li>
               <li class="yes"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>Rillio plays them natively, right in the app</li>
             </ul>
             <p class="vs-note">True HDR passthrough on HDR displays and full Dolby Vision rendering, built on mpv.</p>
@@ -474,10 +488,6 @@
         <details>
           <summary>Is it really free?</summary>
           <p class="a">Yes. Rillio is free software under the GPL, with no tiers, no ads and no data business. Every line of it is on GitHub for you to read, build and verify.</p>
-        </details>
-        <details>
-          <summary>* How does Rillio render Dolby Vision when VLC does not?</summary>
-          <p class="a" id="faq-dv">VLC's playback pipeline does not process the Dolby Vision RPU metadata carried inside these streams, so the picture falls back to the base layer. Rillio renders through mpv and libplacebo, whose open-source implementation does read and apply that metadata. To be clear, Rillio is not Dolby certified and does not claim to be. It renders what is in the stream, faithfully.</p>
         </details>
       </div>
     </div>
