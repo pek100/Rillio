@@ -114,6 +114,22 @@ const TopNav = ({ className, route }: Props) => {
                 >
                     <Icon className="size-4" name="addons-outline" />
                 </Link>
+                <Link
+                    to="/cached"
+                    title={'Cached'}
+                    tabIndex={-1}
+                    className={cn(ICON_BUTTON_BARE, route === 'cached' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
+                >
+                    <Icon className="size-4" name="download" />
+                </Link>
+                <Link
+                    to="/settings"
+                    title={t('SETTINGS')}
+                    tabIndex={-1}
+                    className={cn(ICON_BUTTON_BARE, route === 'settings' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
+                >
+                    <Icon className="size-4" name="settings" />
+                </Link>
                 <NavMenu renderLabel={renderAccountLabel} />
             </div>
 

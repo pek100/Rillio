@@ -241,9 +241,13 @@ const Player = () => {
                     .then((resp) => resp.json())
                     .then((stats) => {
                         if (stats !== null && typeof stats.engineError === 'string' && stats.engineError.length > 0) {
+                            // Disk full is user-fixable right here: deleting cached
+                            // media frees the space, so point at the Cached page.
+                            const diskFull = /not enough space|os error 112/i.test(stats.engineError);
                             setError((current) => current !== null ? {
                                 ...current,
                                 message: `${current.message}: ${stats.engineError}`,
+                                freeSpace: diskFull,
                             } : current);
                         }
                     })

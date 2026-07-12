@@ -6,6 +6,7 @@ const classnames = require('classnames');
 const { useTranslation } = require('react-i18next');
 const { useCore } = require('rillio/core');
 const { usePlatform, useToast } = require('rillio/common');
+const useCacheDownload = require('rillio/common/useCacheDownload');
 const Option = require('./Option');
 const styles = require('./styles');
 
@@ -85,6 +86,11 @@ const OptionsMenu = React.memo(React.forwardRef(({ className, stream, playbackDe
         }
     }, [downloadUrl]);
 
+    const downloadToCache = useCacheDownload();
+    const onKeepInCacheClick = React.useCallback(() => {
+        downloadToCache(stream);
+    }, [downloadToCache, stream]);
+
     const onDownloadSubtitlesClick = React.useCallback(() => {
         subtitlesTrackUrl && platform.openExternal(subtitlesTrackUrl);
     }, [subtitlesTrackUrl]);
@@ -138,6 +144,17 @@ const OptionsMenu = React.memo(React.forwardRef(({ className, stream, playbackDe
                         label={t('CTX_DOWNLOAD_VIDEO')}
                         disabled={stream === null}
                         onClick={onDownloadVideoButtonClick}
+                    />
+                    :
+                    null
+            }
+            {
+                stream !== null && typeof stream.infoHash === 'string' ?
+                    <Option
+                        icon={'download'}
+                        label={'Keep in cache'}
+                        disabled={false}
+                        onClick={onKeepInCacheClick}
                     />
                     :
                     null

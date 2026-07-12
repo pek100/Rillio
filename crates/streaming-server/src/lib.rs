@@ -7,6 +7,7 @@
 //! Milestone status lives in `docs/streaming-server-rust/` and
 //! `checklists/streaming-server-rust.md`. This is **M0** - the control plane.
 
+mod cache_api;
 mod hlsv2;
 mod local_addon;
 mod proxy;
@@ -85,6 +86,12 @@ pub fn router(config: Config, engine: Engine) -> Router {
         .route("/{info_hash}/create", post(torrent::create_magnet))
         .route("/removeAll", post(torrent::remove_all))
         .route("/{info_hash}/remove", post(torrent::remove))
+        // Cache management (Rillio-specific): the Cached page + per-stream
+        // Download buttons. Reads GET, mutations POST-only (see cache_api).
+        .route("/cache/list", get(cache_api::list))
+        .route("/cache/download", post(cache_api::download))
+        .route("/cache/pin", post(cache_api::pin))
+        .route("/cache/delete", post(cache_api::delete))
         // M2 stats family (static segments; win over the {idx} stream param).
         .route("/stats.json", get(stats::stats_aggregate))
         .route("/{info_hash}/stats.json", get(stats::stats_torrent))

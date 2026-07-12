@@ -190,6 +190,33 @@ pub struct Engine {
     /// stored for `/settings` reporting and the stats `opts` echo. See
     /// [`BtProfile`] and [`Engine::apply_bt_profile`].
     bt: Arc<Mutex<BtProfile>>,
+    /// Lowercase hex infohashes the user chose to KEEP ("download to cache"):
+    /// the cache-cap sweeper never evicts these. Persisted to
+    /// [`PINS_FILE`] in the cache root, loaded at [`Engine::new`].
+    pinned: Arc<Mutex<HashSet<String>>>,
+}
+
+/// Filename of the persisted pin set, under the cache root.
+const PINS_FILE: &str = "pins.json";
+
+/// Read the persisted pin set. Absent/unreadable/malformed => empty (nothing
+/// pinned) - pins are cache-keeping hints, not integrity data.
+fn read_pins(cache_dir: &std::path::Path) -> HashSet<String> {
+    std::fs::read(cache_dir.join(PINS_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<Vec<String>>(&bytes).ok())
+        .map(|v| v.into_iter().collect())
+        .unwrap_or_default()
+}
+
+/// Persist the pin set. Loud on failure: an unsaved pin silently un-pins on the
+/// next start, which the sweeper could then evict.
+fn write_pins(cache_dir: &std::path::Path, pins: &HashSet<String>) {
+    let list: Vec<&String> = pins.iter().collect();
+    let body = serde_json::to_vec(&list).expect("pin list serializes");
+    if let Err(e) = std::fs::write(cache_dir.join(PINS_FILE), body) {
+        tracing::error!("pins: persisting {PINS_FILE} failed: {e}");
+    }
 }
 
 impl Engine {
@@ -282,13 +309,61 @@ impl Engine {
             ..Default::default()
         };
         let session = Session::new_with_opts(cache_dir, opts).await?;
+        let pinned = read_pins(&cache_root);
         Ok(Self {
             session,
             cache_root: Arc::new(cache_root),
             last_access: Arc::new(Mutex::new(HashMap::new())),
             prefetched: Arc::new(Mutex::new(HashSet::new())),
             bt: Arc::new(Mutex::new(BtProfile::ULTRA_FAST)),
+            pinned: Arc::new(Mutex::new(pinned)),
         })
+    }
+
+    /// Whether the user pinned this torrent ("download to cache").
+    pub fn is_pinned(&self, info_hash: &str) -> bool {
+        self.pinned
+            .lock()
+            .map(|p| p.contains(info_hash))
+            .unwrap_or(false)
+    }
+
+    /// Pin or unpin a torrent; persists immediately.
+    pub fn set_pinned(&self, info_hash: &str, pinned: bool) {
+        if let Ok(mut p) = self.pinned.lock() {
+            let changed = if pinned {
+                p.insert(info_hash.to_owned())
+            } else {
+                p.remove(info_hash)
+            };
+            if changed {
+                write_pins(&self.cache_root, &p);
+            }
+        }
+    }
+
+    /// Resume a paused torrent (a disk-full write error pauses it; the user
+    /// fixing the disk and retrying expects it to pick back up).
+    pub async fn unpause(&self, handle: &Handle) {
+        if handle.is_paused() {
+            if let Err(e) = self.session.unpause(handle).await {
+                tracing::warn!("unpause failed: {e:#}");
+            }
+        }
+    }
+
+    /// Make sure `file_idx` is part of the torrent's download selection.
+    /// `only_files() == None` means every file is selected already.
+    pub async fn select_file(&self, handle: &Handle, file_idx: usize) {
+        if let Some(only) = handle.only_files() {
+            if !only.contains(&file_idx) {
+                let mut set: Vec<usize> = only;
+                set.push(file_idx);
+                if let Err(e) = self.session.update_only_files(handle, &set.into_iter().collect()).await {
+                    tracing::warn!("select_file({file_idx}) failed: {e:#}");
+                }
+            }
+        }
     }
 
     /// The current BitTorrent profile (for `GET /settings` and the stats echo).
@@ -363,8 +438,9 @@ impl Engine {
                 let idle = last.get(&ih).map(|t| now.duration_since(*t)).unwrap_or(Duration::MAX);
                 (ih, bytes, idle)
             })
-            // Protect anything touched within the grace window (active playback).
-            .filter(|(_, _, idle)| *idle >= grace)
+            // Protect anything touched within the grace window (active playback)
+            // and anything the user pinned ("download to cache" keeps).
+            .filter(|(ih, _, idle)| *idle >= grace && !self.is_pinned(ih))
             .collect();
         // Most idle first.
         candidates.sort_by(|a, b| b.2.cmp(&a.2));
@@ -501,6 +577,9 @@ impl Engine {
         });
         if let Some(id) = target {
             let _ = self.session.delete(id.into(), Self::DELETE_FILES_ON_REMOVE).await;
+            // A deleted torrent must not leave a stale pin behind (it would
+            // shield a future re-add of the same infohash from eviction).
+            self.set_pinned(info_hash, false);
             true
         } else {
             false

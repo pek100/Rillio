@@ -65,6 +65,12 @@ const routerPaths: RouterPathDef[] = [
         element: <routes.Settings />,
     },
     {
+        path: '/cached',
+        view: 3,
+        modal: true,
+        element: <routes.Cached />,
+    },
+    {
         path: '/player/:stream/:streamTransportUrl?/:metaTransportUrl?/:type?/:id?/:videoId?',
         view: 4,
         element: <routes.Player />,

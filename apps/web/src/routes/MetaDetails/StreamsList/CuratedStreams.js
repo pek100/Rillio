@@ -11,6 +11,33 @@ const { useCore } = require('rillio/core');
 const { useProfile, languages } = require('rillio/common');
 const { useScreenCapability } = require('rillio/common/useScreenCapability');
 const { curateStreams, recommendStream, flagFor, availableLanguages, formatSize } = require('./streamQuality');
+const useCacheDownload = require('rillio/common/useCacheDownload');
+
+// Small "download to cache" affordance shared by tiles and rows: only torrent
+// streams (infoHash) can be cached, and the click must not trigger the
+// enclosing play link.
+const DownloadToCache = ({ stream, className }) => {
+    const downloadToCache = useCacheDownload();
+    const onClick = React.useCallback((event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        downloadToCache(stream);
+    }, [downloadToCache, stream]);
+    if (typeof stream.infoHash !== 'string') {
+        return null;
+    }
+    return (
+        <span
+            role={'button'}
+            tabIndex={-1}
+            title={'Download to cache (watch later, kept on the Cached page)'}
+            onClick={onClick}
+            className={cn('inline-flex size-6 shrink-0 items-center justify-center rounded-full text-fg-subtle transition hover:bg-white/10 hover:text-fg', className)}
+        >
+            <Icon className={'size-3.5'} name={'download'} />
+        </span>
+    );
+};
 
 const PRESETS = [
     { key: 'auto', label: 'Auto' },
@@ -120,6 +147,7 @@ const Tile = ({ label, entry, highlighted }) => {
             <div className="flex items-center gap-1.5">
                 <span className={cn('text-sm font-semibold', highlighted ? 'text-accent' : 'text-fg')}>{label}</span>
                 <Icon className={cn('size-3.5 transition', highlighted ? 'text-accent' : 'text-fg-subtle opacity-0 group-hover:opacity-100')} name="play" />
+                <DownloadToCache stream={stream} className="ml-auto opacity-0 transition group-hover:opacity-100" />
             </div>
             <div className="truncate text-xs text-fg-muted">{providerOf(stream) || 'Stream'}</div>
             <div className="flex items-center gap-2 text-[11px] tabular-nums text-fg-subtle">
@@ -147,6 +175,7 @@ const Row = ({ entry }) => {
             {quality.flags.length ? <span className="shrink-0 text-[11px] tracking-tight">{quality.flags.slice(0, 3).join(' ')}</span> : null}
             {size ? <span className="shrink-0 text-[11px] tabular-nums text-fg-subtle">{size}</span> : null}
             {quality.seeders != null ? <span className="shrink-0 text-[11px] tabular-nums text-fg-subtle">{quality.seeders}</span> : null}
+            <DownloadToCache stream={stream} className="shrink-0 opacity-0 transition group-hover:opacity-100" />
         </Button>
     );
 };

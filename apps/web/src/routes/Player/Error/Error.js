@@ -8,7 +8,7 @@ const { default: Icon } = require('@stremio/stremio-icons/react');
 const { Button } = require('rillio/components');
 const styles = require('./styles');
 
-const Error = React.forwardRef(({ className, code, message, stream, onTryDifferentSource }, ref) => {
+const Error = React.forwardRef(({ className, code, message, stream, freeSpace, onTryDifferentSource }, ref) => {
     const { t } = useTranslation();
 
     const [playlist, fileName] = React.useMemo(() => {
@@ -28,14 +28,32 @@ const Error = React.forwardRef(({ className, code, message, stream, onTryDiffere
                     null
             }
             {
-                typeof onTryDifferentSource === 'function' ?
-                    <button
-                        type={'button'}
-                        onClick={onTryDifferentSource}
-                        className={'pointer-events-auto mt-4 rounded-full bg-accent px-5 py-2 text-sm font-semibold text-bg transition hover:brightness-110'}
-                    >
-                        Try a different source
-                    </button>
+                typeof onTryDifferentSource === 'function' || freeSpace === true ?
+                    <div className={'pointer-events-auto mt-4 flex flex-wrap items-center justify-center gap-2'}>
+                        {
+                            typeof onTryDifferentSource === 'function' ?
+                                <button
+                                    type={'button'}
+                                    onClick={onTryDifferentSource}
+                                    className={'rounded-full bg-accent px-5 py-2 text-sm font-semibold text-bg transition hover:brightness-110'}
+                                >
+                                    Try a different source
+                                </button>
+                                :
+                                null
+                        }
+                        {
+                            freeSpace === true ?
+                                <Button
+                                    href={'#/cached'}
+                                    className={'rounded-full bg-surface px-5 py-2 text-sm text-fg transition hover:bg-surface-hover'}
+                                >
+                                    Free up space
+                                </Button>
+                                :
+                                null
+                        }
+                    </div>
                     :
                     null
             }
@@ -48,7 +66,7 @@ const Error = React.forwardRef(({ className, code, message, stream, onTryDiffere
                         download={fileName}
                         target={'_blank'}
                     >
-                        <Icon className={styles['icon']} name={'ic_downloads'} />
+                        <Icon className={styles['icon']} name={'download'} />
                         <div className={styles['label']}>{t('PLAYER_OPEN_IN_EXTERNAL')}</div>
                     </Button>
                     :
@@ -63,6 +81,7 @@ Error.propTypes = {
     code: PropTypes.number,
     message: PropTypes.string,
     stream: PropTypes.object,
+    freeSpace: PropTypes.bool,
     onTryDifferentSource: PropTypes.func,
 };
 
