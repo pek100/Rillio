@@ -74,6 +74,13 @@ Origin (rejecting arbitrary websites), keeps state-changing routes POST-only, an
 routes subtitle/proxy fetches through an SSRF guard, so a page you open in a
 browser cannot drive or read from your local server.
 
+Torrent data is treated as untrusted at the filesystem level too: every file
+path a torrent declares is validated to resolve under the cache root before
+anything is streamed (absolute paths, drive prefixes, and `..` traversal are
+rejected), on top of librqbit-core's own parse-time path-traversal check, and a
+torrent that fails the check is removed instead of written. A malicious
+`.torrent` cannot plant files anywhere else on disk.
+
 It is a separate cargo workspace because it pulls a large native tree (librqbit,
 rustls, DHT) that needs `url >= 2.5`, which conflicts with the wasm crates'
 `url 2.4.*` pin. Build it from its own directory.
