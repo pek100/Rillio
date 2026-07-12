@@ -127,6 +127,10 @@ const NavMenuContent = ({ onClick }) => {
                     <Icon className={styles['icon']} name={'download'} />
                     <div className={styles['nav-menu-option-label']}>Import from Stremio</div>
                 </Button>
+                <Button className={styles['nav-menu-option-container']} title={'Upload to Stremio'} onClick={() => openSync('upload')}>
+                    <Icon className={styles['icon']} name={'cloud-library'} />
+                    <div className={styles['nav-menu-option-label']}>Upload to Stremio</div>
+                </Button>
                 <Button className={styles['nav-menu-option-container']} title={ t('PLAY_URL_MAGNET_LINK') } onClick={onPlayMagnetLinkClick}>
                     <Icon className={styles['icon']} name={'magnet-link'} />
                     <div className={styles['nav-menu-option-label']}>{ t('PLAY_URL_MAGNET_LINK') }</div>

@@ -33,10 +33,20 @@ serve the OLD bundle - edits silently do not appear. Before each relaunch:
 
 ```powershell
 Get-Process rillio-desktop -ErrorAction SilentlyContinue | Stop-Process -Force
-Get-Process msedgewebview2 -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+# Wait for RILLIO'S webview children to exit on their own (they die with the
+# host). NEVER `Stop-Process -Force` all msedgewebview2 like this snippet used
+# to: that kills every WebView2 app on the machine AND can catch Chromium's
+# storage service mid-write - "Local Storage" in this profile is the ONLY copy
+# of the user's profile/library/settings (incident 2026-07-13, data wiped).
+Get-CimInstance Win32_Process -Filter "Name='msedgewebview2.exe'" |
+  Where-Object { $_.CommandLine -match 'com\.rillio\.desktop' } |
+  ForEach-Object { try { Wait-Process -Id $_.ProcessId -Timeout 15 -ErrorAction Stop } catch {} }
 $d = "$env:LOCALAPPDATA\com.rillio.desktop\EBWebView\Default"
 foreach ($t in @('Service Worker','Cache','Code Cache')) { Remove-Item (Join-Path $d $t) -Recurse -Force -ErrorAction SilentlyContinue }
 ```
+
+Only ever delete those three cache dirs - everything else under `Default`
+(especially `Local Storage`) is user data.
 
 Production is unaffected (each release is a new commit, and the shell also
 clears these caches when its version changes).

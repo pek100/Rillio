@@ -1,10 +1,13 @@
 // Local-account Sync modal, opened from the account menu via a window event
-// (OPEN_SYNC_EVENT). Two jobs, no server of our own:
+// (OPEN_SYNC_EVENT). Three jobs, no server of our own:
 //   Backup & restore - export the whole local account as one compact code (+ a QR
 //     when it fits) and restore from a pasted code.
 //   Import from Stremio - a one-time sign-in (email, Facebook, or Apple, the same
 //     options Stremio offers) that pulls the Stremio library + add-ons into the
 //     local store, then drops the connection (kept anonymous, local).
+//   Upload to Stremio - the reverse: a one-time sign-in that pushes this device's
+//     library + add-ons to the Stremio account (common/stremioUpload talks to the
+//     Stremio API directly with a temporary session; local data stays untouched).
 const React = require('react');
 const { default: Icon } = require('@stremio/stremio-icons/react');
 const { useCore } = require('rillio/core');
@@ -14,6 +17,7 @@ const useToast = require('rillio/common/Toast/useToast');
 const { setDisplayName } = require('rillio/common/useDisplayName');
 const { OPEN_SYNC_EVENT } = require('rillio/common/syncEvents');
 const { exportLocalData, importLocalData, anonymizeBucket } = require('rillio/common/localData');
+const { uploadToStremio } = require('rillio/common/stremioUpload');
 const { makeQrSvg } = require('rillio/common/qr');
 const useFacebookLogin = require('rillio/routes/Intro/useFacebookLogin');
 const { default: useAppleLogin } = require('rillio/routes/Intro/useAppleLogin');
@@ -57,6 +61,12 @@ const SyncModal = () => {
     const [error, setError] = React.useState(null);
     const detachRef = React.useRef(null);
 
+    // Upload to Stremio: `uploadStage` doubles as the in-flight flag and the
+    // progress label on the confirm button.
+    const [uploadStage, setUploadStage] = React.useState(null);
+    const uploadStageRef = React.useRef(null);
+    React.useEffect(() => { uploadStageRef.current = uploadStage; }, [uploadStage]);
+
     // Mirrors for the auth listeners, which outlive renders (and, mid-login, the
     // modal itself).
     const openRef = React.useRef(false);
@@ -80,7 +90,7 @@ const SyncModal = () => {
     React.useEffect(() => {
         const onOpen = (event) => {
             const requested = event && event.detail ? event.detail.tab : null;
-            setTab(requested === 'stremio' ? 'stremio' : 'backup');
+            setTab(requested === 'stremio' || requested === 'upload' ? requested : 'backup');
             setError(null);
             setRestoreDraft('');
             try {
@@ -231,6 +241,65 @@ const SyncModal = () => {
             });
     }, [busy, attachAuth, startAppleLogin, core]);
 
+    // Run the whole upload (common/stremioUpload): sign in with a temporary
+    // session, push this device's library + add-ons to the account, sign out.
+    // Local data is never modified, so no reload is needed. The promise outlives
+    // the modal; if it was closed mid-upload, the outcome surfaces as a toast.
+    const runUpload = React.useCallback((auth) => {
+        setError(null);
+        setUploadStage('Starting…');
+        uploadToStremio(auth, (stage) => setUploadStage(stage))
+            .then(({ itemsPushed, addonsAdded }) => {
+                setUploadStage(null);
+                const message = itemsPushed === 0 && addonsAdded === 0 ?
+                    'Your Stremio account already has everything on this device.' :
+                    `Sent ${itemsPushed} library item${itemsPushed === 1 ? '' : 's'} and ${addonsAdded} add-on${addonsAdded === 1 ? '' : 's'} to your account.`;
+                toast.show({ type: 'success', title: 'Uploaded to Stremio', message, timeout: 5000 });
+            })
+            .catch((e) => {
+                setUploadStage(null);
+                const message = (e && e.message) || 'Upload failed. Please try again.';
+                setError(message);
+                if (!openRef.current) {
+                    toast.show({ type: 'error', title: 'Stremio upload failed', message, timeout: 6000 });
+                }
+            });
+    }, [toast]);
+
+    const uploadWithEmail = React.useCallback(() => {
+        if (uploadStage !== null) return;
+        if (!email || !password) { setError('Enter your Stremio email and password.'); return; }
+        runUpload({ type: 'Login', email, password });
+    }, [uploadStage, email, password, runUpload]);
+
+    const uploadWithFacebook = React.useCallback(() => {
+        if (uploadStage !== null) return;
+        setError(null);
+        setUploadStage('Waiting for Facebook…');
+        startFacebookLogin()
+            .then(({ email: fbEmail, password: fbPassword }) => {
+                runUpload({ type: 'Login', email: fbEmail, password: fbPassword, facebook: true });
+            })
+            .catch((e) => {
+                setUploadStage(null);
+                if (e && e.message) setError(e.message);
+            });
+    }, [uploadStage, startFacebookLogin, runUpload]);
+
+    const uploadWithApple = React.useCallback(() => {
+        if (uploadStage !== null) return;
+        setError(null);
+        setUploadStage('Waiting for Apple…');
+        startAppleLogin()
+            .then(({ token, sub, email: appleEmail, name }) => {
+                runUpload({ type: 'Apple', token, sub, email: appleEmail, name });
+            })
+            .catch((e) => {
+                setUploadStage(null);
+                if (e && e.message) setError(e.message);
+            });
+    }, [uploadStage, startAppleLogin, runUpload]);
+
     if (!open) return null;
 
     const tabBtn = (id, label) => (
@@ -251,7 +320,8 @@ const SyncModal = () => {
                 <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-surface px-5 pt-4 pb-3">
                     <div className="inline-flex gap-1 rounded-full bg-white/5 p-1">
                         {tabBtn('backup', 'Backup & restore')}
-                        {tabBtn('stremio', 'Import from Stremio')}
+                        {tabBtn('stremio', 'Import')}
+                        {tabBtn('upload', 'Upload')}
                     </div>
                     <Button className="flex size-8 shrink-0 items-center justify-center rounded-full text-fg-muted transition hover:bg-white/10 hover:text-fg" title="Close" onClick={close}>
                         <Icon className="size-4" name="close" />
@@ -289,6 +359,7 @@ const SyncModal = () => {
                             <Button className={GHOST} onClick={restore}>Restore</Button>
                         </div>
                         :
+                        tab === 'stremio' ?
                         <div className="flex flex-col px-5 pb-6 pt-1">
                             <div className={LABEL}>Import from Stremio</div>
                             <div className={HINT}>Sign in once. We pull your library and add-ons into Rillio, store them locally, and don&apos;t stay connected, your Stremio session is untouched.</div>
@@ -308,6 +379,33 @@ const SyncModal = () => {
                                     Continue with Facebook
                                 </Button>
                                 <Button className={cn(GHOST, busy && 'pointer-events-none opacity-50')} onClick={importWithApple}>
+                                    <svg className="size-4" viewBox="0 0 384 512" fill="currentColor" aria-hidden="true">
+                                        <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z" />
+                                    </svg>
+                                    Continue with Apple
+                                </Button>
+                            </div>
+                        </div>
+                        :
+                        <div className="flex flex-col px-5 pb-6 pt-1">
+                            <div className={LABEL}>Upload to Stremio</div>
+                            <div className={HINT}>Sign in once. We push this device&apos;s library and add-ons to your Stremio account, then sign out. Nothing on the account is removed, newer account data is kept, and your local data stays untouched.</div>
+                            <input className={cn(FIELD, 'mb-2.5')} type="email" placeholder="Stremio email" value={email} autoComplete="off" disabled={uploadStage !== null} onChange={(e) => setEmail(e.target.value)} />
+                            <input className={cn(FIELD, 'mb-3')} type="password" placeholder="Stremio password" value={password} disabled={uploadStage !== null} onChange={(e) => setPassword(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') uploadWithEmail(); }} />
+                            <Button className={cn(PRIMARY, uploadStage !== null && 'pointer-events-none opacity-70')} onClick={uploadWithEmail}>
+                                {uploadStage !== null ? uploadStage : 'Upload my data'}
+                            </Button>
+
+                            <div className="my-4 flex items-center gap-3 text-[11px] uppercase tracking-wider text-fg-subtle">
+                                <span className="h-px flex-1 bg-line" />or<span className="h-px flex-1 bg-line" />
+                            </div>
+
+                            <div className="flex flex-col gap-2.5">
+                                <Button className={cn(GHOST, uploadStage !== null && 'pointer-events-none opacity-50')} onClick={uploadWithFacebook}>
+                                    <Icon className="size-4" name="facebook" />
+                                    Continue with Facebook
+                                </Button>
+                                <Button className={cn(GHOST, uploadStage !== null && 'pointer-events-none opacity-50')} onClick={uploadWithApple}>
                                     <svg className="size-4" viewBox="0 0 384 512" fill="currentColor" aria-hidden="true">
                                         <path d="M318.7 268.7c-.2-36.7 16.4-64.4 50-84.8-18.8-26.9-47.2-41.7-84.7-44.6-35.5-2.8-74.3 20.7-88.5 20.7-15 0-49.4-19.7-76.4-19.7C63.3 141.2 4 184.8 4 273.5q0 39.3 14.4 81.2c12.8 36.7 59 126.7 107.2 125.2 25.2-.6 43-17.9 75.8-17.9 31.8 0 48.3 17.9 76.4 17.9 48.6-.7 90.4-82.5 102.6-119.3-65.2-30.7-61.7-90-61.7-91.9zm-56.6-164.2c27.3-32.4 24.8-61.9 24-72.5-24.1 1.4-52 16.4-67.9 34.9-17.5 19.8-27.8 44.3-25.6 71.9 26.1 2 49.9-11.4 69.5-34.3z" />
                                     </svg>

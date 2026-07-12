@@ -52,6 +52,7 @@ const User = ({ profile }: Props) => {
                     <div className={styles['links-row']}>
                         <Link label={'Sync & backup'} onClick={() => openSync('backup')} />
                         <Link label={'Import from Stremio'} onClick={() => openSync('stremio')} />
+                        <Link label={'Upload to Stremio'} onClick={() => openSync('upload')} />
                         {
                             profile.auth !== null ?
                                 <Link label={t('LOG_OUT')} onClick={onLogout} />

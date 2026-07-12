@@ -3,7 +3,7 @@
 // convention: dispatch a window CustomEvent, a single mounted modal listens.
 export const OPEN_SYNC_EVENT = 'rillio:open-sync';
 
-export type SyncTab = 'backup' | 'stremio';
+export type SyncTab = 'backup' | 'stremio' | 'upload';
 
 export const openSync = (tab: SyncTab = 'backup'): void => {
     window.dispatchEvent(new CustomEvent(OPEN_SYNC_EVENT, { detail: { tab } }));

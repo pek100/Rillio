@@ -15,6 +15,13 @@ use tauri::Manager;
 #[derive(Default)]
 struct MpvState(Mutex<Option<mpv::Mpv>>);
 
+/// Set while [`install_update`] is tearing the webview down to run the
+/// installer. Destroying the last window fires `RunEvent::ExitRequested`
+/// (code None), which must NOT exit the app then: the update task still has to
+/// wait for WebView2 to release the profile and hand off to the installer.
+#[derive(Default)]
+struct UpdateInFlight(std::sync::atomic::AtomicBool);
+
 /// Buffer for OS deep links (stremio:// / rillio://). A link can arrive before
 /// the WebView has mounted its listener (cold start: the app is launched BY the
 /// link) or while the app is already running (warm: forwarded by the
@@ -259,6 +266,7 @@ pub fn run() {
         .plugin(tauri_plugin_deep_link::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .manage(MpvState::default())
+        .manage(UpdateInFlight::default())
         .manage(shell::ShellState::default())
         .manage(DeepLinkState::default())
         .setup(|app| {
@@ -282,8 +290,25 @@ pub fn run() {
             shell::shell_send,
             shell::shell_mpv_stats
         ])
-        .run(ctx)
-        .expect("error while running the Rillio desktop shell");
+        .build(ctx)
+        .expect("error while building the Rillio desktop shell")
+        // The run callback exists for exactly one reason: during an update,
+        // install_update destroys the main window BEFORE running the installer
+        // (see the incident note there), and destroying the last window
+        // requests an exit (code None). Exiting then would kill the update
+        // task mid-handoff, so it is prevented while UpdateInFlight is set.
+        // Programmatic exits (code Some, e.g. app.restart()) always proceed.
+        .run(|app_handle, event| {
+            if let tauri::RunEvent::ExitRequested { code, api, .. } = &event {
+                let updating = app_handle
+                    .state::<UpdateInFlight>()
+                    .0
+                    .load(std::sync::atomic::Ordering::SeqCst);
+                if code.is_none() && updating {
+                    api.prevent_exit();
+                }
+            }
+        });
 }
 
 /// Load mpv, embed it into the window (`wid`), and play `source`. Stores the
@@ -336,6 +361,15 @@ fn start_mpv_embedded(
 /// or a just-applied update), delete WebView2's service-worker + HTTP caches so
 /// the fresh embedded assets always win. Best-effort: any error just logs and
 /// the web-side self-heal (apps/web index.js) remains as a backstop.
+///
+/// INCIDENT NOTE (2026-07-13): when the 0.1.16 -> 0.1.17 update wiped a user's
+/// profile/library, this function was the first suspect and was proven INNOCENT
+/// (the real cause was the updater's hard process exit, see install_update).
+/// Keep it innocent: ALL user data lives in this same profile ("Local Storage"
+/// is the only copy of profile/library/settings; also "IndexedDB",
+/// "WebStorage", "Session Storage"). NEVER add a user-data directory to the
+/// list below, and never delete `Default` or `EBWebView` wholesale. The three
+/// entries below are pure caches and are the ONLY safe deletions.
 fn clear_stale_webview_cache(identifier: String, current: String) {
     // %LOCALAPPDATA%\<identifier> is where WebView2 keeps its EBWebView profile.
     let local = match std::env::var_os("LOCALAPPDATA") {
@@ -496,6 +530,23 @@ fn spawn_update_check(app: tauri::AppHandle) {
 /// Download, verify (minisign) and install the pending update, then relaunch.
 /// Invoked from the web UI's update toast. Re-checks so it never installs a
 /// stale handle.
+///
+/// INCIDENT (2026-07-13, the 0.1.16 -> 0.1.17 auto-update WIPED a user's
+/// profile/library/settings): tauri-plugin-updater's install step launches the
+/// NSIS installer and then calls `std::process::exit(0)` immediately, with the
+/// WebView2 child processes still alive and possibly mid-write. The abandoned
+/// browser process then shuts down asynchronously, racing the installer and the
+/// relaunched app over the EBWebView profile; Chromium "recovered" the profile's
+/// Local Storage leveldb (the ONLY copy of all user data, see
+/// crates/core-web env.rs local_storage_*) by destroying and recreating it
+/// EMPTY. Forensics: leveldb LOG showed the db reopening as a fresh generation
+/// ("Recovering log #3") while orphaned old-generation tables (000140-000144)
+/// survived only because their handles were still open when the destroy ran.
+///
+/// The fix: download first, then DESTROY the webview window (graceful WebView2
+/// shutdown -> storage service flushes and exits) and WAIT until the browser
+/// releases the Local Storage lock, and only then hand off to the installer.
+/// The webview must never be alive when the process exits for an update.
 #[tauri::command]
 async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
     use tauri::Emitter;
@@ -513,8 +564,8 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
     // (apps/web App/UpdatingOverlay); `content_len` is the total size when known.
     let app_cb = app.clone();
     let mut downloaded: u64 = 0;
-    update
-        .download_and_install(
+    let bytes = update
+        .download(
             move |chunk_len, content_len| {
                 downloaded += chunk_len as u64;
                 let _ = app_cb.emit(
@@ -527,8 +578,90 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
         .await
         .map_err(|e| e.to_string())?;
 
-    // Diverges (never returns), so the Ok arm below is unreachable.
-    app.restart()
+    // From here on the webview goes away, so this command's JS response will
+    // never be delivered - that's fine, the next thing the user sees is the
+    // updated app relaunching (NSIS passive mode relaunches it).
+    app.state::<UpdateInFlight>()
+        .0
+        .store(true, std::sync::atomic::Ordering::SeqCst);
+    if let Some(window) = app.get_webview_window("main") {
+        if let Err(e) = window.destroy() {
+            tracing::warn!("update: could not destroy the main window: {e}");
+        }
+    }
+    let identifier = app.config().identifier.clone();
+    let released =
+        tauri::async_runtime::spawn_blocking(move || wait_for_webview_profile_release(&identifier))
+            .await
+            .unwrap_or(false);
+    if !released {
+        // Fail loud but proceed: blocking the update forever on a wedged
+        // browser process would strand the user on the old version, and the
+        // destroyed window already stopped all new writes.
+        tracing::warn!("update: WebView2 did not release the profile in time, installing anyway");
+    }
+
+    // Hands off to the installer and exits this process, so this normally
+    // never returns.
+    if let Err(e) = update.install(bytes) {
+        // The webview is already gone: without a relaunch this process would be
+        // a headless zombie. Restart the (still old) app; the update toast will
+        // re-offer the update on the next launch.
+        tracing::error!("update: install failed, relaunching the current version: {e}");
+        app.restart();
+    }
+    Ok(())
+}
+
+/// Wait (up to 10s) for the WebView2 browser process to shut down and release
+/// this app's Local Storage database. Chromium holds the leveldb `LOCK` file
+/// open with no sharing, so an exclusive open attempt fails with a sharing
+/// violation exactly as long as the storage service is still alive. Returns
+/// true once the lock is free (or never existed).
+#[cfg(windows)]
+fn wait_for_webview_profile_release(identifier: &str) -> bool {
+    use std::os::windows::fs::OpenOptionsExt;
+
+    let local = match std::env::var_os("LOCALAPPDATA") {
+        Some(dir) => dir,
+        None => return true,
+    };
+    let lock = std::path::Path::new(&local)
+        .join(identifier)
+        .join("EBWebView")
+        .join("Default")
+        .join("Local Storage")
+        .join("leveldb")
+        .join("LOCK");
+    if !lock.exists() {
+        return true;
+    }
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    loop {
+        match std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0) // exclusive: fails while ANY other handle is open
+            .open(&lock)
+        {
+            Ok(_) => {
+                // Small grace period for the rest of the browser teardown.
+                std::thread::sleep(std::time::Duration::from_millis(200));
+                return true;
+            }
+            Err(e) => {
+                if std::time::Instant::now() >= deadline {
+                    tracing::warn!("webview profile still locked after 10s: {e}");
+                    return false;
+                }
+                std::thread::sleep(std::time::Duration::from_millis(100));
+            }
+        }
+    }
+}
+
+#[cfg(not(windows))]
+fn wait_for_webview_profile_release(_identifier: &str) -> bool {
+    true
 }
 
 /// True when we can create `dir` and write a file inside it.
