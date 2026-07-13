@@ -1,9 +1,11 @@
 // Copyright (C) 2017-2026 Smart code 203358507
 
 /**
- * Playback-speed picker. State-driven floating panel (opened from Player state, not a
- * Radix trigger) so it honors the immersion + closePrevented contract. Restyled onto
- * Tailwind tokens + the kit Button; same reversed 0.25x..2.0x rates, same dispatch.
+ * Playback-speed picker. Fixed-position, state-driven floating <div> (opened from Player
+ * state, not a menu/popover trigger) whose close rides native mousedown bubbling to the
+ * Player's onContainerMouseDown; see the researched KEEP note at the menu-layer mount in
+ * Player.tsx for why no 2026 primitive fits. Restyled onto Tailwind tokens + the kit
+ * Button; same reversed 0.25x..2.0x rates, same dispatch.
  */
 
 import React, { forwardRef, memo, useCallback } from 'react';

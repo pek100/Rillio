@@ -30,3 +30,22 @@ except the Radix lock (#1), which is why it follows the synthesis recommendation
    TopNav's internal searchOpen state. This matches the router's modal-route
    convention (Addons/Settings/Cached already work this way) and removes a known
    inconsistency rather than adding behavior.
+
+## Overlay exceptions re-review (reinforces #1)
+
+The four hand-rolled overlays kept during the rewrite were re-reviewed (see
+`overlay-exceptions-decision.md`) and resolved with **zero new dependencies**, which
+confirms the Radix lock (#1) was the right call:
+
+- **ContextMenu -> ADOPT** a Radix Popover driven by a virtual anchor (`Popover.Anchor`
+  `virtualRef`, already bundled). Kept the public `on`/`autoClose`/`lock` API so both call
+  sites stay drop-in.
+- **Nav search dropdown -> ADOPT** cmdk (already installed, already used by SearchModal),
+  and **unified** both search consumers on one shared headless `SearchSuggestions` list.
+- **Player menu-layers -> KEEP** (native-DOM-bubble close no portalling primitive removes)
+  and **blur backdrop -> KEEP** (animating a full-viewport backdrop-filter is structurally
+  broken in 2026 Chromium/WebView2), both with rewritten, research-cited justifications.
+
+None of the four needed Base UI, Floating UI, Ariakit, or Downshift. The
+one-extra-primitive-lib soft budget stays entirely unspent, reserved for a future case
+that genuinely needs anchored positioning (the one capability none of these four use).

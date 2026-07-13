@@ -20,9 +20,8 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCloseModalRoute } from 'rillio-router';
-import { Search } from 'lucide-react';
-import { cn } from 'rillio/components/ui/cn';
-import { Command, CommandInput, CommandList, CommandGroup, CommandItem } from 'rillio/components/ui/command';
+import { Command, CommandInput } from 'rillio/components/ui/command';
+import SearchSuggestions from 'rillio/components/SearchSuggestions';
 
 const debounce = require('lodash.debounce');
 const useSearchHistory = require('rillio/components/NavBar/HorizontalNavBar/SearchBar/useSearchHistory').default;
@@ -34,8 +33,7 @@ const { withCoreSuspender } = require('rillio/common/CoreSuspender');
 // TopNav (the search icon Link) and App (the keyboard shortcut) share one source.
 export const SEARCH_MODAL_PATH = '/search-palette';
 
-const ITEM = 'flex items-center gap-2.5 rounded-card px-3 py-2.5 text-sm text-fg-muted data-[selected=true]:bg-surface-hover data-[selected=true]:text-fg';
-const HEADING = 'text-[0.6875rem] font-semibold uppercase tracking-[0.06em] text-fg-subtle';
+const EMPTY_ROW = 'flex items-center justify-center gap-2.5 rounded-card px-3 py-2.5 text-sm text-fg-subtle';
 
 const SearchModal = () => {
     const { t } = useTranslation();
@@ -102,10 +100,16 @@ const SearchModal = () => {
 
     return createPortal((
         <div className="fixed inset-0 z-50">
-            {/* No entrance animation on the backdrop: animating opacity/transform on
-                a backdrop-filter element forces the full-viewport blur to re-rasterize
-                every frame (visible as a delayed, janky backdrop). The addon modal's
-                backdrop is smooth precisely because it just appears, so match it. */}
+            {/* Static appear, no entrance animation - a deliberate design choice, not a
+                missing polish. In 2026 Chromium/WebView2 animating a live full-viewport
+                backdrop-filter is still structurally broken, not merely janky: animating
+                the blur RADIUS re-runs a full-viewport GPU convolution every frame
+                (compositing offloads the property mutation, not the raster, so the frame
+                budget blows out), and fading the layer's OPACITY is worse - opacity < 1
+                turns the element into a "backdrop root", so mid-fade the blur can no longer
+                reach the page behind it (the still-open Chromium flicker bug 1194050 /
+                40175472). The addon modal's backdrop is smooth precisely because it just
+                appears, so match it. */}
             <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" onClick={close} />
 
             <div
@@ -127,61 +131,20 @@ const SearchModal = () => {
                         />
                     </div>
 
-                    <CommandList className="max-h-[22rem] p-2">
-                        {
-                            empty ?
-                                <div className={cn(ITEM, 'justify-center text-fg-subtle')}>
-                                    {t('SEARCH_OR_PASTE_LINK')}
-                                </div>
-                                :
-                                null
+                    <SearchSuggestions
+                        historyItems={historyItems}
+                        suggestions={suggestions}
+                        onClearHistory={searchHistory.clear}
+                        onSelect={goTo}
+                        listClassName="max-h-[22rem] p-2"
+                        empty={empty ?
+                            <div className={EMPTY_ROW}>
+                                {t('SEARCH_OR_PASTE_LINK')}
+                            </div>
+                            :
+                            null
                         }
-
-                        {
-                            historyItems.length > 0 ?
-                                <CommandGroup
-                                    className="p-0"
-                                    heading={
-                                        <div className="flex items-center justify-between px-3 py-1.5">
-                                            <span className={HEADING}>{t('STREMIO_TV_SEARCH_HISTORY_TITLE')}</span>
-                                            <button
-                                                type="button"
-                                                className="text-xs text-fg-subtle transition-colors duration-150 hover:text-fg"
-                                                onClick={searchHistory.clear}
-                                            >
-                                                {t('CLEAR_HISTORY')}
-                                            </button>
-                                        </div>
-                                    }
-                                >
-                                    {historyItems.slice(0, 8).map(({ query: itemQuery, deepLinks }: any, index: number) => (
-                                        <CommandItem key={`history-${index}`} value={`history-${index}`} onSelect={() => goTo(deepLinks.search)} className={ITEM}>
-                                            <Search className="size-4 shrink-0 text-fg-subtle" />
-                                            <span className="truncate">{itemQuery}</span>
-                                        </CommandItem>
-                                    ))}
-                                </CommandGroup>
-                                :
-                                null
-                        }
-
-                        {
-                            suggestions.length > 0 ?
-                                <CommandGroup
-                                    className="p-0"
-                                    heading={<span className={cn(HEADING, 'block px-3 py-1.5')}>{t('SEARCH_SUGGESTIONS')}</span>}
-                                >
-                                    {suggestions.map(({ query: itemQuery, deepLinks }: any, index: number) => (
-                                        <CommandItem key={`suggestion-${index}`} value={`suggestion-${index}`} onSelect={() => goTo(deepLinks.search)} className={ITEM}>
-                                            <Search className="size-4 shrink-0 text-fg-subtle" />
-                                            <span className="truncate">{itemQuery}</span>
-                                        </CommandItem>
-                                    ))}
-                                </CommandGroup>
-                                :
-                                null
-                        }
-                    </CommandList>
+                    />
                 </Command>
             </div>
         </div>

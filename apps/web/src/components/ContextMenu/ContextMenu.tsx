@@ -1,35 +1,43 @@
 // Copyright (C) 2017-2026 Smart code 203358507
 
 /**
- * ContextMenu - a faithful custom right-click menu, ported to .tsx/Tailwind.
+ * ContextMenu - right-click / edge-locked menu built on Radix Popover with a virtual
+ * anchor. The public API ({ on, autoClose, lock, children }) is unchanged, so both call
+ * sites (Player right-click OptionsMenu, SubtitleVariant lock='bottom') stay drop-in.
  *
- * Why NOT the kit's Radix ContextMenu: this component's two Player call sites depend
- * on behavior Radix cannot express without a leaky adaptation:
- *   - a MULTI-ref trigger (`on: ref[]`): the right-click-over-video menu arms three
- *     dynamic sibling layers at once (video surface / buffering / error overlay), only
- *     one of which is mounted at a time. Radix `ContextMenuTrigger` wraps a single
- *     element, so this would require a virtual-anchor hook re-attaching `contextmenu`
- *     to each ref and driving a DropdownMenu at a synthetic cursor anchor.
- *   - `lock`-to-edge anchoring: the SubtitleVariant menu opens flush to an element
- *     EDGE (not the cursor). Radix ContextMenu always positions at the cursor, so this
- *     too would mean hand-wiring a controlled DropdownMenu with a virtual anchor.
- * Rebuilding both on Radix reimplements exactly the collision-aware positioning this
- * file already does cleanly, while adding a portal + focus-trap that could fight the
- * Player immersion / closePrevented contract. Per the mandate, a faithful custom port
- * beats a leaky Radix adaptation, so the custom positioning stays; only its hashed
- * CSS-module classes (now Tailwind) and the legacy `Transition` (now the motion
- * `Presence` fade) are replaced.
+ * A thin app-owned hook (useContextAnchor) attaches `contextmenu` to every ref in `on`
+ * and feeds ONE virtual anchor into Popover.Anchor's `virtualRef` (a
+ * { current: { getBoundingClientRect } } Measurable): a zero-size rect at the cursor for
+ * the default case, the real element rect for the lock/edge case. Popper's flip/shift
+ * collision logic (collisionPadding) replaces the old hand-rolled PADDING clamp, and
+ * `lock` maps 1:1 to `side`.
+ *
+ * `virtualRef` is undocumented-but-stable: it is the exact mechanism Radix's own
+ * ContextMenu uses to position at the cursor, so it will not be removed (verified in
+ * @radix-ui/react-popper source: with a virtualRef, PopperAnchor renders null and
+ * positions against virtualRef.current). If it ever were removed, the 2-line fallback is
+ * a real, zero-size absolutely-positioned <Popover.Anchor> element moved to the cursor.
+ *
+ * Why Popover and not the kit ContextMenu/DropdownMenu: those wrap a single trigger and
+ * position at the cursor only; this needs N dynamic sibling triggers plus edge-lock.
+ * Why this is safe on the Player surface: the old component ALREADY portalled to body
+ * (createPortal), and Popover.Portal preserves the identical React-tree relationship, so
+ * OptionsMenu's `optionsMenuClosePrevented` mousedown still bubbles the React tree to
+ * Player's onContainerMouseDown (the closePrevented protocol is untouched). `modal={false}`
+ * (no focus trap / scroll lock / aria-hide) plus onOpenAutoFocus preventDefault keep the
+ * app in charge of focus and immersion. DismissableLayer supplies Escape + outside-
+ * pointerdown close, replacing the old full-screen overlay + document keydown listener.
+ * Entrance/exit is the kit convention (data-state + tw-animate-css), replacing the old
+ * motion Presence fade.
  */
 
-import React, { memo, RefObject, useCallback, useEffect, useMemo, useState } from 'react';
-import { createPortal } from 'react-dom';
-import Presence from '../Presence';
+import React, { memo, RefObject, useCallback, useEffect, useRef, useState } from 'react';
+import { Popover as PopoverPrimitive } from 'radix-ui';
 
 const PADDING = 8;
 
-type Coordinates = [number, number];
-type Size = [number, number];
 type Lock = 'top' | 'right' | 'bottom' | 'left';
+type Measurable = { getBoundingClientRect: () => DOMRect };
 
 type Props = {
     children: React.ReactNode,
@@ -38,121 +46,72 @@ type Props = {
     lock?: Lock,
 };
 
-const ContextMenu = ({ children, on, autoClose, lock }: Props) => {
-    const [active, setActive] = useState(false);
-    const [position, setPosition] = useState<Coordinates>([0, 0]);
-    const [containerSize, setContainerSize] = useState<Size>([0, 0]);
-    const [triggerRect, setTriggerRect] = useState<DOMRect | null>(null);
+// A zero-size rect pinned at the cursor (the default, non-lock anchor).
+const pointRect = (x: number, y: number): DOMRect =>
+    ({ x, y, left: x, top: y, right: x, bottom: y, width: 0, height: 0, toJSON: () => ({}) }) as DOMRect;
 
-    const ref = useCallback((element: HTMLDivElement) => {
-        element && setContainerSize([element.offsetWidth, element.offsetHeight]);
-    }, []);
-
-    const style = useMemo(() => {
-        const [viewportWidth, viewportHeight] = [window.innerWidth, window.innerHeight];
-        const [containerWidth, containerHeight] = containerSize;
-
-        let x: number;
-        let y: number;
-
-        if (lock && triggerRect) {
-            switch (lock) {
-                case 'top':
-                    x = triggerRect.left;
-                    y = triggerRect.top - containerHeight;
-                    break;
-                case 'bottom':
-                    x = triggerRect.left;
-                    y = triggerRect.bottom;
-                    break;
-                case 'left':
-                    x = triggerRect.left - containerWidth;
-                    y = triggerRect.top;
-                    break;
-                case 'right':
-                    x = triggerRect.right;
-                    y = triggerRect.top;
-                    break;
-            }
-        } else {
-            [x, y] = position;
-        }
-
-        const left = Math.max(
-            PADDING,
-            Math.min(
-                x + containerWidth > viewportWidth - PADDING ? x - containerWidth : x,
-                viewportWidth - containerWidth - PADDING
-            )
-        );
-
-        const top = Math.max(
-            PADDING,
-            Math.min(
-                y + containerHeight > viewportHeight - PADDING ? y - containerHeight : y,
-                viewportHeight - containerHeight - PADDING
-            )
-        );
-
-        return { top, left };
-    }, [position, containerSize, lock, triggerRect]);
-
-    const close = () => {
-        setActive(false);
-    };
-
-    const stopPropagation = (event: React.MouseEvent | React.TouchEvent) => {
-        event.stopPropagation();
-    };
+// Attaches `contextmenu` to every ref in `on` and drives a virtual anchor + open state.
+const useContextAnchor = (on: RefObject<HTMLElement>[], lock?: Lock) => {
+    const [open, setOpen] = useState(false);
+    const anchorRef = useRef<Measurable>({ getBoundingClientRect: () => pointRect(0, 0) });
+    // Radix's PopperAnchor effect re-reads virtualRef.current on every render and
+    // repositions only when its object identity changes. Bump on each contextmenu so a
+    // SECOND right-click (while already open, when setOpen(true) is a no-op) still forces
+    // the effect to re-run and move the menu to the new cursor / edge.
+    const [, bumpAnchor] = useState(0);
 
     const onContextMenu = useCallback((event: MouseEvent) => {
         event.preventDefault();
-
-        if (lock) {
-            const target = event.currentTarget as HTMLElement;
-            setTriggerRect(target.getBoundingClientRect());
-        } else {
-            setPosition([event.clientX, event.clientY]);
-        }
-        setActive(true);
+        const rect = lock
+            ? (event.currentTarget as HTMLElement).getBoundingClientRect()
+            : pointRect(event.clientX, event.clientY);
+        anchorRef.current = { getBoundingClientRect: () => rect };
+        setOpen(true);
+        bumpAnchor((n) => n + 1);
     }, [lock]);
-
-    const handleKeyDown = useCallback((event: KeyboardEvent) => event.key === 'Escape' && close(), []);
-
-    const onClick = useCallback(() => {
-        autoClose && close();
-    }, [autoClose]);
 
     useEffect(() => {
         on.forEach((ref) => ref.current && ref.current.addEventListener('contextmenu', onContextMenu));
-        document.addEventListener('keydown', handleKeyDown);
-
         return () => {
             on.forEach((ref) => ref.current && ref.current.removeEventListener('contextmenu', onContextMenu));
-            document.removeEventListener('keydown', handleKeyDown);
         };
-    }, [on, onContextMenu, handleKeyDown]);
+    }, [on, onContextMenu]);
 
-    return createPortal((
-        <Presence when={active}>
-            <div
-                className={'fixed inset-0'}
-                onMouseDown={close}
-                onTouchStart={close}
-            >
-                <div
-                    ref={ref}
-                    className={'fixed rounded-(--border-radius) bg-(--modal-background-color) shadow-(--outer-glow)'}
-                    style={style}
-                    onMouseDown={stopPropagation}
-                    onTouchStart={stopPropagation}
-                    onClick={onClick}
+    return { open, setOpen, anchorRef };
+};
+
+const ContextMenu = ({ children, on, autoClose, lock }: Props) => {
+    const { open, setOpen, anchorRef } = useContextAnchor(on, lock);
+
+    const onContentClick = useCallback(() => {
+        autoClose && setOpen(false);
+    }, [autoClose, setOpen]);
+
+    return (
+        <PopoverPrimitive.Root open={open} onOpenChange={setOpen} modal={false}>
+            <PopoverPrimitive.Anchor virtualRef={anchorRef} />
+            <PopoverPrimitive.Portal>
+                <PopoverPrimitive.Content
+                    side={lock ?? 'bottom'}
+                    align={'start'}
+                    sideOffset={0}
+                    collisionPadding={PADDING}
+                    // The app owns focus: never pull it into the menu (open) or shove it
+                    // back to the null virtual anchor (close), either of which would jar
+                    // the Player immersion.
+                    onOpenAutoFocus={(event) => event.preventDefault()}
+                    onCloseAutoFocus={(event) => event.preventDefault()}
+                    onClick={onContentClick}
+                    className={
+                        'z-50 rounded-(--border-radius) bg-(--modal-background-color) shadow-(--outer-glow) transition-none ' +
+                        'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0'
+                    }
                 >
                     {children}
-                </div>
-            </div>
-        </Presence>
-    ), document.body);
+                </PopoverPrimitive.Content>
+            </PopoverPrimitive.Portal>
+        </PopoverPrimitive.Root>
+    );
 };
 
 export default memo(ContextMenu);

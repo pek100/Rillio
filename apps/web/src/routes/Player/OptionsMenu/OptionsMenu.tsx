@@ -1,10 +1,14 @@
 // Copyright (C) 2017-2026 Smart code 203358507
 
 /**
- * Player options action list. Used TWO ways by Player.js: as a state-driven floating
- * menu-layer AND as the right-click-over-video content inside the shared rillio
- * ContextMenu. Restyled onto Tailwind tokens + the kit Button; every conditional row,
- * clipboard/toast flow, cache-download and PlayOnDevice dispatch is preserved verbatim.
+ * Player options action list. Used TWO ways by Player.js: as a fixed-position, state-driven
+ * floating menu-layer (see the researched KEEP note at the menu-layer mount in Player.tsx)
+ * AND as the right-click-over-video content inside the shared rillio ContextMenu (now a
+ * Radix Popover). Both paths close via the `optionsMenuClosePrevented` nativeEvent flag set
+ * in onMouseDown below, which bubbles the React tree to onContainerMouseDown - preserved
+ * across the Popover.Portal exactly as it was across the old createPortal. Restyled onto
+ * Tailwind tokens + the kit Button; every conditional row, clipboard/toast flow, cache-
+ * download and PlayOnDevice dispatch is preserved verbatim.
  */
 
 import React, { forwardRef, memo, ReactNode, useCallback, useMemo } from 'react';

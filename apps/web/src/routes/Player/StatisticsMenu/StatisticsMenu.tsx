@@ -3,8 +3,10 @@
 /**
  * Player statistics panel. A bespoke media-diagnostics readout tied to mpv fields;
  * every formatter and the 1s getMpvStats poll effect are preserved verbatim. Restyled
- * onto Tailwind tokens with the divide-y label|value row idiom. State-driven layer, so
- * the closePrevented mousedown protocol is kept.
+ * onto Tailwind tokens with the divide-y label|value row idiom. Fixed-position, state-
+ * driven <div> layer whose close rides native mousedown bubbling to the Player's
+ * onContainerMouseDown; see the researched KEEP note at the menu-layer mount in Player.tsx
+ * for why no 2026 primitive fits.
  */
 
 import React, { forwardRef, memo, ReactNode, useCallback, useEffect, useState } from 'react';

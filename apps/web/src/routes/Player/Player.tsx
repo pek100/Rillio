@@ -1081,6 +1081,25 @@ const Player = () => {
                     :
                     null
             }
+            {/*
+              * The five player menu-layers below (Statistics / Subtitles / Audio / Speed /
+              * Options) stay hand-rolled state-driven <div> panels rather than a menu/popover
+              * primitive, and this is a researched KEEP, not inertia. Three constraints defeat
+              * every 2026 trigger-menu primitive (Radix / Base UI / Ariakit):
+              *   1. Fixed-position, NOT trigger-anchored: MENU_LAYER pins them bottom-right,
+              *      never anchored to the ControlBar button that opens them, so a primitive's
+              *      one real value (anchored positioning) is unused.
+              *   2. Native-DOM-bubble close: they are DOM children of player-container and close
+              *      via native mousedown bubbling to onContainerMouseDown (also the immersion
+              *      driver), gated by the per-menu closePrevented nativeEvent flags. Any primitive
+              *      that portals to body severs that native bubble and breaks the coupling.
+              *   3. Single close arbiter: Radix DismissableLayer / Base UI outside-press fire
+              *      their own close, racing the Player's menusOpen-gated close. The Player must be
+              *      the sole arbiter. (Ariakit alone can be reduced to disable all of this, but
+              *      then it only adds role="menu" plus a dependency while leaving close +
+              *      immersion + positioning entirely in place - strictly worse.)
+              * Revisit only if these menus ever stop needing container-mousedown close.
+              */}
             <Presence when={statisticsMenuOpen}>
                 <StatisticsMenu
                     className={MENU_LAYER}

@@ -1,31 +1,36 @@
 // Copyright (C) 2017-2024 Smart code 203358507
 
 /**
- * Inline nav SearchBar. Clean-room rewrite onto the foundation kit (Input +
- * IconButton) with a cmdk-style suggestion panel anchored under the pill (a manual
- * absolute dropdown, NOT Radix Popover: the input must keep focus while the panel is
- * open and Enter must submit the free-text search rather than select a row, so the
- * legacy focus / click-outside / keyboard contract is preserved verbatim).
+ * Inline nav SearchBar. Clean-room rewrite onto the foundation kit (Input + IconButton)
+ * with a cmdk-driven suggestion panel anchored under the pill. It shares the row/heading
+ * list machinery with the SearchModal palette via the headless <SearchSuggestions>
+ * component (dedup: one primitive, two consumers), and keeps its own pill + dropdown
+ * shape.
+ *
+ * cmdk keeps DOM focus in the input (ARIA combobox: a virtual highlight moves, focus
+ * never leaves), which is the invariant this bar needs. Enter behaviour is conditional:
+ * with no row actively highlighted it submits the free-text search; after the user arrows
+ * into a row it selects that row. Mechanism: an `armed` flag tracks whether the user has
+ * pressed an arrow key since the last edit. On Enter, if unarmed we preventDefault +
+ * stopPropagation (stopping cmdk's root keydown from selecting the auto-highlighted first
+ * row) and navigate the free text; if armed we let the keydown bubble so cmdk selects the
+ * highlighted row. `armed` also gates the row highlight visually, so no row looks selected
+ * until the user actually arrows.
  *
  * Reused verbatim: useSearchHistory / useLocalSearch (250ms debounce) / usePlayUrl
  * (paste-to-play) / deepLinks.search hrefs / submit-to-/search / focus-on-active /
  * click-outside-to-close. The props contract HorizontalNavBar depends on
  * ({ className, query, active }) is unchanged.
- *
- * Visuals fixed to the design language: the panel drops the old `--outer-glow`
- * shadow-blob for the kit popover surface (bg-popover + shadow-elevated), rows share
- * SearchModal's heading / row styling, and the whole pill sits on the h-10 rhythm.
- * `overflow-visible` overrides the App-wide `* { overflow: hidden }` reset so the
- * panel can escape the pill.
  */
 
 import React, { forwardRef } from 'react';
 import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { Command as CommandPrimitive } from 'cmdk';
 import { Search, X } from 'lucide-react';
 import { cn } from 'rillio/components/ui/cn';
-import { Input } from 'rillio/components/ui/input';
-import { Button, IconButton } from 'rillio/components/ui/button';
+import { IconButton } from 'rillio/components/ui/button';
+import SearchSuggestions from 'rillio/components/SearchSuggestions';
 
 const useRouteFocused = require('rillio/common/useRouteFocused').default;
 const useBinaryState = require('rillio/common/useBinaryState');
@@ -41,11 +46,6 @@ type Props = {
     active?: boolean;
 };
 
-// SearchModal's shared heading + row styling, so the two consumers of these hooks
-// read as one system.
-const HEADING = 'text-[0.6875rem] font-semibold uppercase tracking-[0.06em] text-fg-subtle';
-const ROW = 'w-full justify-start rounded-card px-3 py-2 text-left text-sm font-medium text-fg-muted no-underline hover:bg-surface-hover hover:text-fg';
-
 const SearchBar = React.memo(({ className, query, active }: Props) => {
     const { t } = useTranslation();
     const routeFocused = useRouteFocused();
@@ -58,9 +58,19 @@ const SearchBar = React.memo(({ className, query, active }: Props) => {
 
     const [historyOpen, openHistory, closeHistory] = useBinaryState(query === null ? true : false);
     const [currentQuery, setCurrentQuery] = React.useState(query || '');
+    // `armed` = the user has arrowed into a row since the last edit, so Enter should select
+    // it rather than submit free text. The ref keeps the synchronous read in onKeyDown fresh;
+    // the state drives the visual highlight gating.
+    const [armed, setArmed] = React.useState(false);
+    const armedRef = React.useRef(false);
     const [, setSearchParams] = useSearchParams();
     const searchInputRef = React.useRef<HTMLInputElement>(null);
     const containerRef = React.useRef<HTMLDivElement>(null);
+
+    const disarm = React.useCallback(() => {
+        armedRef.current = false;
+        setArmed(false);
+    }, []);
 
     const searchBarOnClick = React.useCallback(() => {
         if (!active) {
@@ -81,11 +91,11 @@ const SearchBar = React.memo(({ className, query, active }: Props) => {
         };
     }, [searchHistoryOnClose]);
 
-    const queryInputOnChange = React.useCallback(() => {
-        const value = searchInputRef.current!.value;
+    const queryInputOnValueChange = React.useCallback((value: string) => {
+        disarm();
         setCurrentQuery(value);
         openHistory();
-    }, []);
+    }, [disarm]);
 
     const queryInputOnPaste = React.useCallback((event: React.ClipboardEvent<HTMLInputElement>) => {
         const pasted = event.clipboardData.getData('text');
@@ -94,34 +104,60 @@ const SearchBar = React.memo(({ className, query, active }: Props) => {
         }
     }, [handlePlayUrl]);
 
-    const queryInputOnSubmit = React.useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+    const queryInputOnKeyDown = React.useCallback((event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (['ArrowDown', 'ArrowUp', 'Home', 'End'].includes(event.key)) {
+            armedRef.current = true;
+            setArmed(true);
+            return; // let cmdk move the highlight
+        }
+        if (event.key !== 'Enter') {
+            return;
+        }
+        if (armedRef.current) {
+            // A row is highlighted: let the keydown bubble to cmdk's root, which selects it
+            // (the row's onSelect navigates). Nothing to do here.
+            return;
+        }
+        // Free-text submit: stop cmdk from selecting the auto-highlighted first row.
         event.preventDefault();
-        const value = (event.target as HTMLInputElement).value;
-        setCurrentQuery(value);
+        event.stopPropagation();
+        const value = currentQuery.trim();
         closeHistory();
-        if (typeof value === 'string' && value.length > 0) {
-            // Navigate rather than setSearchParams: the bar now lives in the top
-            // nav on every route, and setSearchParams would scribble ?search on
-            // whatever route happens to be showing.
+        if (value.length > 0) {
+            // Navigate rather than setSearchParams: the bar now lives in the top nav on
+            // every route, and setSearchParams would scribble ?search on whatever route
+            // happens to be showing.
             navigate(`/search?search=${encodeURIComponent(value)}`);
         }
-    }, [navigate]);
+    }, [currentQuery, navigate, closeHistory]);
 
     const queryInputClear = React.useCallback(() => {
-        if (searchInputRef.current) {
-            searchInputRef.current.value = '';
-        }
-
+        disarm();
         setCurrentQuery('');
         // Only reset the URL when the search route is the thing showing results.
         if (onSearchRoute) {
             setSearchParams({});
         }
-    }, [onSearchRoute, setSearchParams]);
+    }, [onSearchRoute, setSearchParams, disarm]);
+
+    // History/suggestion rows carry a hash deepLink; navigate via the router (strip the
+    // leading '#') so it matches the submit path.
+    const goTo = React.useCallback((href: string) => {
+        navigate(href.replace(/^#/, ''));
+    }, [navigate]);
 
     const updateLocalSearchDebounced = React.useCallback(debounce((value: string) => {
         localSearch.search(value);
     }, 250), []);
+
+    // The field is now controlled, so resync it when the route query changes (navigation),
+    // which the old uncontrolled defaultValue + key remount did implicitly. User typing
+    // changes currentQuery locally without touching the query prop, so this never clobbers
+    // in-progress input.
+    React.useEffect(() => {
+        setCurrentQuery(query || '');
+        disarm();
+    }, [query]);
 
     React.useEffect(() => {
         updateLocalSearchDebounced(currentQuery);
@@ -141,27 +177,28 @@ const SearchBar = React.memo(({ className, query, active }: Props) => {
 
     const historyItems = searchHistory?.items ?? [];
     const suggestions = localSearch?.items ?? [];
+    const hasItems = historyItems.length > 0 || suggestions.length > 0;
 
     return (
-        <div
+        <CommandPrimitive
+            ref={containerRef as any}
+            shouldFilter={false}
+            loop
             className={cn('relative flex h-10 items-center overflow-visible rounded-full bg-surface transition-colors duration-150 hover:bg-surface-hover', className)}
             onClick={searchBarOnClick}
-            ref={containerRef}
         >
             {
                 active ?
-                    <Input
+                    <CommandPrimitive.Input
                         key={query}
                         ref={searchInputRef}
-                        type="text"
+                        value={currentQuery}
                         placeholder={t('SEARCH_OR_PASTE_LINK')}
-                        defaultValue={query}
-                        tabIndex={-1}
-                        onChange={queryInputOnChange}
+                        onValueChange={queryInputOnValueChange}
                         onPaste={queryInputOnPaste}
-                        onSubmit={queryInputOnSubmit}
+                        onKeyDown={queryInputOnKeyDown}
                         onClick={openHistory}
-                        className="h-full min-w-0 flex-1 rounded-full bg-transparent pl-5 pr-2 font-medium focus-visible:outline-none"
+                        className="h-full min-w-0 flex-1 rounded-full bg-transparent pl-5 pr-2 text-sm font-medium text-fg outline-none placeholder:text-fg-subtle focus-visible:outline-none"
                     />
                     :
                     <div className="flex h-full min-w-0 flex-1 cursor-text items-center pl-5 pr-2 text-sm font-medium text-fg-subtle">
@@ -179,56 +216,24 @@ const SearchBar = React.memo(({ className, query, active }: Props) => {
                     </IconButton>
             }
             {
-                historyOpen && (historyItems.length > 0 || suggestions.length > 0) ?
-                    <div className="absolute left-0 top-full z-10 mt-2 flex w-full flex-col gap-6 rounded-card bg-popover p-4 text-popover-foreground shadow-elevated">
-                        {
-                            historyItems.length > 0 ?
-                                <div className="flex w-full flex-col gap-1">
-                                    <div className="flex items-center justify-between pb-2">
-                                        <span className={HEADING}>{t('STREMIO_TV_SEARCH_HISTORY_TITLE')}</span>
-                                        <button
-                                            type="button"
-                                            className="text-xs text-fg-subtle transition-colors duration-150 hover:text-fg"
-                                            onClick={searchHistory.clear}
-                                        >
-                                            {t('CLEAR_HISTORY')}
-                                        </button>
-                                    </div>
-                                    {
-                                        historyItems.slice(0, 8).map(({ query: itemQuery, deepLinks }: any, index: number) => (
-                                            <Button key={index} variant="ghost" className={ROW} href={deepLinks.search} onClick={closeHistory}>
-                                                <Search className="size-4 shrink-0 text-fg-subtle" />
-                                                <span className="truncate">{itemQuery}</span>
-                                            </Button>
-                                        ))
-                                    }
-                                </div>
-                                :
-                                null
-                        }
-                        {
-                            suggestions.length > 0 ?
-                                <div className="flex w-full flex-col gap-1">
-                                    <div className="pb-2">
-                                        <span className={HEADING}>{t('SEARCH_SUGGESTIONS')}</span>
-                                    </div>
-                                    {
-                                        suggestions.map(({ query: itemQuery, deepLinks }: any, index: number) => (
-                                            <Button key={index} variant="ghost" className={ROW} href={deepLinks.search} onClick={closeHistory}>
-                                                <Search className="size-4 shrink-0 text-fg-subtle" />
-                                                <span className="truncate">{itemQuery}</span>
-                                            </Button>
-                                        ))
-                                    }
-                                </div>
-                                :
-                                null
-                        }
+                historyOpen && hasItems ?
+                    <div className="absolute left-0 top-full z-10 mt-2 w-full rounded-card bg-popover p-2 text-popover-foreground shadow-elevated">
+                        <SearchSuggestions
+                            historyItems={historyItems}
+                            suggestions={suggestions}
+                            onClearHistory={searchHistory.clear}
+                            onSelect={goTo}
+                            onRowActivate={closeHistory}
+                            // Until the user arrows, neutralise cmdk's default first-row
+                            // highlight so no row looks selected while Enter still submits
+                            // free text.
+                            listClassName={cn('max-h-[70vh] overflow-y-auto', !armed && '[&_[cmdk-item][data-selected=true]]:bg-transparent [&_[cmdk-item][data-selected=true]]:text-fg-muted')}
+                        />
                     </div>
                     :
                     null
             }
-        </div>
+        </CommandPrimitive>
     );
 });
 

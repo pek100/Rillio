@@ -2,10 +2,11 @@
 
 /**
  * Subtitles panel: three persistent columns (Languages | Variants | Settings). A
- * state-driven floating surface, NOT a click-dismiss menu, so it honors the immersion
- * + closePrevented contract. Restyled onto Tailwind tokens + the kit Button; every
- * track-shaping useMemo, the embedded-vs-extra routing, and the Stepper/SubtitleVariant
- * wiring are preserved verbatim.
+ * fixed-position, state-driven floating <div> (NOT a menu/popover primitive) whose close
+ * rides native mousedown bubbling to the Player's onContainerMouseDown; see the researched
+ * KEEP note at the menu-layer mount in Player.tsx for why no 2026 primitive fits. Restyled
+ * onto Tailwind tokens + the kit Button; every track-shaping useMemo, the embedded-vs-extra
+ * routing, and the Stepper/SubtitleVariant wiring are preserved verbatim.
  */
 
 import React, { forwardRef, memo, useCallback, useMemo } from 'react';
