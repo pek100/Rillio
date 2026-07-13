@@ -14,9 +14,24 @@
 import React, { useEffect, useRef, useState } from 'react';
 import Logo from 'rillio/common/Logo/Logo';
 import { getTauri } from 'rillio/common/Platform/shell/isShell';
-import styles from './styles.less';
 
 type FluidLogo = (canvas: HTMLCanvasElement, options: { fallback: () => void }) => void;
+
+// Was UpdatingOverlay/styles.less. The looping fluid-fill mark is canvas-driven
+// (window.__rillioFluidLogo); the updating-pulse (fallback logo) + updating-slide
+// (indeterminate bar) keyframes live in styles/tailwind.css.
+const S = {
+    overlay: 'fixed inset-0 z-[2147483000] flex flex-col items-center justify-center gap-6 bg-bg',
+    mark: 'flex items-center justify-center [filter:drop-shadow(0_8px_30px_rgba(255,160,51,0.2))]',
+    markCanvas: 'w-[92px] h-[95px]',
+    markFallback: 'w-[92px] h-[95px] animate-[updating-pulse_1.6s_ease-in-out_infinite]',
+    title: 'text-[1.15rem] font-bold tracking-[-0.01em] text-[rgba(255,255,255,0.92)]',
+    track: 'w-[220px] h-1 rounded-full bg-[rgba(255,255,255,0.08)] overflow-hidden',
+    fill: 'h-full rounded-[inherit] bg-accent [transition:width_0.3s_ease]',
+    fillIndeterminate: 'h-full w-[42%] rounded-[inherit] bg-accent animate-[updating-slide_1.15s_ease-in-out_infinite]',
+    hint: 'text-[0.85rem] text-[rgba(255,255,255,0.5)] [font-variant-numeric:tabular-nums]',
+    note: '-mt-2 text-[0.8rem] text-[rgba(255,255,255,0.32)]',
+};
 
 const UpdatingOverlay = () => {
     const [active, setActive] = useState(false);
@@ -70,21 +85,21 @@ const UpdatingOverlay = () => {
     return (
         // The whole bare surface is a window drag region (it has no other
         // interactive elements); the floating window controls sit above it.
-        <div className={styles['overlay']} data-tauri-drag-region>
-            <div className={styles['mark']}>
+        <div className={S.overlay} data-tauri-drag-region>
+            <div className={S.mark}>
                 {fellBack
-                    ? <Logo className={styles['mark-fallback']} size={92} />
-                    : <canvas ref={canvasRef} className={styles['mark-canvas']} width={360} height={371} />}
+                    ? <Logo className={S.markFallback} size={92} />
+                    : <canvas ref={canvasRef} className={S.markCanvas} width={360} height={371} />}
             </div>
-            <div className={styles['title']}>Updating Rillio</div>
-            <div className={styles['track']}>
+            <div className={S.title}>Updating Rillio</div>
+            <div className={S.track}>
                 <div
-                    className={pct === null ? styles['fill-indeterminate'] : styles['fill']}
+                    className={pct === null ? S.fillIndeterminate : S.fill}
                     style={pct === null ? undefined : { width: `${pct}%` }}
                 />
             </div>
-            <div className={styles['hint']}>{pct === null ? 'Downloading the update' : `${pct}%`}</div>
-            <div className={styles['note']}>Rillio will restart when it is done.</div>
+            <div className={S.hint}>{pct === null ? 'Downloading the update' : `${pct}%`}</div>
+            <div className={S.note}>Rillio will restart when it is done.</div>
         </div>
     );
 };

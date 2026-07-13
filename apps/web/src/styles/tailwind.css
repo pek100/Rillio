@@ -152,3 +152,261 @@ html:not(.active-slider-within) .player-container[data-immersed] .player-immersi
     opacity: 0;
     transition: opacity 200ms;
 }
+
+/* ============================================================================
+ * GLOBAL BASE LAYER - ported from the former App/styles.less in the LESS purge
+ * (Stage B). App/styles.less was BOTH the app's single CSS reset AND a CSS module;
+ * it now lives here as plain global rules. Everything below is UNLAYERED, exactly
+ * like the utilities imported at the top of this file: the `*{}` reset is
+ * specificity (0,0,0,0) and every Tailwind utility is (0,0,1,0), so utilities
+ * always win by SPECIFICITY - the robust model documented in this file's header
+ * (no @layer needed, which is why the old webpack `wrap-legacy-layer` postcss shim
+ * was removed too).
+ * ========================================================================== */
+
+/* Brand fonts. Nunito Sans is the UI face (== --font-sans); PlusJakartaSans is a
+ * legacy decorative fallback; TwemojiFlags (unicode-range limited to the
+ * regional-indicator flag codepoints) renders country-flag emoji in the
+ * language/region pickers. Ported verbatim. */
+@font-face {
+    font-family: 'PlusJakartaSans';
+    src: url('/assets/fonts/PlusJakartaSans.ttf') format('truetype');
+}
+@font-face {
+    font-family: 'Nunito Sans';
+    src: url('/assets/fonts/NunitoSans.ttf') format('truetype');
+    font-weight: 200 1000;
+    font-display: swap;
+}
+@font-face {
+    font-family: 'TwemojiFlags';
+    src: url('/assets/fonts/TwemojiFlags.woff2') format('woff2');
+    unicode-range: U+1F1E6-1F1FF;
+}
+
+/* Legacy layout + alias tokens (ported from App/styles.less :root). Kept as a
+ * plain :root block (NOT @theme static) because these are consumed directly as
+ * var(--name) inside arbitrary Tailwind values across ~30 components, so renaming
+ * every consumer is riskier than aliasing. Exact-duplicate COLORS point at the
+ * semantic token (single source of truth); everything with no semantic equivalent
+ * keeps its literal value. Duplicated declarations of --color-bg/surface/
+ * surface-hover/accent/line that App/styles.less re-listed were dropped: the
+ * @theme static block above already emits them to :root. LESS build-time @vars are
+ * resolved to their literals here. */
+:root {
+    /* Shape ratios + fixed control sizes */
+    --landscape-shape-ratio: 0.5625;
+    --poster-shape-ratio: 1.464;
+    --scroll-bar-size: 6px;
+    --horizontal-nav-bar-size: 5.5rem;
+    --vertical-nav-bar-size: 6rem;
+    --focus-outline-size: 2px;
+    --rillio-marker: 42;
+
+    /* Brand / external-service colors (literal; no semantic slot) */
+    --color-facebook: #1877F1;
+    --color-x: #000000;
+    --color-reddit: #FF4500;
+    --color-imdb: #f5c518;
+    --color-trakt: rgb(255, 255, 255);
+
+    /* Placeholder skeleton colors (the two LESS @color-surface-* refs resolved to
+     * their literal hsla() values). */
+    --color-placeholder: #60606080;
+    --color-placeholder-text: hsla(0, 0%, 75%, 0.5);        /* was @color-surface-50 */
+    --color-placeholder-background: hsla(0, 0%, 50%, 0.2);   /* was @color-surface-dark5-20 */
+
+    /* Foreground/background aliases. bg/surface/accent are EXACT duplicates of the
+     * semantic tokens above, so they alias. --primary-foreground-color stays literal
+     * (0.9) because the semantic --color-fg is 0.95 - aliasing would brighten every
+     * legacy consumer. --border-radius == --radius-card, so it aliases. */
+    --primary-background-color: var(--color-bg);            /* #020407 */
+    --secondary-background-color: var(--color-surface);     /* #0A1017 */
+    --primary-foreground-color: rgba(255, 255, 255, 0.9);
+    --secondary-foreground-color: rgb(12, 11, 17, 1);
+    --primary-accent-color: var(--color-accent);            /* #FFA033 */
+    --overlay-color: rgba(255, 255, 255, 0.05);
+    --modal-background-color: var(--color-surface-hover);
+    --outer-glow: 0 12px 34px rgba(0, 0, 0, 0.55), 0 3px 10px rgba(0, 0, 0, 0.42);
+    --border-radius: var(--radius-card);                    /* 0.75rem */
+
+    /* Overlay band sizes (LESS @vars resolved to literals) */
+    --top-overlay-size: 5.25rem;
+    --bottom-overlay-size: 0rem;
+    --overlap-size: 3rem;
+    --transparency-gradient-pad: 6rem;
+
+    /* Safe-area insets */
+    --safe-area-inset-top: env(safe-area-inset-top, 0rem);
+    --safe-area-inset-right: env(safe-area-inset-right, 0rem);
+    --safe-area-inset-bottom: env(safe-area-inset-bottom, 0rem);
+    --safe-area-inset-left: env(safe-area-inset-left, 0rem);
+
+    /* Viewport sizing (dynamic/large/small units, upgraded by @supports below) */
+    --dynamic-viewport-width: 100vw;
+    --dynamic-viewport-height: 100vh;
+    --large-viewport-width: 100vw;
+    --large-viewport-height: 100vh;
+    --small-viewport-width: 100vw;
+    --small-viewport-height: 100vh;
+    --viewport-height-diff: calc(100vh - 100vh);
+}
+
+@supports (height: 100dvh) {
+    :root { --dynamic-viewport-width: 100dvw; --dynamic-viewport-height: 100dvh; }
+}
+@supports (height: 100lvh) {
+    :root { --large-viewport-width: 100lvw; --large-viewport-height: 100lvh; }
+}
+@supports (height: 100svh) {
+    :root { --small-viewport-width: 100svw; --small-viewport-height: 100svh; }
+}
+@supports (height: 100lvh) and (height: 100svh) {
+    :root { --viewport-height-diff: calc(100lvh - 100svh); }
+}
+@media (display-mode: standalone) {
+    /* iOS over-pads the bottom inset; deduce the real inset (was the LESS
+     * @calculated-bottom-safe-inset). */
+    :root {
+        --safe-area-inset-bottom: min(env(safe-area-inset-bottom, 0rem), max(1rem, calc(var(--viewport-height-diff) - env(safe-area-inset-top, 0rem))));
+    }
+}
+@media only screen and (max-width: 640px) {
+    :root { --bottom-overlay-size: 6rem; }
+}
+
+/* The single CSS reset (ported verbatim from App/styles.less `*{}`). LAYOUT
+ * SEMANTICS are byte-identical - especially `overflow: hidden`, which many
+ * overflow-visible utilities across the app are calibrated against; changing it is
+ * out of scope. The only re-expressed VALUE is the Firefox scrollbar thumb color,
+ * moved onto a semantic token (--color-surface-hover, was --overlay-color). */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    font-size: 1rem;
+    font-family: inherit;
+    border: none;
+    outline: none;
+    list-style: none;
+    user-select: none;
+    text-decoration: none;
+    appearance: none;
+    background: none;
+    box-shadow: none;
+    overflow: hidden;
+    word-break: break-word;
+    scrollbar-width: thin;
+    scrollbar-color: var(--color-surface-hover) transparent;
+}
+
+/* Webkit scrollbar, re-expressed on semantic tokens (thumb = surface-hover, thumb
+ * hover = accent; was --overlay-color / --primary-accent-color). */
+::-webkit-scrollbar {
+    width: var(--scroll-bar-size);
+    height: var(--scroll-bar-size);
+}
+::-webkit-scrollbar-thumb {
+    border-radius: var(--scroll-bar-size);
+    background-color: var(--color-surface-hover);
+}
+::-webkit-scrollbar-thumb:hover {
+    background-color: var(--color-accent);
+}
+::-webkit-scrollbar-track {
+    background-color: transparent;
+}
+
+/* SVGs opt out of the universal overflow:hidden so glyphs/filters are not clipped. */
+svg {
+    overflow: visible;
+}
+
+/* Root document sizing + behavior (ported from App/styles.less html/body/#app,
+ * re-expressed on semantic tokens). The html font stack keeps its EXACT original
+ * ordering on purpose: TwemojiFlags must precede the generic `sans-serif` (a
+ * generic family covers every codepoint, so a flag font placed after it is never
+ * reached). Primary family is Nunito Sans == --font-sans. */
+html {
+    width: calc(max(var(--small-viewport-width), var(--dynamic-viewport-width)));
+    height: calc(max(var(--small-viewport-height), var(--dynamic-viewport-height)));
+    font-family: 'Nunito Sans', 'PlusJakartaSans', 'Arial', 'Helvetica', 'TwemojiFlags', 'sans-serif';
+    overflow: auto;
+    overscroll-behavior: none;
+    user-select: none;
+    touch-action: manipulation;
+    background-color: var(--color-bg);
+    color: var(--color-fg);
+    -webkit-tap-highlight-color: transparent;
+}
+html body {
+    width: 100%;
+    height: 100%;
+    background: var(--color-bg);
+    -webkit-font-smoothing: antialiased;
+}
+#app {
+    position: relative;
+    z-index: 0;
+    width: 100%;
+    height: 100%;
+}
+@media (display-mode: standalone) {
+    html {
+        width: calc(max(100%, var(--large-viewport-width)));
+        height: calc(max(100%, var(--large-viewport-height)));
+        -webkit-touch-callout: none;
+    }
+}
+/* Responsive base font-size ladder (was App/styles.less + screen-sizes.less). */
+@media only screen and (min-width: 2800px) { html { font-size: 18px; } }
+@media only screen and (max-width: 2800px) { html { font-size: 16px; } }
+@media only screen and (max-width: 2200px) { html { font-size: 15px; } }
+@media only screen and (max-width: 1600px) { html { font-size: 14px; } }
+
+/* Shared entrance animation (ported from the former common/animations.less; only
+ * `.animation-fade-in` and its two keyframes are still consumed - Board / Search /
+ * Discover / Library / Calendar rows). Global class, used app-wide. */
+.animation-fade-in {
+    animation-name: fade-in;
+    animation-timing-function: ease-in-out;
+    animation-duration: 350ms;
+}
+@media (prefers-reduced-motion) {
+    .animation-fade-in { animation-name: fade-in-no-motion; }
+}
+@keyframes fade-in {
+    0%   { opacity: 0; transform: translateY(4px); }
+    40%  { opacity: 0; transform: translateY(4px); }
+    70%  { opacity: 0.6; transform: translateY(2px); }
+    100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in-no-motion {
+    0%   { opacity: 0; }
+    40%  { opacity: 0; }
+    70%  { opacity: 0.6; }
+    100% { opacity: 1; }
+}
+
+/* Gamepad diagram entrance choreography (ported from App/GamepadModal/styles.less;
+ * the classes moved onto GamepadDiagram.tsx as animate-[...] utilities). No
+ * Tailwind primitive exists for stroke-dashoffset draw-in, so the keyframes live
+ * here. Already gamepad-* namespaced. */
+@keyframes gamepad-draw-stroke { from { stroke-dashoffset: 2000; } to { stroke-dashoffset: 0; } }
+@keyframes gamepad-draw-line { from { stroke-dashoffset: 800; } to { stroke-dashoffset: 0; } }
+@keyframes gamepad-fade-in { from { opacity: 0; } to { opacity: 1; } }
+
+/* Updating overlay (ported from App/UpdatingOverlay/styles.less; classes moved onto
+ * UpdatingOverlay.tsx). The looping fluid-fill brand mark is canvas/WebGL-driven
+ * (window.__rillioFluidLogo); these keyframes only drive the static-logo fallback
+ * pulse and the indeterminate progress-bar slide. */
+@keyframes updating-pulse { 0%, 100% { transform: scale(1); opacity: 0.9; } 50% { transform: scale(1.06); opacity: 1; } }
+@keyframes updating-slide { 0% { transform: translateX(-130%); } 100% { transform: translateX(340%); } }
+
+/* Episode selected-flash (ported from components/Video/styles.less; applied on the
+ * Video row as animate-[video-selected-border_...]). Fades the row border from the
+ * accent to transparent over 3s. */
+@keyframes video-selected-border {
+    0%   { border-color: var(--color-accent); }
+    100% { border-color: transparent; }
+}

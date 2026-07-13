@@ -26,7 +26,6 @@ const { default: UpdatingOverlay } = require('./UpdatingOverlay/UpdatingOverlay'
 const { default: SyncModal } = require('./SyncModal/SyncModal');
 const { ensureDisplayName } = require('rillio/common/useDisplayName');
 const { SEARCH_MODAL_PATH } = require('rillio/components/SearchModal');
-const styles = require('./styles');
 
 const ProtectedRoutes = withCoreSuspender(Routes);
 const NAVIGATE_TABS_ROUTES = ['/', '/discover', '/library', '/calendar', '/addons', '/settings'];
@@ -216,7 +215,7 @@ const App = () => {
                                     <SearchParamsHandler />
                                     <DeepLinkHandler />
                                     <DeepLinkOpenHandler />
-                                    <UpdaterBanner className={styles['updater-banner-container']} />
+                                    <UpdaterBanner className="absolute inset-x-0 bottom-0 z-[1]" />
                                     <ErrorBoundary>
                                         <ProtectedRoutes />
                                     </ErrorBoundary>

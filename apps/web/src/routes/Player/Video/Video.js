@@ -3,12 +3,15 @@
 const React = require('react');
 const PropTypes = require('prop-types');
 const classnames = require('classnames');
-const styles = require('./styles');
 
+// Was routes/Player/Video/styles.less: the container is a bare passthrough; the
+// inner div is the mpv playback surface (fills the container; its descendants
+// inherit font-size). Ported to Tailwind on this component's own markup only - no
+// logic, ref wiring or packages/video touched.
 const Video = React.forwardRef(({ className, onClick, onDoubleClick }, ref) => {
     return (
-        <div className={classnames(className, styles['video-container'])} onClick={onClick} onDoubleClick={onDoubleClick}>
-            <div ref={ref} className={styles['video']} />
+        <div className={className} onClick={onClick} onDoubleClick={onDoubleClick}>
+            <div ref={ref} className={'w-full h-full [&_*]:[font-size:inherit]'} />
         </div>
     );
 });

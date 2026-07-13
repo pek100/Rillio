@@ -14,25 +14,6 @@ const packageJson = require('./package.json');
 
 const COMMIT_HASH = execSync('git rev-parse HEAD').toString().trim();
 
-// Wrap ONLY App/styles.less's output in `@layer legacy` so Tailwind v4 utilities
-// (in @layer utilities) win over its universal `* { }` reset. Component-level Less
-// stays unlayered/untouched, it only ever targets its own legacy elements, never
-// the new Tailwind components, so there is nothing for utilities to lose to there.
-const wrapLegacyLayer = () => ({
-    postcssPlugin: 'wrap-legacy-layer',
-    Once(root, { postcss }) {
-        const file = (root.source && root.source.input && root.source.input.file) || '';
-        if (!/[\\/]App[\\/]styles\.less$/.test(file)) return;
-        const nodes = root.nodes.slice();
-        if (!nodes.length) return;
-        const layer = postcss.atRule({ name: 'layer', params: 'legacy' });
-        root.removeAll();
-        nodes.forEach((n) => layer.append(n));
-        root.append(layer);
-    },
-});
-wrapLegacyLayer.postcss = true;
-
 // Only ever run our own sources through the loaders.
 //
 // Upstream expressed this as `exclude: /node_modules/`, which worked because
@@ -42,8 +23,8 @@ wrapLegacyLayer.postcss = true;
 // longer match that pattern -- babel/ts-loader would start reprocessing
 // already-built package output. An explicit `include` says what we mean.
 const SRC = path.resolve(__dirname, 'src');
-// Fonts and images are referenced from src/**/*.less and src/**/*.tsx but live
-// in a sibling directory, so asset rules must cover both.
+// Fonts and images are referenced from src/**/*.{css,tsx} but live in a sibling
+// directory, so asset rules must cover both.
 const ASSETS = path.resolve(__dirname, 'assets');
 
 const THREAD_LOADER = {
@@ -61,7 +42,6 @@ threadLoader.warmup(
         'ts-loader',
         'css-loader',
         'postcss-loader',
-        'less-loader',
     ],
 );
 
@@ -108,80 +88,6 @@ module.exports = (env, argv) => ({
                         loader: 'ts-loader',
                         options: {
                             happyPackMode: true,
-                        }
-                    }
-                ]
-            },
-            {
-                test: /\.less$/,
-                include: SRC,
-                use: [
-                    {
-                        loader: MiniCssExtractPlugin.loader,
-                        options: {
-                            esModule: false
-                        }
-                    },
-                    THREAD_LOADER,
-                    {
-                        loader: 'css-loader',
-                        options: {
-                            esModule: false,
-                            importLoaders: 2,
-                            modules: {
-                                namedExport: false,
-                                localIdentName: '[local]-[hash:base64:5]'
-                            }
-                        }
-                    },
-                    {
-                        loader: 'postcss-loader',
-                        options: {
-                            postcssOptions: {
-                                plugins: [
-                                    require('cssnano')({
-                                        preset: [
-                                            'advanced',
-                                            {
-                                                autoprefixer: {
-                                                    add: true,
-                                                    remove: true,
-                                                    flexbox: false,
-                                                    grid: false
-                                                },
-                                                cssDeclarationSorter: true,
-                                                calc: false,
-                                                colormin: false,
-                                                convertValues: false,
-                                                discardComments: {
-                                                    removeAll: true,
-                                                },
-                                                discardOverridden: false,
-                                                discardUnused: false,
-                                                mergeIdents: false,
-                                                normalizeDisplayValues: false,
-                                                normalizePositions: false,
-                                                normalizeRepeatStyle: false,
-                                                normalizeUnicode: false,
-                                                normalizeUrl: false,
-                                                reduceIdents: false,
-                                                reduceInitial: false,
-                                                zindex: false
-                                            }
-                                        ]
-                                    }),
-                                    wrapLegacyLayer()
-                                ]
-                            }
-                        }
-                    },
-                    {
-                        loader: 'less-loader',
-                        options: {
-                            lessOptions: {
-                                strictMath: true,
-                                ieCompat: false
-                            }
                         }
                     }
                 ]
@@ -242,7 +148,7 @@ module.exports = (env, argv) => ({
         ]
     },
     resolve: {
-        extensions: ['.tsx', '.ts', '.js', '.json', '.less', '.wasm'],
+        extensions: ['.tsx', '.ts', '.js', '.json', '.wasm'],
         // NOTE: `symlinks` must stay at its default (true). pnpm stores each
         // package's own dependencies under .pnpm/<pkg>@<ver>/node_modules, and
         // they are only reachable by resolving the package through its symlink

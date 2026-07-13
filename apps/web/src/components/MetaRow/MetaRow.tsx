@@ -10,13 +10,18 @@
  *
  * itemComponent injection, CATALOG_PREVIEW_SIZE slicing, the ReactIs guard and the
  * fill-with-placeholders logic are reused verbatim.
+ *
+ * The former structural LESS module is gone (LESS purge, Stage B). The per-breakpoint
+ * poster trim is NOT here: callers (Board / Search) pass structural arbitrary-variant
+ * hide classes on the row's own className (they target `>*:last-child>*:nth-child(...)`,
+ * i.e. the items container's children), so no per-item API is needed. Each item's
+ * fit-to-width flex-basis is set from its posterShape.
  */
 
 import React from 'react';
 import { ChevronRight } from 'lucide-react';
 import { Button } from 'rillio/components/ui/button';
 import MetaRowPlaceholder from './MetaRowPlaceholder';
-import styles from './styles.less';
 const ReactIs = require('react-is');
 const CONSTANTS = require('rillio/common/CONSTANTS');
 const useTranslate = require('rillio/common/useTranslate');
@@ -34,6 +39,25 @@ type MetaRowType = React.FC<Props> & { Placeholder?: typeof MetaRowPlaceholder }
 
 const cx = (...parts: (string | false | undefined)[]) => parts.filter(Boolean).join(' ');
 
+// Fit-to-width flex-basis per poster shape (was `.meta-item.poster-shape-*`). A row
+// renders CATALOG_PREVIEW_SIZE items that grow to fill the width; posterShape sets
+// the aspect-driven grow factor. Default (unknown shape) is poster, matching the old
+// `.poster-shape-poster` base that was always applied.
+const SHAPE_FLEX: Record<string, string> = {
+    poster: 'flex-[calc(1/var(--poster-shape-ratio))]',
+    square: 'flex-1',
+    landscape: 'flex-[calc(1/var(--landscape-shape-ratio))]',
+};
+const shapeFlex = (shape?: string) => SHAPE_FLEX[shape as string] ?? SHAPE_FLEX.poster;
+
+const S = {
+    container: 'overflow-visible',
+    header: 'flex flex-row items-center justify-end px-4 mb-1 max-[640px]:px-2',
+    title: 'flex-1 max-h-[2.4em] text-[1.6rem] font-semibold text-[color:var(--primary-foreground-color)] max-[640px]:mr-2 max-[640px]:whitespace-nowrap max-[640px]:text-ellipsis',
+    message: 'max-h-[3.6em] px-2 text-[1.3rem] text-[color:var(--primary-foreground-color)] opacity-60',
+    items: 'flex flex-row items-stretch overflow-visible',
+};
+
 const MetaRow: MetaRowType = ({ className, title, catalog, message, itemComponent, notifications }) => {
     const t = useTranslate();
 
@@ -50,11 +74,11 @@ const MetaRow: MetaRowType = ({ className, title, catalog, message, itemComponen
     }, [catalog]);
 
     return (
-        <div className={cx(className, styles['meta-row-container'])}>
-            <div className={styles['header-container']}>
+        <div className={cx(className, S.container)}>
+            <div className={S.header}>
                 {
                     typeof catalogTitle === 'string' && catalogTitle.length > 0 ?
-                        <div className={styles['title-container']} title={catalogTitle}>{catalogTitle}</div>
+                        <div className={S.title} title={catalogTitle}>{catalogTitle}</div>
                         :
                         null
                 }
@@ -76,16 +100,16 @@ const MetaRow: MetaRowType = ({ className, title, catalog, message, itemComponen
             </div>
             {
                 typeof message === 'string' && message.length > 0 ?
-                    <div className={styles['message-container']} title={message}>{message}</div>
+                    <div className={S.message} title={message}>{message}</div>
                     :
-                    <div className={styles['meta-items-container']}>
+                    <div className={S.items}>
                         {
                             ReactIs.isValidElementType(itemComponent) ?
                                 items.slice(0, CONSTANTS.CATALOG_PREVIEW_SIZE).map((item: any, index: number) => {
                                     return React.createElement(itemComponent as React.ElementType, {
                                         ...item,
                                         key: index,
-                                        className: cx(styles['meta-item'], styles['poster-shape-poster'], styles[`poster-shape-${item.posterShape}`]),
+                                        className: shapeFlex(item.posterShape),
                                         notifications,
                                     });
                                 })
@@ -93,7 +117,7 @@ const MetaRow: MetaRowType = ({ className, title, catalog, message, itemComponen
                                 null
                         }
                         {Array(Math.max(0, CONSTANTS.CATALOG_PREVIEW_SIZE - items.length)).fill(null).map((_: null, index: number) => (
-                            <div key={index} className={cx(styles['meta-item'], styles['poster-shape-poster'])} />
+                            <div key={index} className={shapeFlex('poster')} />
                         ))}
                     </div>
             }

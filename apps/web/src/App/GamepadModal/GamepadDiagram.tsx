@@ -4,9 +4,18 @@ import React, { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useGamepad } from 'rillio/services';
 import type { ControllerType } from 'rillio/services/GamepadContext';
-import styles from './styles.less';
 
 type ActiveButton = string | null;
+
+// Entrance choreography classes (was GamepadModal/styles.less). The keyframes
+// (gamepad-draw-stroke / gamepad-draw-line / gamepad-fade-in) live in
+// styles/tailwind.css; here they are Tailwind animate-[...] utilities on the SVG
+// parts. There is no kit primitive for stroke-dashoffset draw-in.
+const DIAGRAM = 'flex-none w-full max-w-3xl h-auto';
+const ANIM_BODY = '[stroke-dasharray:2000] [stroke-dashoffset:0] animate-[gamepad-draw-stroke_1.4s_ease-in-out]';
+const ANIM_CONTROLS = 'animate-[gamepad-fade-in_0.6s_ease-out_1s_both]';
+const ANIM_LINES = '[&_line]:[stroke-dasharray:800] [&_line]:[stroke-dashoffset:0] [&_line]:animate-[gamepad-draw-line_0.8s_ease-out_1.6s_both] [&_circle]:animate-[gamepad-fade-in_0.3s_ease-out_2s_both]';
+const ANIM_LABELS = 'animate-[gamepad-fade-in_0.5s_ease-out_2.2s_both]';
 
 const CX = 400;
 const ARROW = { UP: '↑', DOWN: '↓', LEFT: '←', RIGHT: '→' };
@@ -117,7 +126,7 @@ const GamepadDiagram = () => {
         : { x1: CX - STX - 24, y1: 232 + BY };
 
     return (
-        <svg className={styles['diagram']} viewBox={'0 0 800 510'} xmlns={'http://www.w3.org/2000/svg'}>
+        <svg className={DIAGRAM} viewBox={'0 0 800 510'} xmlns={'http://www.w3.org/2000/svg'}>
             <defs>
                 <linearGradient id={'bodyGrad'} x1={'0'} y1={'0'} x2={'0'} y2={'1'}>
                     <stop offset={'0%'} stopColor={SURFACE_HOVER} />
@@ -138,7 +147,7 @@ const GamepadDiagram = () => {
                 </filter>
             </defs>
 
-            <g className={styles['anim-controls']}>
+            <g className={ANIM_CONTROLS}>
                 <path
                     d={`M${CX - SX - 38},68 Q${CX - SX - 40},48 ${CX - SX - 28},42 L${CX - SX + 28},42 Q${CX - SX + 40},48 ${CX - SX + 38},68 Z`}
                     fill={'url(#triggerGrad)'} stroke={LINE} strokeWidth={'1'} opacity={'0.7'}
@@ -151,7 +160,7 @@ const GamepadDiagram = () => {
                 <text x={CX + SX} y={'58'} textAnchor={'middle'} fill={FG_SUBTLE} fontSize={'8'} fontWeight={'500'}>{layout.rt}</text>
             </g>
             <path
-                className={styles['anim-body']}
+                className={ANIM_BODY}
                 d={
                     `M${CX - 178},${105 + BY}
                     Q${CX - 165},${80 + BY} ${CX - 95},${74 + BY}
@@ -177,7 +186,7 @@ const GamepadDiagram = () => {
                 strokeWidth={'2.5'}
             />
 
-            <g className={styles['anim-controls']}>
+            <g className={ANIM_CONTROLS}>
                 <rect x={CX - 58} y={96 + BY} rx={'8'} ry={'8'} width={'116'} height={'48'} fill={SURFACE} stroke={LINE} strokeWidth={'1.5'} />
                 <g filter={active === 'lb' ? 'url(#glow)' : undefined}>
                     <path
@@ -236,7 +245,7 @@ const GamepadDiagram = () => {
 
             </g>
 
-            <g className={styles['anim-lines']}>
+            <g className={ANIM_LINES}>
                 <line x1={CX - SX - 40} y1={'74'} x2={'85'} y2={'48'} stroke={FG_SUBTLE} strokeWidth={'1'} opacity={'0.4'} />
                 <circle cx={'85'} cy={'48'} r={'2'} fill={FG_SUBTLE} />
                 <line x1={navLine.x1} y1={navLine.y1} x2={'85'} y2={168} stroke={ACCENT} strokeWidth={'1'} opacity={'0.4'} />
@@ -255,7 +264,7 @@ const GamepadDiagram = () => {
                 <circle cx={'715'} cy={268} r={'2'} fill={FG_SUBTLE} />
             </g>
 
-            <g className={styles['anim-labels']}>
+            <g className={ANIM_LABELS}>
                 <text x={'80'} y={'44'} textAnchor={'end'} fill={FG} fontSize={'12'} fontWeight={'500'}>{t('GAMEPAD_ACTION_PREV_TAB')}</text>
                 <text x={'80'} y={164} textAnchor={'end'} fill={FG} fontSize={'12'} fontWeight={'500'}>{t('GAMEPAD_ACTION_NAVIGATE')}</text>
                 <text x={'80'} y={244} textAnchor={'end'} fill={FG} fontSize={'12'} fontWeight={'500'}>{t('GAMEPAD_ACTION_GUIDE')}</text>

@@ -10,9 +10,12 @@
  * hero + continue-watching rows shifting the visible-child -> catalog index map, the
  * THRESHOLD=5 debounced scroll re-run, and the streaming-server warning gating.
  *
- * The one thing NOT expressed in Tailwind is the per-breakpoint poster trim: it
- * targets MetaRow's hashed `.meta-item` class, so it stays in styles.less (see the
- * note there). Board pins the row-shape marker classes from that module on each row.
+ * The per-breakpoint poster trim (LESS purge, Stage B) is now expressed the same way
+ * routes/Search does it: structural arbitrary-variant classes on the row's OWN
+ * className that hide the items-container's overflow children once the viewport is too
+ * narrow to fit them (the old nth-child media queries, 2200/1900/1600/1300/1000/800/
+ * 640px). No CSS module and no per-item API. `>*:last-child` is the items container
+ * (Ready + placeholder rows both end with it); its children are the poster items.
  */
 
 import React from 'react';
@@ -24,11 +27,38 @@ import useBoard from './useBoard';
 import useContinueWatchingPreview from './useContinueWatchingPreview';
 import StreamingServerWarning from './StreamingServerWarning';
 import HeroCarousel from './HeroCarousel';
-import styles from './styles.less';
 
 const HERO_SLIDES = 6;
 
 const THRESHOLD = 5;
+
+const HIDE_POSTER =
+    'max-[2200px]:[&>*:last-child>*:nth-child(n+10)]:hidden ' +
+    'max-[1900px]:[&>*:last-child>*:nth-child(n+9)]:hidden ' +
+    'max-[1600px]:[&>*:last-child>*:nth-child(n+8)]:hidden ' +
+    'max-[1300px]:[&>*:last-child>*:nth-child(n+7)]:hidden ' +
+    'max-[1000px]:[&>*:last-child>*:nth-child(n+6)]:hidden ' +
+    'max-[800px]:[&>*:last-child>*:nth-child(n+5)]:hidden ' +
+    'max-[640px]:[&>*:last-child>*:nth-child(n+4)]:hidden';
+
+const HIDE_LANDSCAPE =
+    'max-[2200px]:[&>*:last-child>*:nth-child(n+9)]:hidden ' +
+    'max-[1900px]:[&>*:last-child>*:nth-child(n+8)]:hidden ' +
+    'max-[1600px]:[&>*:last-child>*:nth-child(n+7)]:hidden ' +
+    'max-[1300px]:[&>*:last-child>*:nth-child(n+6)]:hidden ' +
+    'max-[1000px]:[&>*:last-child>*:nth-child(n+5)]:hidden ' +
+    'max-[800px]:[&>*:last-child>*:nth-child(n+4)]:hidden';
+
+const hideClassesForShape = (posterShape: string | undefined): string =>
+    posterShape === 'landscape' ? HIDE_LANDSCAPE : HIDE_POSTER;
+
+// The floating streaming-server warning: absolute inset placement with safe-area
+// insets, rebased above the bottom nav rail at the minimum width, and nudged clear of
+// the left rail in phone-landscape (was board-warning-container in styles.less).
+const BOARD_WARNING =
+    'absolute bottom-[calc(var(--safe-area-inset-bottom)+0.5rem)] left-[calc(var(--safe-area-inset-left)+0.5rem)] right-[calc(var(--safe-area-inset-right)+0.5rem)] ' +
+    'max-[640px]:bottom-[calc(var(--vertical-nav-bar-size)+0.5rem)] max-[640px]:h-28 ' +
+    '[@media(orientation:landscape)and(max-width:1000px)and(max-height:500px)]:left-[calc(var(--safe-area-inset-left)+var(--vertical-nav-bar-size)+0.5rem)]';
 
 // Row rhythm: 1rem top / 2rem bottom, tightened to 1.5rem bottom at the minimum
 // width. Kept as a shared string so every row (catalog, continue-watching,
@@ -101,7 +131,7 @@ const Board = () => {
                     {
                         continueWatchingPreview.items.length > 0 ?
                             <MetaRow
-                                className={cx(ROW_SPACING, styles['continue-watching-row'], 'animation-fade-in')}
+                                className={cx(ROW_SPACING, HIDE_POSTER, 'animation-fade-in')}
                                 title={t.string('BOARD_CONTINUE_WATCHING')}
                                 catalog={continueWatchingPreview}
                                 itemComponent={ContinueWatchingItem}
@@ -116,7 +146,7 @@ const Board = () => {
                                 return (
                                     <MetaRow
                                         key={index}
-                                        className={cx(ROW_SPACING, styles[`row-${catalog.content.content[0].posterShape}`], 'animation-fade-in')}
+                                        className={cx(ROW_SPACING, hideClassesForShape(catalog.content.content[0].posterShape), 'animation-fade-in')}
                                         catalog={catalog}
                                         itemComponent={MetaItem}
                                     />
@@ -139,7 +169,7 @@ const Board = () => {
                                 return (
                                     <MetaRow.Placeholder
                                         key={index}
-                                        className={cx(ROW_SPACING, styles['row-poster'], 'animation-fade-in')}
+                                        className={cx(ROW_SPACING, HIDE_POSTER, 'animation-fade-in')}
                                         catalog={catalog}
                                         title={t.catalogTitle(catalog)}
                                     />
@@ -151,7 +181,7 @@ const Board = () => {
             </MainNavBars>
             {
                 showStreamingServerWarning ?
-                    <StreamingServerWarning className={styles['board-warning-container']} />
+                    <StreamingServerWarning className={BOARD_WARNING} />
                     :
                     null
             }

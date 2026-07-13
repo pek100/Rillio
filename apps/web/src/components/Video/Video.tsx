@@ -28,8 +28,13 @@ import {
     ContextMenuItem,
 } from 'rillio/components/ui/context-menu';
 import VideoPlaceholder from './VideoPlaceholder';
-import styles from './styles.less';
 const { default: toPath } = require('rillio-router/toPath');
+
+// Was components/Video/styles.less. `.video-container` was a 0.5rem bottom margin
+// (kept as a hook for VideosList); `.selected` is the 3s border-flash whose
+// keyframe (video-selected-border) lives in styles/tailwind.css.
+const VIDEO_ROW = 'mb-2';
+const VIDEO_SELECTED = 'animate-[video-selected-border_3s_ease-in-out_forwards]';
 const useProfile = require('rillio/common/useProfile');
 const { usePlatform } = require('rillio/common/Platform');
 
@@ -126,8 +131,8 @@ const Video: VideoType = ({
                     className={cn(
                         'flex h-auto scroll-m-5 flex-row flex-wrap items-center justify-start gap-0 rounded-card border-[0.15rem] border-transparent p-2 text-base font-normal whitespace-normal',
                         'hover:bg-[var(--overlay-color)] focus:bg-[var(--overlay-color)] focus-visible:outline-none data-[state=open]:bg-[var(--overlay-color)]',
-                        styles['video-container'],
-                        selected && styles['selected'],
+                        VIDEO_ROW,
+                        selected && VIDEO_SELECTED,
                         className,
                     )}
                 >
