@@ -182,7 +182,7 @@ const MetaDetails = () => {
                 navMenu={true}
                 originPath={originPath}
             />
-            <div ref={contentRef} className="relative z-0 flex min-h-0 flex-1 flex-row self-stretch">
+            <div ref={contentRef} className="z-0 flex min-h-0 flex-1 flex-row self-stretch">
                 {
                     tabs.length > 0 ?
                         <VerticalNavBar

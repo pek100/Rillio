@@ -59,14 +59,11 @@ const HeroMedia = ({ className, ytIds, background, poster, name }: Props) => {
     // Meta changed (new title): restart from the first slide.
     React.useEffect(() => { setActive(0); }, [slides]);
 
-    const panelClassName = 'group relative w-full overflow-hidden rounded-[12px] bg-surface aspect-video';
+    const panelClassName = 'group relative w-full overflow-hidden rounded-card bg-surface aspect-video';
 
     if (count === 0) {
-        return (
-            <div className={cn(panelClassName, className)}>
-                <div className="absolute inset-0 bg-surface" />
-            </div>
-        );
+        // Panel already paints bg-surface; no inner fill layer needed.
+        return <div className={cn(panelClassName, className)} />;
     }
 
     return (

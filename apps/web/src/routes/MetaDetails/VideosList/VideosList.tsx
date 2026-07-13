@@ -173,7 +173,7 @@ const VideosList = ({ className, metaItem, libraryItem, season, seasonOnSelect, 
                         <React.Fragment>
                             {
                                 showNotificationsToggle && libraryItem ?
-                                    <label className="flex flex-none items-center justify-start gap-4 px-6 pb-[0.65rem] pt-[1.15rem] text-fg">
+                                    <label className="flex flex-none items-center gap-4 px-6 pb-[0.65rem] pt-[1.15rem] text-fg">
                                         <Switch checked={!libraryItem.state.noNotif} onCheckedChange={() => toggleNotifications?.()} />
                                         <span>{t('DETAIL_RECEIVE_NOTIF_SERIES')}</span>
                                     </label>
