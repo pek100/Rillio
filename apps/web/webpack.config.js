@@ -68,6 +68,10 @@ threadLoader.warmup(
 module.exports = (env, argv) => ({
     mode: argv.mode,
     devtool: argv.mode === 'production' ? 'source-map' : 'eval-source-map',
+    // Radix / motion / vaul / cmdk ship `"use client"` directives that webpack
+    // cannot map to a module concept, emitting a warning per file. Silence just
+    // that class of warning (foundation kit, Phase 2) without hiding real ones.
+    ignoreWarnings: [/Module level directives cause errors when not transpiled/, /Module level directives/],
     entry: {
         main: './src/index.js',
         worker: './node_modules/@rillio/core-web/worker.js'

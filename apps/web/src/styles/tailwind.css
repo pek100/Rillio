@@ -7,6 +7,12 @@
 @import "tailwindcss/theme.css";
 @import "tailwindcss/utilities.css";
 
+/* tw-animate-css: enter/exit keyframe utilities (`data-[state=open]:animate-in`,
+ * fade/zoom/slide) that the adapted shadcn primitives use. Imported UNLAYERED and
+ * AFTER utilities.css for the same specificity reason the utilities are (it beats
+ * the legacy `*{}` reset), and after so its animation utilities can layer on top. */
+@import "tw-animate-css";
+
 @source "../**/*.{js,jsx,ts,tsx,html}";
 
 /* `static` forces v4 to emit EVERY token to :root, even ones no scanned utility
@@ -49,6 +55,63 @@
     /* Elevation - dark shadows only. No accent/colored glow (brand law). */
     --shadow-island: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-elevated: 0 8px 30px rgba(0, 0, 0, 0.5);
+
+    /* shadcn token bridge (Phase 2 foundation kit). The adapted shadcn/Radix
+     * primitives in components/ui read these semantic color names as Tailwind
+     * utilities (bg-background, text-primary-foreground, border-border, ...) AND
+     * as raw --color-* custom properties. Defined here INSIDE @theme static so v4
+     * emits each to :root (never tree-shaken) exactly like the tokens above.
+     *
+     * NAMING TRAP: shadcn `primary` = our brand accent #FFA033; shadcn `accent`
+     * = the neutral menu-item hover surface (--color-surface-hover), NOT the
+     * brand. warning/success have no shadcn slot - keep --color-warning/success. */
+    --color-background: var(--color-bg);            /* #020407 */
+    --color-foreground: var(--color-fg);
+    --color-card: var(--color-surface);             /* #0A1017 */
+    --color-card-foreground: var(--color-fg);
+    --color-popover: var(--color-surface);
+    --color-popover-foreground: var(--color-fg);
+    --color-primary: var(--color-accent);           /* #FFA033 brand */
+    --color-primary-foreground: var(--color-bg);
+    --color-secondary: var(--color-surface-hover);  /* #111A24 */
+    --color-secondary-foreground: var(--color-fg);
+    --color-muted: var(--color-surface);
+    --color-muted-foreground: var(--color-fg-muted);
+    --color-accent: var(--color-surface-hover);     /* neutral hover bg, NOT brand */
+    --color-accent-foreground: var(--color-fg);
+    --color-destructive: var(--color-danger);       /* #DF524C */
+    --color-destructive-foreground: var(--color-fg);
+    --color-border: var(--color-line);
+    --color-input: var(--color-line);
+    --color-ring: var(--color-highlight);           /* focus ring = brand */
+    --radius: var(--radius-card);                   /* 0.75rem */
+}
+
+/* Bare-name shim for any adapted part that reads raw var(--primary)/var(--radius)/
+ * etc. in an arbitrary value rather than through a Tailwind utility. Kept OUTSIDE
+ * @theme (plain :root rule) so v4 never tree-shakes it and it does not emit extra
+ * color utilities. Mirrors the @theme static aliases above. */
+:root {
+    --background: var(--color-bg);
+    --foreground: var(--color-fg);
+    --card: var(--color-surface);
+    --card-foreground: var(--color-fg);
+    --popover: var(--color-surface);
+    --popover-foreground: var(--color-fg);
+    --primary: var(--color-accent);
+    --primary-foreground: var(--color-bg);
+    --secondary: var(--color-surface-hover);
+    --secondary-foreground: var(--color-fg);
+    --muted: var(--color-surface);
+    --muted-foreground: var(--color-fg-muted);
+    --accent: var(--color-surface-hover);
+    --accent-foreground: var(--color-fg);
+    --destructive: var(--color-danger);
+    --destructive-foreground: var(--color-fg);
+    --border: var(--color-line);
+    --input: var(--color-line);
+    --ring: var(--color-highlight);
+    --radius: var(--radius-card);
 }
 
 /* Brand-hover wordmark: visible at rest, re-fades in (slight slide) on hover,
