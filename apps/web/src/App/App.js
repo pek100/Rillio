@@ -22,6 +22,9 @@ const UpdatingOverlay = require('./UpdatingOverlay/UpdatingOverlay');
 const SyncModal = require('./SyncModal/SyncModal');
 const { ensureDisplayName } = require('rillio/common/useDisplayName');
 const { OPEN_SEARCH_EVENT } = require('rillio/components/TopNav/TopNav');
+// Radix Tooltip provider for the Phase 3 foundation-kit Tooltips (ActionsGroup,
+// ActionButton, ...). Mounted once at the app root, as the kit expects.
+const { TooltipProvider: KitTooltipProvider } = require('rillio/components/ui/tooltip');
 const styles = require('./styles');
 
 const ProtectedRoutes = withCoreSuspender(Routes);
@@ -190,6 +193,7 @@ const App = () => {
         <ServicesProvider services={services}>
             <ToastProvider className={styles['toasts-container']}>
                 <TooltipProvider className={styles['tooltip-container']}>
+                    <KitTooltipProvider>
                     <GamepadProvider enabled={gamepadSupportEnabled} onGuide={toggleGamepadModal}>
                         <ShortcutsProvider onShortcut={onShortcut}>
                             <FullscreenProvider>
@@ -220,6 +224,7 @@ const App = () => {
                             </FullscreenProvider>
                         </ShortcutsProvider>
                     </GamepadProvider>
+                    </KitTooltipProvider>
                 </TooltipProvider>
             </ToastProvider>
         </ServicesProvider>

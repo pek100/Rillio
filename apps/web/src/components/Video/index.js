@@ -1,5 +1,5 @@
-// Copyright (C) 2017-2023 Smart code 203358507
+// Copyright (C) 2017-2025 Smart code 203358507
 
-const Video = require('./Video');
+const Video = require('./Video').default;
 
 module.exports = Video;

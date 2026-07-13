@@ -1,5 +1,5 @@
-// Copyright (C) 2017-2023 Smart code 203358507
+// Copyright (C) 2017-2025 Smart code 203358507
 
-const MetaRowPlaceholder = require('./MetaRowPlaceholder');
+const MetaRowPlaceholder = require('./MetaRowPlaceholder').default;
 
 module.exports = MetaRowPlaceholder;

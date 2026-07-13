@@ -1,29 +1,40 @@
-// Copyright (C) 2017-2023 Smart code 203358507
+// Copyright (C) 2017-2025 Smart code 203358507
 
-const React = require('react');
-const PropTypes = require('prop-types');
-const classnames = require('classnames');
+/**
+ * MetaPreview - the meta-details hero panel. Ported to TypeScript with the leaf
+ * pieces rebuilt on the foundation kit (ActionsGroup / Ratings / ActionButton /
+ * MetaLinks are Tailwind; the share modal is now the kit Dialog). The panel's
+ * structural layout keeps its flat, token-based LESS module because a sibling route
+ * (Player SideDrawer) composes its `description-container` / `action-buttons-container`
+ * classes; that cross-module contract must stay intact until SideDrawer is rewritten.
+ *
+ * All domain logic is reused verbatim: the linksGroups sanitizer (URL parse, redirect
+ * allowlist, IMDb / SHARE special-casing, hidden-category filter - security relevant),
+ * the showHref and metaItemActions memos, and the Ratings core-dispatch wiring.
+ */
+
+import React from 'react';
+import { useTranslation } from 'react-i18next';
+import Icon from '@stremio/stremio-icons/react';
+import Image from 'rillio/components/Image';
+import ActionsGroup from 'rillio/components/ActionsGroup';
+import { Button } from 'rillio/components/ui/button';
+import { Dialog, DialogContent, DialogTitle } from 'rillio/components/ui/dialog';
+import ActionButton from './ActionButton';
+import MetaLinks from './MetaLinks';
+import MetaPreviewPlaceholder from './MetaPreviewPlaceholder';
+import { Ratings } from './Ratings';
+import styles from './styles.less';
 const UrlUtils = require('url');
-const { useTranslation } = require('react-i18next');
-const { default: Icon } = require('@stremio/stremio-icons/react');
-const { default: Button } = require('rillio/components/Button');
-const { default: Image } = require('rillio/components/Image');
-const { default: ActionsGroup } = require('rillio/components/ActionsGroup');
-const ModalDialog = require('rillio/components/ModalDialog');
 const SharePrompt = require('rillio/components/SharePrompt');
 const CONSTANTS = require('rillio/common/CONSTANTS');
 const routesRegexp = require('rillio/common/routesRegexp');
 const useBinaryState = require('rillio/common/useBinaryState');
-const ActionButton = require('./ActionButton');
-const MetaLinks = require('./MetaLinks');
-const MetaPreviewPlaceholder = require('./MetaPreviewPlaceholder');
-const styles = require('./styles');
-const { Ratings } = require('./Ratings');
 
 const ALLOWED_LINK_REDIRECTS = [
     routesRegexp.search.regexp,
     routesRegexp.discover.regexp,
-    routesRegexp.metadetails.regexp
+    routesRegexp.metadetails.regexp,
 ];
 
 // Categories never rendered as link pills: imdb/share are surfaced elsewhere,
@@ -36,54 +47,77 @@ const HIDDEN_LINK_CATEGORIES = [
     'Directors',
 ];
 
-const MetaPreview = React.forwardRef(({ className, compact, name, logo, background, runtime, releaseInfo, released, description, deepLinks, links, inLibrary, toggleInLibrary, watched, toggleWatched, ratingInfo }, ref) => {
+type Link = { category?: string; name?: string; url?: string };
+
+type Props = {
+    className?: string;
+    compact?: boolean;
+    name?: string;
+    logo?: string;
+    background?: string;
+    runtime?: string;
+    releaseInfo?: string;
+    released?: Date;
+    description?: string;
+    deepLinks?: { metaDetailsVideos?: string; metaDetailsStreams?: string; player?: string };
+    links?: Link[];
+    inLibrary?: boolean;
+    toggleInLibrary?: () => void;
+    watched?: boolean;
+    toggleWatched?: () => void;
+    ratingInfo?: unknown;
+};
+
+type MetaPreviewType = React.ForwardRefExoticComponent<Props & React.RefAttributes<HTMLDivElement>> & {
+    Placeholder?: typeof MetaPreviewPlaceholder;
+};
+
+const MetaPreview = React.forwardRef<HTMLDivElement, Props>(({
+    className, compact, name, logo, background, runtime, releaseInfo, released, description,
+    deepLinks, links, inLibrary, toggleInLibrary, watched, toggleWatched, ratingInfo,
+}, ref) => {
     const { t } = useTranslation();
     const [shareModalOpen, openShareModal, closeShareModal] = useBinaryState(false);
+
     const linksGroups = React.useMemo(() => {
         return Array.isArray(links) ?
             links
                 .filter((link) => link && typeof link.category === 'string' && typeof link.url === 'string')
-                .reduce((linksGroups, { category, name, url }) => {
-                    const { protocol, path, pathname, hostname } = UrlUtils.parse(url);
+                .reduce((linksGroups: Map<string, any>, { category, name, url }: Link) => {
+                    const { protocol, path, pathname, hostname } = UrlUtils.parse(url as string);
                     if (category === CONSTANTS.IMDB_LINK_CATEGORY) {
                         if (hostname === 'imdb.com') {
                             linksGroups.set(category, {
                                 label: name,
-                                href: `https://www.stremio.com/warning#${encodeURIComponent(url)}`
+                                href: `https://www.stremio.com/warning#${encodeURIComponent(url as string)}`,
                             });
                         }
                     } else if (category === CONSTANTS.SHARE_LINK_CATEGORY) {
-                        linksGroups.set(category, {
-                            label: name,
-                            href: url
-                        });
+                        linksGroups.set(category, { label: name, href: url });
                     } else {
                         if (protocol === 'stremio:') {
                             if (pathname !== null && ALLOWED_LINK_REDIRECTS.some((regexp) => pathname.match(regexp))) {
-                                if (!linksGroups.has(category)) {
-                                    linksGroups.set(category, []);
+                                if (!linksGroups.has(category as string)) {
+                                    linksGroups.set(category as string, []);
                                 }
-                                linksGroups.get(category).push({
-                                    label: name,
-                                    href: `#${path}`
-                                });
+                                linksGroups.get(category as string).push({ label: name, href: `#${path}` });
                             }
                         } else if (typeof hostname === 'string' && hostname.length > 0) {
-                            if (!linksGroups.has(category)) {
-                                linksGroups.set(category, []);
+                            if (!linksGroups.has(category as string)) {
+                                linksGroups.set(category as string, []);
                             }
-                            linksGroups.get(category).push({
+                            linksGroups.get(category as string).push({
                                 label: name,
-                                href: `https://www.stremio.com/warning#${encodeURIComponent(url)}`
+                                href: `https://www.stremio.com/warning#${encodeURIComponent(url as string)}`,
                             });
                         }
                     }
-
                     return linksGroups;
                 }, new Map())
             :
             new Map();
     }, [links]);
+
     const showHref = React.useMemo(() => {
         return deepLinks ?
             typeof deepLinks.player === 'string' ?
@@ -99,15 +133,17 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
             :
             null;
     }, [deepLinks]);
+
     const renderLogoFallback = React.useCallback(() => (
         <div className={styles['logo-placeholder']}>{name}</div>
     ), [name]);
+
     const metaItemActions = React.useMemo(() => {
         const actions = [
             {
                 icon: inLibrary ? 'remove-from-library' : 'add-to-library',
                 label: inLibrary ? t('REMOVE_FROM_LIB') : t('ADD_TO_LIB'),
-                onClick: typeof toggleInLibrary === 'function' ? toggleInLibrary : null,
+                onClick: typeof toggleInLibrary === 'function' ? toggleInLibrary : undefined,
             },
             {
                 icon: watched ? 'eye-off' : 'eye',
@@ -115,19 +151,18 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                 onClick: typeof toggleWatched === 'function' ? toggleWatched : undefined,
             },
         ];
-        // Share lives in the same group as library/watched so every action reads
-        // as one uniform pill, rather than a lone circular button beside them.
+        // Share lives in the same group as library/watched so every action reads as
+        // one uniform pill, rather than a lone circular button beside them.
         if (linksGroups.has(CONSTANTS.SHARE_LINK_CATEGORY)) {
-            actions.push({
-                icon: 'share',
-                label: t('CTX_SHARE'),
-                onClick: openShareModal,
-            });
+            actions.push({ icon: 'share', label: t('CTX_SHARE'), onClick: openShareModal });
         }
         return actions;
     }, [inLibrary, watched, toggleInLibrary, toggleWatched, linksGroups, openShareModal, t]);
+
+    const hasActions = typeof toggleInLibrary === 'function' && typeof toggleWatched === 'function';
+
     return (
-        <div className={classnames(className, styles['meta-preview-container'], { [styles['compact']]: compact })} ref={ref}>
+        <div className={[className, styles['meta-preview-container'], compact ? styles['compact'] : ''].filter(Boolean).join(' ')} ref={ref}>
             {
                 typeof background === 'string' && background.length > 0 ?
                     <div className={styles['background-image-layer']}>
@@ -139,13 +174,7 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
             <div className={styles['meta-info-container']}>
                 {
                     typeof logo === 'string' && logo.length > 0 ?
-                        <Image
-                            className={styles['logo']}
-                            src={logo}
-                            alt={' '}
-                            title={name}
-                            renderFallback={renderLogoFallback}
-                        />
+                        <Image className={styles['logo']} src={logo} alt={' '} title={name} renderFallback={renderLogoFallback} />
                         :
                         renderLogoFallback()
                 }
@@ -170,6 +199,7 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                             {
                                 linksGroups.has(CONSTANTS.IMDB_LINK_CATEGORY) ?
                                     <Button
+                                        variant="ghost"
                                         className={styles['imdb-button-container']}
                                         title={linksGroups.get(CONSTANTS.IMDB_LINK_CATEGORY).label}
                                         href={linksGroups.get(CONSTANTS.IMDB_LINK_CATEGORY).href}
@@ -186,28 +216,14 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                                 !compact ?
                                     <div className={styles['meta-actions']}>
                                         {
-                                            typeof toggleInLibrary === 'function' && typeof toggleWatched === 'function' ?
-                                                <ActionsGroup items={metaItemActions} className={styles['group-container']} />
+                                            hasActions ?
+                                                <ActionsGroup items={metaItemActions} className={styles['group-container']} size="sm" />
                                                 :
                                                 null
                                         }
                                         {
                                             ratingInfo !== null && ratingInfo !== undefined ?
-                                                <Ratings
-                                                    ratingInfo={ratingInfo}
-                                                    className={styles['group-container']}
-                                                />
-                                                :
-                                                null
-                                        }
-                                        {
-                                            shareModalOpen && linksGroups.has(CONSTANTS.SHARE_LINK_CATEGORY) ?
-                                                <ModalDialog title={t('CTX_SHARE')} onCloseRequest={closeShareModal}>
-                                                    <SharePrompt
-                                                        className={styles['share-prompt']}
-                                                        url={linksGroups.get(CONSTANTS.SHARE_LINK_CATEGORY).href}
-                                                    />
-                                                </ModalDialog>
+                                                <Ratings ratingInfo={ratingInfo as any} className={styles['group-container']} size="sm" />
                                                 :
                                                 null
                                         }
@@ -224,9 +240,7 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                         <div className={styles['description-container']}>
                             {
                                 !compact ?
-                                    <div className={styles['label-container']}>
-                                        {t('SUMMARY')}
-                                    </div>
+                                    <div className={styles['label-container']}>{t('SUMMARY')}</div>
                                     :
                                     null
                             }
@@ -237,13 +251,13 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                 }
                 {
                     Array.from(linksGroups.keys())
-                        .filter((category) => !HIDDEN_LINK_CATEGORIES.includes(category))
+                        .filter((category) => !HIDDEN_LINK_CATEGORIES.includes(category as string))
                         .map((category, index) => (
                             <MetaLinks
                                 key={index}
                                 className={styles['meta-links']}
-                                label={category}
-                                links={linksGroups.get(category)}
+                                label={category as string}
+                                links={linksGroups.get(category as string)}
                             />
                         ))
                 }
@@ -252,14 +266,15 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                 compact ?
                     <div className={styles['action-buttons-container']}>
                         {
-                            typeof toggleInLibrary === 'function' && typeof toggleWatched === 'function'
-                                ? <ActionsGroup items={metaItemActions} className={styles['group-container']} />
-                                : null
+                            hasActions ?
+                                <ActionsGroup items={metaItemActions} className="mb-4" />
+                                :
+                                null
                         }
                         {
                             typeof showHref === 'string' ?
                                 <ActionButton
-                                    className={classnames(styles['action-button'], styles['show-button'])}
+                                    className="mb-4 hover:bg-primary focus:bg-primary focus-visible:outline-none"
                                     icon={'play'}
                                     label={t('SHOW')}
                                     tabIndex={0}
@@ -272,37 +287,21 @@ const MetaPreview = React.forwardRef(({ className, compact, name, logo, backgrou
                     :
                     null
             }
+            {
+                linksGroups.has(CONSTANTS.SHARE_LINK_CATEGORY) ?
+                    <Dialog open={shareModalOpen} onOpenChange={(open: boolean) => { if (!open) closeShareModal(); }}>
+                        <DialogContent className="max-w-[32rem]">
+                            <DialogTitle>{t('CTX_SHARE')}</DialogTitle>
+                            <SharePrompt className={styles['share-prompt']} url={linksGroups.get(CONSTANTS.SHARE_LINK_CATEGORY).href} />
+                        </DialogContent>
+                    </Dialog>
+                    :
+                    null
+            }
         </div>
     );
-});
+}) as MetaPreviewType;
 
 MetaPreview.Placeholder = MetaPreviewPlaceholder;
 
-MetaPreview.propTypes = {
-    className: PropTypes.string,
-    compact: PropTypes.bool,
-    name: PropTypes.string,
-    logo: PropTypes.string,
-    background: PropTypes.string,
-    runtime: PropTypes.string,
-    releaseInfo: PropTypes.string,
-    released: PropTypes.instanceOf(Date),
-    description: PropTypes.string,
-    deepLinks: PropTypes.shape({
-        metaDetailsVideos: PropTypes.string,
-        metaDetailsStreams: PropTypes.string,
-        player: PropTypes.string
-    }),
-    links: PropTypes.arrayOf(PropTypes.shape({
-        category: PropTypes.string,
-        name: PropTypes.string,
-        url: PropTypes.string
-    })),
-    inLibrary: PropTypes.bool,
-    toggleInLibrary: PropTypes.func,
-    watched: PropTypes.bool,
-    toggleWatched: PropTypes.func,
-    ratingInfo: PropTypes.object,
-};
-
-module.exports = MetaPreview;
+export default MetaPreview;
