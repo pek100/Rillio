@@ -1,0 +1,214 @@
+{
+    "family":  "overlays",
+    "familyNotes":  "Every overlay in this family is wired to Rillio\u0027s CUSTOM router view-stack, not to internal trigger state. ModalDialog renders through `rillio/router/Modal` into a `useModalsContainer()` portal, gates keyboard handling on `useRouteFocused()`, and traps focus with `react-focus-lock`. AddonDetailsModal, EventModal and SharePrompt are compositions ON TOP of ModalDialog, so they inherit that plumbing. This is the single biggest integration decision for the rewrite: Radix Dialog/Popover/ContextMenu ship their OWN portal + focus trap + Escape/outside-click dismissal, which OVERLAPS the router machinery. Two viable strategies: (A) adopt Radix primitives and drive `open` from the URL (`open={routeMatches}`, `onOpenChange` -\u003e router pop), let Radix own portal+focus+Escape, and RETIRE react-focus-lock / useRouteFocused-keydown for these; or (B) keep the router portal as the target via Radix\u0027s `Portal container={modalsContainer}` and disable Radix\u0027s `modal` focus scope to avoid double-trapping. Strategy A is cleaner but must preserve the `onCloseRequest({type, dataset, reactEvent, nativeEvent})` callback shape the whole app depends on. All positioned overlays currently reimplement collision math by hand (Popup getBoundingClientRect flipping, ContextMenu viewport clamping, TooltipItem manual top/left) - Radix\u0027s built-in `avoidCollisions`/`collisionPadding` replaces ALL of it. Design language to hold: `--modal-background-color` surface, `--outer-glow` box-shadow, `--border-radius` / `--radius-pill`, single accent `--primary-accent-color` (#FFA033), flat borderless, canonical bare-glyph icon button (inline-flex size-N items-center justify-center rounded-full, ~60% opacity, hover bg tint). Icons are @stremio/stremio-icons (\u0027close\u0027,\u0027addons\u0027,\u0027checkmark\u0027,\u0027about\u0027,\u0027link\u0027,\u0027facebook\u0027,\u0027x\u0027,\u0027reddit\u0027); Radix/shadcn defaults assume lucide - either swap the lucide glyphs for stremio-icons or map names. shadcn now ships BOTH a Radix and a Base-UI variant of every primitive below; pick the RADIX variant for guaranteed React 18.3.1 support and because the app has no Base-UI yet. tailwindcss-animate data-state keyframes must be reconciled with the UNLAYERED Tailwind v4 setup.",
+    "components":  [
+                       {
+                           "name":  "ModalDialog",
+                           "currentPath":  "apps/web/src/components/ModalDialog/ModalDialog.js",
+                           "visualSpec":  "Centered modal shell, the base every other modal composes on. Renders through router Modal into useModalsContainer portal. Backdrop: --color-background-dark5-40 tint, click-outside-to-close via mousedown bubbling (inner container stops it by setting nativeEvent.closeModalDialogPrevented). Card: flex column, max-w/max-h 80% (90% + column buttons under @minimum), padding 0 2rem, --border-radius, --modal-background-color, --outer-glow shadow. Optional absolutely-positioned background image at opacity .1. Bare-glyph close button top-right (2.5rem square, \u0027close\u0027 icon 1.25rem, 60% opacity -\u003e 100% on hover with --color-surface-hover tint). Content: optional 4.5rem title row (1.2rem/500), scrollable body (padding 2rem 0), optional footer buttons row (pill --radius-pill, height 3.5rem, --primary-accent-color, brightness-110 hover, wrap to column on mobile). Escape closes only if this is the topmost modal (childElementCount-2 check for focus-lock wrapper divs). States: hover/focus on close + action buttons (outline --primary-foreground-color). Props: className,title,buttons[{className,label,icon,props}],children,dataset,background,onCloseRequest. Consumes: useModalsContainer, router Modal, useRouteFocused, Button, @stremio/stremio-icons, react-i18next.",
+                           "logicToReuse":  "router Modal + useModalsContainer portal, useRouteFocused (topmost-modal Escape gate), the onCloseRequest({type,dataset,reactEvent,nativeEvent}) contract, buttons[] descriptor shape consumed by AddonDetailsModal/EventModal",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Dialog (Radix variant): Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add @shadcn/dialog (choose Radix) - or registry https://ui.shadcn.com/r/radix/dialog.json",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dialog",
+                                                  "rationale":  "Radix Dialog is the canonical accessible modal: focus trap, Escape, outside-click, scroll-lock, aria all built in, and it is fully controllable via open/onOpenChange so a URL-driven route can own the open state. Themes cleanly to our tokens (overlay bg, --modal-background-color content, --outer-glow, --border-radius). Replaces the hand-rolled mousedown-preventDefault outside-click and the childElementCount Escape hack.",
+                                                  "gaps":  "Does NOT cover: (1) the background-image-at-opacity-.1 layer - add as a custom absolute div inside DialogContent; (2) the buttons[] descriptor API - rebuild DialogFooter to map the same array so callers are untouched; (3) portal target - either point DialogPortal at useModalsContainer or migrate off the router portal (see familyNotes); (4) close button uses lucide X - swap for stremio-icons \u0027close\u0027 with the canonical bare-glyph treatment. Keep react-i18next titles."
+                                              },
+                           "motionIdeas":  "Framer Motion: overlay fade 0.15s; content spring scale 0.96-\u003e1 + y 8-\u003e0 (stiffness 300 damping 26) on enter, reverse on exit via AnimatePresence with Radix forceMount. Or lean on Radix data-[state=open] tailwindcss-animate (fade-in-0 zoom-in-95) to avoid the FM/forceMount dance. Footer buttons: subtle scale-95 tap.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Credenza (responsive Dialog-on-desktop / Drawer-on-mobile)",
+                                                  "source":  "other-registry",
+                                                  "url":  "https://github.com/redpangilinan/credenza",
+                                                  "note":  "Could unify ModalDialog + BottomSheet into one responsive component, but adds a dependency and less token control."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Popup",
+                           "currentPath":  "apps/web/src/components/Popup/Popup.js",
+                           "visualSpec":  "Generic anchored floating menu via render-props (renderLabel/renderMenu). No portal - menu is an absolutely-positioned child of the label container. Hand-rolled collision flipping: walks up to the nearest scroll-ancestor, measures label vs menu rects, picks one of four corners (top/bottom-left/right) so the menu stays in view; can be forced with `direction` prop. Menu surface: --modal-background-color, --border-radius, --outer-glow, overflow hidden, visibility toggled per direction class. Dismiss: window keydown(Escape)/mousedown/pointerdown, suppressed when the click lands inside the menu (nativeEvent.closePopupPrevented set on menu mousedown) or on the label. Focus managed by react-focus-lock (autoFocus=false). States: label gets \u0027active\u0027 class when open. Props: open,direction,renderLabel,renderMenu,dataset,onCloseRequest. Consumes: useRouteFocused, react-focus-lock, classnames. Used app-wide for nav/account/option menus.",
+                           "logicToReuse":  "open/onCloseRequest contract, dataset passthrough, the render-prop call sites (many); auto-flip intent",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Popover (Radix variant) as the generic primitive; DropdownMenu (Radix) for the action-list call sites",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add @shadcn/popover @shadcn/dropdown-menu (Radix)",
+                                                  "url":  "https://ui.shadcn.com/docs/components/popover",
+                                                  "rationale":  "Popup is a generic anchored-content primitive, which is exactly Radix Popover: controlled open/onOpenChange, side+align, and avoidCollisions/collisionPadding that DELETES the entire getBoundingClientRect/scroll-ancestor flip algorithm and the four visibility classes. Radix also portals + traps focus + handles Escape/outside-click, replacing the react-focus-lock + triple window-listener block. Call sites whose renderMenu is a list of actions should use DropdownMenu instead (roving tabindex, typeahead, Item/Separator semantics).",
+                                                  "gaps":  "Migration is per-call-site: render-prop API (renderLabel/renderMenu) becomes Trigger/Content children - a compatibility wrapper preserving open+onCloseRequest+dataset will keep churn down. Radix portals to body by default (current Popup does NOT portal) so any CSS relying on the menu being a DOM child of the label must move to Content styling. Decide Popover vs DropdownMenu per usage."
+                                              },
+                           "motionIdeas":  "Radix data-[state=open] + data-[side] tailwindcss-animate: fade-in + slide-in-from-top/bottom-2 keyed off side, 120ms ease-out. Framer alt: origin-aware scale 0.95-\u003e1 with transformOrigin set from data-side, spring stiffness 400 damping 30.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Origin UI popover/menu blocks (flat, borderless presets)",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/popover",
+                                                  "note":  "Nicer flat defaults closer to our look; still Radix underneath, drop-in over shadcn Popover."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "ContextMenu",
+                           "currentPath":  "apps/web/src/components/ContextMenu/ContextMenu.tsx",
+                           "visualSpec":  "Right-click menu, portaled to document.body via createPortal, shown through the local Transition(\u0027fade\u0027) component. Attaches \u0027contextmenu\u0027 listeners to an array of external refs (`on`), preventDefault, then positions: either at cursor [clientX,clientY] or, when `lock` (top/right/bottom/left) is set, anchored to a chosen EDGE of the trigger rect. useMemo clamps within viewport with 8px PADDING, flipping to the other side if it would overflow. Full-viewport transparent backdrop closes on mousedown/touchstart; inner menu stops propagation; optional autoClose on item click; Escape closes. Surface: --modal-background-color, --border-radius, --outer-glow. Props: children,on(ref[]),autoClose,lock?. Consumes: createPortal, local Transition, useState/useMemo/useCallback.",
+                           "logicToReuse":  "the `on` ref-array attach pattern (multiple triggers -\u003e one menu), autoClose, and the `lock`-to-trigger-edge behavior (non-standard, see gaps)",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "ContextMenu (Radix variant): ContextMenuTrigger, ContextMenuContent, ContextMenuItem, ContextMenuSeparator, ContextMenuSub, ContextMenuCheckboxItem",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add @shadcn/context-menu (Radix)",
+                                                  "url":  "https://ui.shadcn.com/docs/components/context-menu",
+                                                  "rationale":  "Purpose-built right-click menu: preventDefault on contextmenu, cursor positioning, viewport collision avoidance (replaces the PADDING clamp), keyboard nav, Escape, outside-dismiss, and proper Item/Separator/Sub/Checkbox semantics the current div-based menu lacks. Themes to our flat surface + tokens easily.",
+                                                  "gaps":  "Two real gaps: (1) Radix ContextMenu wraps ONE Trigger as children; the current `on: ref[]` multi-trigger array has no direct equivalent - either wrap each trigger or keep a thin custom hook that attaches contextmenu to the refs and drives a Radix DropdownMenu opened at a virtual cursor anchor. (2) `lock`-to-trigger-EDGE (open flush to top/right/bottom/left of the element rather than at the cursor) is NOT a context-menu idiom - those call sites are really anchored dropdowns and should move to DropdownMenu with side=lock. Icons swap lucide-\u003estremio-icons."
+                                              },
+                           "motionIdeas":  "Keep the fade but upgrade: Radix data-[state] zoom-in-95 + fade-in 100ms; per-item hover uses bg tint not motion. Framer alt: menu scale 0.97-\u003e1 from cursor origin, items stagger 15ms fade for a premium reveal (guard with prefers-reduced-motion).",
+                           "alternates":  [
+                                              {
+                                                  "part":  "DropdownMenu (Radix) opened at a virtual/cursor anchor",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dropdown-menu",
+                                                  "note":  "Better home for the `lock`-to-element call sites than true ContextMenu."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "BottomSheet",
+                           "currentPath":  "apps/web/src/components/BottomSheet/BottomSheet.tsx",
+                           "visualSpec":  "Mobile-only bottom sheet, portaled to body. Only rendered on small/touch layouts (CSS hides it at \u003e=@small portrait and \u003e=@xsmall landscape). Backdrop: --primary-background-color at .8 opacity, tap to close. Panel: bottom-anchored, max-h calc(100% - nav-bar), rounded-top 2rem, --modal-background-color, --outer-glow, slides up via \u0027animation-slide-up\u0027 + translateY. Drag-to-dismiss hand-rolled: onTouchStart records clientY, onTouchMove sets translateY offset (clamped \u003e=0), onTouchEnd snaps closed if offset\u003e100px else back to 0, transitionEnd finalizes close. Grabber handle (0.3rem x 3rem pill at 30% opacity) + title row (1.25rem/600). Content scrolls, tap-in-content also closes. Closes on orientation change (useOrientation). State via useBinaryState (opened/open/close) synced to `show`. Props: children,title,show,onClose. Consumes: createPortal, useBinaryState, useOrientation, classnames.",
+                           "logicToReuse":  "useBinaryState + useOrientation (force-close on rotate), show/onClose contract, the CSS media gate that scopes it to mobile",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Drawer (Radix/Base-UI variant, direction=bottom): Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerHandle",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add @shadcn/drawer",
+                                                  "url":  "https://ui.shadcn.com/docs/components/drawer",
+                                                  "rationale":  "The shadcn Drawer is exactly this component and does the hard part natively: swipe/drag-to-dismiss (data-swiping/data-swipe-direction), velocity+threshold snap-close, a built-in swipe handle (showSwipeHandle), snap points, backdrop, scroll-lock and focus management - deleting the entire manual touchmove/translateY/CLOSE_THRESHOLD logic. Controlled open/onOpenChange maps to show/onClose. Rounded-top surface + handle already match our look.",
+                                                  "gaps":  "shadcn migrated Drawer from Vaul to Base UI recently - verify the installed variant and its peer dep (@base-ui/react or vaul) against React 18.3; both support 18. Does not know our mobile-only visibility rule - keep the media-query gate (or render conditionally on a useIsMobile hook). Keep useOrientation to force-close on rotate (Base UI won\u0027t do that). Title row is our own markup."
+                                              },
+                           "motionIdeas":  "Let Vaul/Base-UI own the drag physics (do NOT layer Framer on the drag). For the backdrop, fade opacity tracking drag progress. Handle: subtle scale-x on grab. Respect prefers-reduced-motion by shortening the 0.1s slide.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Vaul directly",
+                                                  "source":  "other-registry",
+                                                  "url":  "https://vaul.emilkowal.ski",
+                                                  "note":  "If the Base-UI Drawer variant causes friction on 18.3, install Vaul (the original) directly - same API shadcn wrapped for years."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "AddonDetailsModal",
+                           "currentPath":  "apps/web/src/components/AddonDetailsModal/AddonDetailsModal.js",
+                           "visualSpec":  "A ModalDialog composition (NOT a standalone overlay). Title \u0027STREMIO_COMMUNITY_ADDON\u0027, background = addon manifest.background. Body (40rem, --primary-foreground-color) shows loading/error messages or the AddonDetails card (logo w/ addons-icon fallback, name+version pill, description, transport URL, supported types joined \u0027a, b \u0026 c\u0027, unofficial disclaimer). Footer buttons computed from addon state: Cancel (transparent, opacity .3-\u003e1) always; Configure (opens external configure URL) when manifest.behaviorHints.configurable; Install or Uninstall (--overlay-color -\u003e --color-surface-hover) depending on local/remote state. Wrapped in withCoreSuspender with a Fallback modal. Consumes: useCore (transport dispatch InstallAddon/UninstallAddon/Ctx), useAddonDetails (useModelState addon_details model, Load/Unload), usePlatform (openExternal), withCoreSuspender, react-i18next, Image. onCloseRequest event types: cancel/configure/install/uninstall.",
+                           "logicToReuse":  "useAddonDetails (addon_details model wiring), useCore transport dispatch (Install/Uninstall), usePlatform.openExternal, withCoreSuspender, the remote-vs-local addon resolution and behaviorHints branching - ALL of this stays; only the visual shell changes",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Recompose on the rewritten ModalDialog (shadcn Dialog). No dedicated registry part - this is domain UI. Reuse DialogFooter for the dynamic buttons[] and build the AddonDetails card with divide-y rows + a rounded-full version pill.",
+                                                  "confidence":  "high",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dialog",
+                                                  "rationale":  "It is a content+actions modal specific to addons; the only reusable primitive is the Dialog shell it already delegates to. Once ModalDialog is rebuilt on shadcn Dialog, this component inherits the upgrade for free and keeps its core wiring untouched.",
+                                                  "gaps":  "The AddonDetails inner card (logo/name/version/types/disclaimer) has no registry equivalent - lay it out with our divide-y + section-label pattern. Version could use shadcn Badge (rounded-full) for the pill. Keep Image fallback to stremio-icons \u0027addons\u0027."
+                                              },
+                           "motionIdeas":  "Inherits ModalDialog enter/exit. Add a 60ms content cross-fade when addon_details transitions Loading-\u003eReady so the skeleton/message swaps smoothly. Footer buttons fade/scale in as they become available (Install/Uninstall) via AnimatePresence.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "shadcn Badge for the version pill",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/badge",
+                                                  "note":  "rounded-full variant matches our pill language for ADDON_VERSION_SHORT."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "EventModal",
+                           "currentPath":  "apps/web/src/components/EventModal/EventModal.js",
+                           "visualSpec":  "A ModalDialog composition for server-pushed promo/event modals. backdrop-filter blur(10px); card max-w 45rem, overflow visible so a 30rem square hero image floats -10rem above the card (top-centered), hidden in short-landscape. Below: centered info column (gap 2.5rem, padded 10rem top to clear the image) with title (1.325rem, centered), message (1rem, opacity .5), optional addon block (addons icon in accent + name), and a single accent pill CTA (--primary-accent-color, brightness-110 hover) that is either \u0027INSTALL_ADDON\u0027 (links to #/addons?addon=...) or \u0027LEARN_MORE\u0027 (external, target _blank). Data-driven: only renders when ctx.events.modal.type===\u0027Ready\u0027; dismiss calls DismissEvent(id). Pulls events on mount. Consumes: useEvents (useCore transport GetEvents/DismissEvent, useModelState ctx model), Button, react-i18next, stremio-icons.",
+                           "logicToReuse":  "useEvents (GetEvents/DismissEvent transport + ctx.events.modal model state), the Ready-gate and dismiss-by-id flow, the addon-vs-external CTA branch - reuse verbatim",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Recompose on the rewritten ModalDialog (shadcn Dialog) with a custom floating-hero layout. No registry part matches the -10rem overhang hero. Use shadcn Button for the CTA.",
+                                                  "confidence":  "high",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dialog",
+                                                  "rationale":  "This is a bespoke marketing/announcement modal driven entirely by core events; the reusable piece is only the Dialog shell + a Button. The distinctive floating-image-above-card composition is custom and worth keeping as-is visually.",
+                                                  "gaps":  "The overflow-visible floating hero fights Radix DialogContent\u0027s default overflow/animation - set DialogContent overflow visible and position the image absolutely, verify zoom-in animation origin. Keep the backdrop blur(10px). CTA is our accent pill, not shadcn default variant."
+                                              },
+                           "motionIdeas":  "Framer: hero image drops in with y -24-\u003e0 + scale 0.9-\u003e1 spring (playful, stiffness 260 damping 20) slightly AFTER the card, so it \u0027pops\u0027 above the dialog. CTA pill: brightness on hover (existing) + scale-98 tap. Keep serious-topic guard off (promo content, fun is fine).",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "SharePrompt",
+                           "currentPath":  "apps/web/src/components/SharePrompt/SharePrompt.js",
+                           "visualSpec":  "Share body (rendered inside a ModalDialog by callers). Top row: three equal social buttons (Facebook/X/Reddit) with brand bg colors (--color-facebook/-x/-reddit), --border-radius, centered brand icon (stremio-icons facebook/x/reddit), each an href target=_blank share-intent link. Bottom row: a read-only TextInput prefilled with the URL (centered, --overlay-color bg, selects-all on click/mount) + an 8rem accent \u0027COPY\u0027 pill button (link icon + label, --primary-accent-color, brightness-110 hover) that selects the input and document.execCommand(\u0027copy\u0027), then fires a success toast \u0027Copied to clipboard\u0027 (3s). Props: className,url. Consumes: useToast, TextInput, Button, useRouteFocused (auto-select on focus), stremio-icons, react-i18next.",
+                           "logicToReuse":  "useToast.show success feedback, the share-intent URL builders (facebook/twitter/reddit), auto-select-on-mount via useRouteFocused",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom composition: shadcn Button (brand-tinted) for the three social links + Origin UI copy-to-clipboard input for the URL row.",
+                                                  "confidence":  "medium",
+                                                  "url":  "https://originui.com/input",
+                                                  "rationale":  "No single registry \u0027share sheet\u0027 fits our flat brand-colored layout. The one genuinely reusable pattern is the copy-input: Origin UI ships a polished input-with-copy-button (clipboard API + copied checkmark state) that should replace the legacy document.execCommand(\u0027copy\u0027) + manual toast. Wrap the three social links as themeable Buttons.",
+                                                  "gaps":  "Origin UI copy-input uses navigator.clipboard + a transient check state; migrate off execCommand (deprecated) but KEEP firing our useToast success for consistency, or adopt the inline copied-checkmark and drop the toast. Brand colors (--color-facebook/-x/-reddit) and stremio brand icons are ours - the registry input won\u0027t supply them. Verify the exact Origin UI block URL before install."
+                                              },
+                           "motionIdeas":  "Copy button: swap link icon -\u003e checkmark with a 0.15s scale/cross-fade on success (springy), then revert after 2s. Social buttons: brightness-110 + scale-98 tap. Row entrance: 40ms stagger fade-up when the share modal opens.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "shadcn Button + a hand-rolled clipboard hook",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/button",
+                                                  "note":  "If Origin UI copy-input is too opinionated, a Button + useCopyToClipboard hook keeps full token control."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Toast",
+                           "currentPath":  "apps/web/src/common/Toast/ToastProvider.js",
+                           "visualSpec":  "App-level toast system. ToastProvider holds a reducer queue (add/remove/clear) + a filters array (a show() call is suppressed if any filter(item) returns true) + auto-timeout (default 3000ms). Exposed via ToastContext/useToast: show(item)-\u003eid, remove(id), clear(), addFilter/removeFilter. ToastItem: 25rem card, --modal-background-color, backdrop-blur(10px), 1px --color-line border, --outer-glow, --border-radius. Left icon tile (--overlay-color) colored by type - success=checkmark/--color-success, error=close/--color-danger, info=about/--color-fg, alert; info column with title (1.2rem/600), message (1.1rem/.8 opacity), optional pill action button (label, --overlay-color, brightness hover). Round close button (2rem, opacity .4-\u003e1). Whole card is clickable (onSelect+onClose), action stops propagation. Consumes: react-i18next, Button, stremio-icons, useReducer/useContext.",
+                           "logicToReuse":  "useToast hook signature (show/remove/clear/addFilter/removeFilter) - MANY call sites depend on it; the filters suppression mechanism; the item shape {type,title,message,icon,action:{label,onSelect},timeout,dataset,onSelect}",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Sonner (shadcn\u0027s current toast; the old Radix Toast is deprecated in favor of it)",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add @shadcn/sonner",
+                                                  "url":  "https://ui.shadcn.com/docs/components/sonner",
+                                                  "rationale":  "Sonner is the modern, maintained toast: stacking, swipe-dismiss, auto-timeout (duration), promise toasts, success/error/info/warning variants, description, action + cancel buttons, and rich imperative API - covering every ToastItem feature with far less code. shadcn deprecated the old Toast in its favor. One \u003cToaster/\u003e at root, themeable to our blurred --modal-background-color card + --color-line border + type-colored icon.",
+                                                  "gaps":  "Sonner\u0027s API is imperative (toast.success(title,{description,action,duration})) NOT a React context. Preserve the app\u0027s contract by REIMPLEMENTING useToast/ToastProvider as a thin adapter over Sonner: keep show/remove/clear/addFilter/removeFilter, run the filters array before calling toast(), map our types (note our \u0027alert\u0027 -\u003e Sonner \u0027warning\u0027), map action:{label,onSelect} -\u003e Sonner action, map dataset/onSelect. Icons: pass stremio-icons via Sonner\u0027s custom icon option. This keeps every call site unchanged."
+                                              },
+                           "motionIdeas":  "Sonner ships its own enter/stack/swipe motion - do not fight it. Only tune: expand-on-hover, and shorten durations under prefers-reduced-motion. If a Framer flourish is wanted, animate the type icon (checkmark draw-in on success) inside the custom icon slot.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Origin UI toast/notification variants (built on Sonner)",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/toast",
+                                                  "note":  "Prebuilt flatter Sonner skins closer to our card look - drop-in styling reference over the base Sonner."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Tooltips",
+                           "currentPath":  "apps/web/src/common/Tooltips/Tooltip/Tooltip.js",
+                           "visualSpec":  "Hover tooltip system, unusual design: a \u003cTooltip label position margin/\u003e is dropped as a hidden placeholder INSIDE a target; on mount it grabs element.parentElement as the anchor, registers with TooltipProvider (add/update/remove) and attaches mouseenter/mouseleave to that parent to toggle active. TooltipProvider keeps a tooltips[] array and renders each TooltipItem into a global \u0027.tooltips-items-container\u0027. TooltipItem is position:fixed, opacity 0 -\u003e 1 on .active, and computes top/left from parent.getBoundingClientRect() vs its own rect for top/bottom/left/right placement with a margin (default 15px). No portal/collision-avoid/arrow. Consumes: TooltipContext, useState/useLayoutEffect/getBoundingClientRect.",
+                           "logicToReuse":  "the parent-element auto-anchor ergonomics (drop a Tooltip inside any element, it attaches to the parent) is the nice call-site DX to preserve; label/position/margin API",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Tooltip (Radix variant): TooltipProvider, Tooltip, TooltipTrigger, TooltipContent (+ optional arrow)",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add @shadcn/tooltip (Radix)",
+                                                  "url":  "https://ui.shadcn.com/docs/components/tooltip",
+                                                  "rationale":  "Radix Tooltip replaces the entire hand-rolled placeholder+provider+manual-getBoundingClientRect system with portaled, collision-aware positioning (side/align/sideOffset -\u003e our margin), a shared TooltipProvider for global delay, proper hover+focus+touch+keyboard triggering and aria-describedby - accessibility the current mouseenter-only version lacks. Themes to a small --modal-background-color/--overlay-color bubble trivially.",
+                                                  "gaps":  "API shift: Radix wants \u003cTooltip\u003e\u003cTooltipTrigger asChild\u003e{el}\u003c/TooltipTrigger\u003e\u003cTooltipContent\u003elabel\u003c/TooltipContent\u003e\u003c/Tooltip\u003e, i.e. the trigger wraps the element rather than a hidden child auto-attaching to parentElement. To keep call-site ergonomics, EITHER migrate call sites to TooltipTrigger asChild, OR write a tiny wrapper that renders TooltipTrigger around children and passes label. position-\u003eside, margin-\u003esideOffset. Keep one TooltipProvider at app root (mirrors current global container)."
+                                              },
+                           "motionIdeas":  "Radix data-[state]/data-[side] tailwindcss-animate: fade-in-0 + slide-in-from-\u003cside\u003e-1, ~120ms, delayDuration ~300ms so it feels intentional not twitchy. Framer alt: opacity + 2px directional slide, spring stiffness 500. Keep it subtle - tooltips shouldn\u0027t bounce.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Origin UI tooltip presets",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/tooltip",
+                                                  "note":  "Flat, low-chrome Radix tooltip skins matching our borderless language."
+                                              }
+                                          ]
+                       }
+                   ]
+}

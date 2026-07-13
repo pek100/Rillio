@@ -1,0 +1,204 @@
+{
+    "family":  "nav-shell",
+    "familyNotes":  "This family is the app chrome, not content, so most of it is bespoke and should stay custom; the value of premade parts here is small and concentrated in two places: (1) the TopNav tab strip\u0027s active-pill indicator (a framer-motion layoutId \"moving pill\" pattern is worth adopting), and (2) the account dropdown mechanics (shadcn DropdownMenu/Popover as a Radix-backed replacement for the legacy custom Popup). Everything else - window controls, the fluid-fill logo, the layout wrapper, the delay/transition/error primitives - has no meaningful registry equivalent and should be rewritten as small in-house primitives. IMPORTANT reuse constraints that any rewrite must honor: (a) the frameless Tauri shell requires `data-tauri-drag-region` on the bar + its flex spacer, and those regions must NOT be interactive elements (Radix triggers/links inside them stay clickable because they lack the attribute) - a fully premade navbar that wraps everything in its own semantic \u003cnav\u003e/\u003cheader\u003e is fine as long as we can add the drag attribute to the bar element and the flex filler; (b) `useIsShell()` is a reactive hook (Tauri global can appear after first render) - do not gate drag/controls on a one-shot check; (c) the router is a custom view stack - Addons/Settings/Cached/Search are ROUTE links (react-router \u003cLink\u003e), not internal-state dialogs, so any \"menu\"/\"dialog\" part must accept href-driven items or be usable with open-state we control. No framer-motion / Radix / cva present yet, so adopting any Radix-based part (NavigationMenu, DropdownMenu, ScrollArea, Tabs) means pulling in @radix-ui + likely cva; that is fine on React 18.3 but is a foundation-kit decision, not a per-component one. Legacy VerticalNavBar/NavTabButton appear to be dead (only referenced by the NavBar barrel export, not by any route) - confirm before spending rewrite effort on them.",
+    "components":  [
+                       {
+                           "name":  "TopNav",
+                           "currentPath":  "apps/web/src/components/TopNav/TopNav.tsx",
+                           "visualSpec":  "The primary desktop nav bar (main routes: Home/Discover/Library/Calendar). Layout: flex row, h-full, px-6, gap-5, overflow-visible. Left cluster: brand \u003cLink to=\u0027/\u0027\u003e = LogoMark (h-8 animated fluid logo) + a \u0027Rillio\u0027 wordmark (hidden \u003csm, re-fades in on group-hover via keyframe rillio-wordmark-fade). Then a pill tab group (gap-1): each tab is an h-9 rounded-full px-4 text-sm font-medium Link; selected = text-accent (#FFA033), else text-fg-muted hover:text-fg. Middle: a flex-1 spacer (also a drag region in shell). Right cluster (gap-2): bare icon buttons size-10 inline-flex items-center justify-center rounded-full (canonical bare icon-button, ~muted glyph, hover:bg-surface-hover hover:text-fg): Search (opens SearchModal via state), Addons (Link /addons, active=text-accent), Cached (Link /cached, size-4 download glyph + absolute pulsing accent dot when downloads active), Settings (Link /settings, active=text-accent), then the account menu (NavMenu rendered with a filled island-chip label ICON_BUTTON on bg-surface/70 backdrop-blur, person-outline glyph). States: selected/active tab -\u003e accent; hover -\u003e bg tint + fg; downloading -\u003e animate-pulse dot; searchOpen -\u003e SearchModal overlay mounted. Behavior: in the frameless shell the whole \u003cnav\u003e and the flex-1 spacer carry data-tauri-drag-region (links/buttons never do, so they stay clickable); listens for a global \u0027rillio:open-search\u0027 event to open the palette. Tabs/links use tabIndex=-1 (gamepad/focus handled elsewhere).",
+                           "logicToReuse":  "useIsShell() (reactive shell detection + drag-region gating), useActiveDownloads() (pulsing cached dot), SearchModal (route-less overlay palette), NavMenu (account hub popup - reuse whole), Button (renders a \u003cdiv\u003e, needed so the account label can legally contain the menu\u0027s \u003ca\u003e children), react-router \u003cLink\u003e, react-i18next useTranslation, LogoMark, OPEN_SEARCH_EVENT contract.",
+                           "motionIdeas":  "Sliding active-pill: a shared framer-motion layoutId highlight that springs (stiffness ~380, damping ~30) between the selected tab. Icon buttons: whileHover scale 1.06 / whileTap 0.94 on the glyph, bg tint via CSS. Cached dot: keep CSS pulse or a motion scale-breathe. Wordmark: keep the existing fade keyframe or port to a motion opacity dip on brand hover. SearchModal entrance handled in that component.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom app-nav shell (keep the bespoke bar), but reuse a framer-motion \u0027moving pill / layoutId\u0027 animated-tabs part for ONLY the tab strip\u0027s active indicator, and reference Origin UI\u0027s app navbar layout for structure.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "No official shadcn navbar block matches a desktop-app top bar with drag regions, an animated WebGL logo, a cached-downloads badge, and a route-driven account hub; shadcn NavigationMenu is built for hover dropdown mega-menus (viewport/content panels) we do not have, and forcing it would fight our flat pill design. The one genuinely reusable idea is the sliding active-pill, which is a well-trodden framer-motion layoutId pattern - adopt that in the foundation kit rather than a whole navbar. Origin UI navbars are the closest structural reference (logo + links + right-side actions/user menu) but ship as copy-paste blocks to adapt, not drop-in.",
+                                                  "gaps":  "Any premade navbar assumes internal state/routing and will not know about data-tauri-drag-region, useIsShell, the LogoMark canvas, the cached pulse, or SearchModal - all must be wired by hand. Tab parts assume a controlled value; ours is derived from the route.",
+                                                  "url":  "https://ui.aceternity.com/components/resizable-navbar",
+                                                  "install":  "Reference only for tabs indicator: https://github.com/list-jonas/shadcn-ui-animated-tabs ; structure ref: https://originui.com/navbar"
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Navigation Menu",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/navigation-menu",
+                                                  "note":  "Radix-backed; overkill (dropdown mega-menu semantics we do not use). Consider only if Discover/Library ever grow hover sub-menus."
+                                              },
+                                              {
+                                                  "part":  "Tabs",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/tabs",
+                                                  "note":  "Radix Tabs give a11y roving-tab semantics, but our tabs are route Links not panel switches, so semantics mismatch; use the visual pill idea only."
+                                              },
+                                              {
+                                                  "part":  "Resizable / Floating Navbar",
+                                                  "source":  "aceternity",
+                                                  "url":  "https://ui.aceternity.com/components/resizable-navbar",
+                                                  "note":  "Scroll-shrink/frost behavior is not our need (bar is fixed height over content), but a good motion reference."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "NavBar (HorizontalNavBar route chrome + legacy VerticalNavBar)",
+                           "currentPath":  "apps/web/src/components/NavBar/index.js",
+                           "visualSpec":  "Barrel exporting HorizontalNavBar + VerticalNavBar. HorizontalNavBar (the live one, used by detail/player/settings/search routes, NOT the main routes which use TopNav): flex row space-between, h=var(--horizontal-nav-bar-size), transparent bg, over-imagery. Left: either a back Button (chevron-back, 40px circular icon-button) OR a logo slot (\u003cLogo h-8\u003e). Optional \u003ch2\u003e title (600, 1.125rem, ellipsis, is also a drag region). Optional SearchBar (h-2.5rem w-24rem, hidden on addons route). Right buttons-container (gap-0.5rem): optional HDR indicator (2rem x 1rem \u0027hdr\u0027 glyph when gamma pq/hlg, titled HDR10/HLG), optional NavMenu (person-outline label). Icon buttons: 40px rounded-full, size-4 glyph muted-\u003efg, hover/active bg = --overlay-color. In shell the bar is a drag region. Mobile (\u003c@minimum): hides non-back/non-menu buttons, logo width shrinks. VerticalNavBar (legacy, appears unused by routes): vertical stack of NavTabButton items; NavTabButton = \u003cLink\u003e with optional addon logo \u003cImage\u003e (fallback to icon), icon shows `${icon}-outline` when unselected / `${icon}` when selected, optional label, selected class, double-click scrolls all scrolled divs to top.",
+                           "logicToReuse":  "useIsShell (drag), useFullscreen (Fullscreen common), useHorizontalNavGamepadNavigation (services/GamepadNavigation), react-router useNavigate (back button + originPath replace), NavMenu, SearchBar (both withCoreSuspender), Button, Icon, Logo. NavTabButton reuses Image + react-router Link. hdrInfo prop shape {gamma}.",
+                           "motionIdeas":  "Back button: whileTap 0.92, subtle x-shift on hover (-2px). Title: fade/slide-in on route change (motion key on title text). HDR badge: fade-in when it appears. NavMenu open: shared with account menu motion below. VerticalNavBar (if kept): layoutId selected-indicator bar.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom route-chrome bar composed from foundation primitives (icon Button + Radix DropdownMenu for NavMenu). Do NOT adopt a whole-navbar block. Confirm VerticalNavBar/NavTabButton are dead and drop them.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "This bar is route-conditional chrome (back/title/search/HDR/menu combos) with drag-region + fullscreen + gamepad wiring - no registry navbar models this. The reusable seams are the icon button (foundation Button) and the account dropdown, both covered by shadcn primitives. The legacy VerticalNavBar is only referenced by this barrel, not by routes, so it is almost certainly removable.",
+                                                  "gaps":  "No premade part covers HDR-gamma indicator, originPath back semantics, drag regions, or the addon-logo-with-icon-fallback tab. All bespoke.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/button",
+                                                  "install":  "npx shadcn@latest add button dropdown-menu"
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Dropdown Menu",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dropdown-menu",
+                                                  "note":  "Radix replacement for the legacy custom Popup used by NavMenu (see account-menu note)."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "MainNavBars",
+                           "currentPath":  "apps/web/src/components/MainNavBars/MainNavBars.tsx",
+                           "visualSpec":  "Pure layout wrapper for the main routes: a relative, overflow-clip container respecting safe-area insets. Absolutely positions TopNav (top: 0.5rem gap, full width, height var(--horizontal-nav-bar-size), z-1) over an absolutely-positioned scrolling content container (top offset = nav size + gap + safe-top, fills the rest, overflow-hidden, z-0). memo\u0027d. Passes route through; maps \u0027continue_watching\u0027 -\u003e \u0027library\u0027 for the active tab and for gamepad nav. No visible chrome of its own - it only slots TopNav + children.",
+                           "logicToReuse":  "TopNav, useContentGamepadNavigation(contentRef, navRoute) (services/GamepadNavigation), the MainNavBars.less positioning tokens (--horizontal-nav-bar-size, --safe-area-inset-*), classnames.",
+                           "motionIdeas":  "This is a frame, not a surface - keep motion out of it. At most, an AnimatePresence route-crossfade of {children} (opacity/short y) if the app wants page transitions; keep TopNav static so the bar does not flicker between routes.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom layout wrapper (no component, just JSX + CSS). Optionally convert the two absolute panes to a flex column (header + flex-1 overflow-auto content) during the rewrite.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "This is app-specific layout scaffolding (safe-area insets, absolute nav-over-content, gamepad ref) with zero visual surface. No registry ships a layout shell equivalent, and none should - it is glue.",
+                                                  "gaps":  "Nothing premade applies; the only decision is absolute-position vs flex, which is internal.",
+                                                  "url":  ""
+                                              }
+                       },
+                       {
+                           "name":  "WindowControls",
+                           "currentPath":  "apps/web/src/components/WindowControls/WindowControls.tsx",
+                           "visualSpec":  "Frameless Tauri window controls, rendered only in shell (returns null in browser). Two fixed layers at z 2147483646: (1) a thin top-edge drag strip (fixed left-0 right-44 top-0 h-2.5, data-tauri-drag-region) present on every route so the window can be moved even over loading overlays; (2) a right-0 top-0 h-8 flex row of 4 native-style buttons, each h-full w-11 flex-center text-fg-muted, hover:bg-white/10 hover:text-fg (close hover:bg-danger hover:text-white): Fullscreen (custom 11px SVG corner-arrows, toggles/swaps icon), Minimize (rect bar SVG), Maximize/Restore (single vs overlapped-rect SVG), Close (X SVG strokeWidth 1.2). State: maximized + fullscreen booleans synced from the Tauri window (isMaximized/isFullscreen, onResized listener). Behavior: fullscreen is fragile so it COLLAPSES on any window op - every control exits fullscreen first, and a capture-phase mousedown on any data-tauri-drag-region also exits fullscreen before the native drag starts. Controls are never a drag region (always clickable).",
+                           "logicToReuse":  "getTauri()/isShell()/useIsShell() from common/Platform/shell/isShell (single source of truth, re-exported here), Tauri window API (getCurrentWindow: isMaximized/isFullscreen/onResized/minimize/toggleMaximize/close/setFullscreen), the collapse-fullscreen-on-drag safety logic. This whole platform contract must be preserved verbatim.",
+                           "motionIdeas":  "Keep it snappy and OS-native-feeling: 120-150ms bg color transition (already there). Optional icon crossfade on maximize\u003c-\u003erestore / fullscreen\u003c-\u003eexit (AnimatePresence + tiny opacity). Do NOT add scale/spring - window controls should feel instant and un-playful.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom (native caption controls). No shadcn/registry equivalent exists.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "OS window min/max/close/fullscreen for a frameless Tauri window is platform glue tied to the Tauri window API and a delicate fullscreen-collapse safety model. No component registry ships caption controls (a few standalone community \u0027tauri-controls\u0027 packages exist but are not shadcn-style themeable parts and would fight our tokens). Keep bespoke; only restyle the SVG glyphs to tokens.",
+                                                  "gaps":  "N/A - nothing premade to adapt.",
+                                                  "url":  ""
+                                              }
+                       },
+                       {
+                           "name":  "HorizontalScroll",
+                           "currentPath":  "apps/web/src/components/HorizontalScroll/HorizontalScroll.tsx",
+                           "visualSpec":  "A horizontally-scrolling container that fades its overflowing edges with a CSS mask gradient. Renders a relative overflow-x:auto div; on scroll it computes position (\u0027left\u0027 | \u0027center\u0027 | \u0027right\u0027, 1px threshold) and applies a mask-image: at left only the right edge fades (10% mask), at right only the left edge fades, at center both edges fade. No arrows, no snap - just the gradient affordance. Used by Chips, Library, Discover, MetaDetails, Calendar Cell for row-of-pills / horizontal lists.",
+                           "logicToReuse":  "The scroll-position derivation (left/center/right threshold logic) and the mask-gradient CSS are the whole value; consumers pass className + children only.",
+                           "motionIdeas":  "Mask transition already implicit; optionally animate the mask opacity so edges fade in/out smoothly rather than snapping between states. Could add momentum/drag-to-scroll (framer-motion drag on x) but that changes UX - keep optional.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom (edge-fade horizontal scroller). Keep the mask-gradient approach; do not adopt Radix ScrollArea for this.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "The defining feature is the gradient edge-fade tied to scroll position, which no registry part provides. shadcn ScrollArea (Radix) gives custom scrollbars and vertical/horizontal scrolling but not the fade-mask affordance, and it adds a Radix dependency for a purely cosmetic wrapper. Our flat design wants the fade, not visible scrollbars, so custom wins.",
+                                                  "gaps":  "shadcn ScrollArea would replace scrollbars but drop the fade; would need the mask re-added on top, so no net win.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/scroll-area",
+                                                  "install":  "npx shadcn@latest add scroll-area (only if we later want styled scrollbars)"
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Scroll Area",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/scroll-area",
+                                                  "note":  "Radix-backed custom scrollbars; does not do edge-fade masks. Not recommended here."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Transition",
+                           "currentPath":  "apps/web/src/components/Transition/Transition.tsx",
+                           "visualSpec":  "Headless enter/exit CSS-transition helper (no visuals of its own). Props: {children (single element), when (bool), name (class prefix), duration?}. Clones the child and appends classes `${name}-enter|exit`, `${name}-active`, driving mount on when=true and unmount after transitionend on exit. Uses a callbackRef + rAF to flip the active class on the next frame (so CSS transitions fire). Consumed by Player, SideDrawer, Indicator, BottomSheet, UpdaterBanner, ContextMenu for slide/fade in-out.",
+                           "logicToReuse":  "It IS the logic. Its callers depend on the `${name}-enter/-exit/-active` CSS class contract - if replaced by framer-motion those call sites (Player chrome, drawers, sheets, banners, context menu) must be migrated together.",
+                           "motionIdeas":  "This is exactly what framer-motion AnimatePresence + motion.\u003cel\u003e variants replace: define enter/exit variants once in the foundation kit (fade+slide presets) and drop the class-string contract. That is the recommended foundation motion primitive.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Replace with framer-motion AnimatePresence as the foundation motion primitive (not a registry component).",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Transition is a bespoke reimplementation of mount/unmount animation via CSS classes; the project is adopting a motion vocabulary, and framer-motion\u0027s AnimatePresence is the idiomatic, better-maintained replacement. No shadcn/registry \u0027component\u0027 fits because this is a primitive, not a UI part.",
+                                                  "gaps":  "Every consumer (Player/SideDrawer/Indicator/BottomSheet/UpdaterBanner/ContextMenu) uses the class-name contract; migrating means rewriting those transitions as variants. Do it as a batched foundation task, not piecemeal, or keep Transition as-is until each consumer is rebuilt.",
+                                                  "url":  "https://motion.dev/docs/react-animate-presence"
+                                              }
+                       },
+                       {
+                           "name":  "DelayedRenderer",
+                           "currentPath":  "apps/web/src/components/DelayedRenderer/DelayedRenderer.js",
+                           "visualSpec":  "Utility, no UI. Renders {children} only after {delay} ms (setTimeout on mount, cleared on unmount). Used to defer expensive/secondary content (e.g. avoid flashing loaders). Trivial.",
+                           "logicToReuse":  "The delay-gate behavior itself; callers pass delay + children.",
+                           "motionIdeas":  "None inherently. If paired with motion, wrap the delayed children in a motion fade so they do not pop in; but that is the caller\u0027s concern.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom (tiny delay-gate hook/component). No registry equivalent needed.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "A 20-line setTimeout gate has no meaningful premade counterpart and needs none; keep it (optionally rewrite as a useDelayedRender hook in TS).",
+                                                  "gaps":  "N/A.",
+                                                  "url":  ""
+                                              }
+                       },
+                       {
+                           "name":  "ErrorBoundary",
+                           "currentPath":  "apps/web/src/components/ErrorBoundary/ErrorBoundary.tsx",
+                           "visualSpec":  "Last-resort React class error boundary around whole app surfaces (used twice in App.js). On a caught render error shows a centered recovery screen: absolute inset-0 z-10 bg-bg, flex col centered gap-4 p-8 text-center, an \u0027Something went wrong\u0027 title (text-lg font-semibold text-fg), the error.message (max-w-md text-sm text-fg-muted), and a \u0027Try again\u0027 pill button (rounded-full bg-accent px-5 py-2 text-bg font-semibold hover:brightness-110 active:scale-[0.98]) that clears state and re-renders children. Logs to console.error with componentStack.",
+                           "logicToReuse":  "The getDerivedStateFromError/componentDidCatch/reset lifecycle (React error boundaries must be class components). The reset contract and where App.js mounts it.",
+                           "motionIdeas":  "Fallback entrance: motion fade + slight y-rise on the message block so a crash screen does not hard-cut in. \u0027Try again\u0027 button: whileTap 0.98 (already CSS). Keep restrained - this is an error state.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Keep a custom class boundary (or adopt the react-error-boundary library for the boundary mechanics) and rebuild ONLY the fallback UI from foundation primitives (Button + typography). shadcn has no error-boundary component.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "shadcn/ui does not ship an error boundary (React requires a class component for the catch). The community standard is bvaughn\u0027s react-error-boundary if we want a hook-friendly API + resetKeys; otherwise the current 50-line class is fine. Either way the visible fallback is just a centered message + a shadcn-style pill button we already have tokens for.",
+                                                  "gaps":  "Any library only provides the boundary plumbing; the fallback visuals are ours to build against tokens.",
+                                                  "url":  "https://github.com/bvaughn/react-error-boundary",
+                                                  "install":  "npm i react-error-boundary (optional)"
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Button (for the \u0027Try again\u0027 action)",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/button",
+                                                  "note":  "Reuse the foundation Button for the reset control instead of a raw \u003cbutton\u003e."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Logo",
+                           "currentPath":  "apps/web/src/common/Logo/Logo.tsx",
+                           "visualSpec":  "Static Rillio brand mark as inline SVG (201x207 viewBox, rendered at size prop default 34, aspect 207/201). An #FFA033 rounded-square (rx 57) with a dark (#020407) play triangle and orange \u0027rill\u0027 stream ribbons flowing across. Colors are intrinsic to the brand (not tokenized). aria-label=\u0027Rillio\u0027 role=img. className + size props only. Used as the LogoMark fallback and in the legacy HorizontalNavBar logo slot.",
+                           "logicToReuse":  "It is a static asset - the SVG paths themselves are the brand and must be preserved byte-for-byte. Only className/size are external.",
+                           "motionIdeas":  "Static by design (the animated variant is LogoMark). If ever animated standalone, a draw-on stroke or the ribbons doing a subtle flow loop - but keep this one static as the reduced-motion/fallback path.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom (brand SVG asset). No registry equivalent - it is proprietary artwork.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "A brand logo is bespoke artwork; no component library can supply it. Keep the SVG exactly; at most wrap in a typed component.",
+                                                  "gaps":  "N/A.",
+                                                  "url":  ""
+                                              }
+                       },
+                       {
+                           "name":  "LogoMark",
+                           "currentPath":  "apps/web/src/common/LogoMark/LogoMark.tsx",
+                           "visualSpec":  "The header brand mark with the WebGL fluid-fill animation from the loading screen. Renders a \u003cspan\u003e wrapper (className passthrough, e.g. h-8) containing either a \u003ccanvas\u003e (220x226, block h-full w-auto) driven by window.__rillioFluidLogo, or the static \u003cLogo\u003e fallback. Runs the animation deferred via requestIdleCallback (timeout 2000, else setTimeout 1200) so the geodesic bake does not compete with app mount; holds fully-filled at rest and pours the fill while a hover target is hovered. hoverRef prop lets an outer element (the whole brand link) trigger the pour so hovering the wordmark animates the mark too. Falls back to static Logo on missing WebGL/reduced-motion/safety-timeout (safety 8000ms).",
+                           "logicToReuse":  "window.__rillioFluidLogo runtime (the loading-screen WebGL program), requestIdleCallback deferral, hover-target wiring via hoverRef, the fallback-to-Logo path. This is tightly coupled brand+WebGL - reuse verbatim.",
+                           "motionIdeas":  "The animation is the WebGL fluid pour (keep it). Framer-motion role is only orchestration: fade the canvas in when it first mounts (avoid a blank frame), and coordinate the wordmark fade with the pour via a shared hover state. Do not try to reimplement the fluid effect in framer-motion.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom (bespoke WebGL fluid-fill brand mark). No registry equivalent.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "This is a proprietary WebGL shader animation of the brand logo tied to a global runtime; nothing in any registry approximates it, and it must stay coupled to __rillioFluidLogo and the Logo fallback. Keep as-is; only the wrapper className/hover wiring touches the rewrite.",
+                                                  "gaps":  "N/A - fully bespoke.",
+                                                  "url":  ""
+                                              }
+                       }
+                   ]
+}

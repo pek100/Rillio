@@ -1,0 +1,254 @@
+{
+    "family":  "media-cards",
+    "familyNotes":  "This family splits cleanly into three tiers, which should drive rewrite effort. (1) True VIEW components that need a clean-room rewrite: MetaItem, MetaPreview, MetaRow, Video, ActionsGroup, ShortcutsGroup (+ Combos/Keys), DisplayNameEdit, Image, and the placeholders. (2) Pure LOGIC wrappers with NO view of their own: LibItem and ContinueWatchingItem just compute options/handlers and render MetaItem, so there is nothing visual to rewrite; keep them nearly verbatim and only update the props they forward if MetaItem\u0027s API changes. (3) Shared sub-parts of MetaPreview (ActionButton, MetaLinks, Ratings) that fold into their parents.\n\nThe whole family leans on a few shared primitives that MUST be rewritten first in the foundation kit because everything here consumes them: Button (rillio/components/Button - an anchor/button with href+deepLink navigation and a selectPrevented native-event convention), Image (this family owns it), Multiselect + Popup (the custom menu/positioning layer used by MetaItem\u0027s options menu and Video\u0027s context menu), Tooltip (rillio/common/Tooltips), and ModalDialog + SharePrompt (MetaPreview share flow). The selectPrevented / togglePopupPrevented / buttonClickPrevented native-event flag convention is load-bearing across MetaItem, LibItem, ContinueWatchingItem and Video (inner controls set a flag on event.nativeEvent so the outer Button\u0027s click handler skips navigation) - any premade part wrapping these must preserve that bubbling contract or the overlay buttons will double-fire navigation.\n\nDesign-language fit: shadcn/ui\u0027s new flat primitives (Item, ItemGroup+ItemSeparator, button-group, kbd, empty) are an unusually strong match for the \"flat, borderless, divide-y lists over cards, rounded-full pills, one accent\" language - prefer them. The poster-grid cards themselves (MetaItem) have no true registry equivalent (progress bar + watched badge + hover library/watched toggles + new-videos stack + options menu over an aspect-locked poster) and stay custom-on-primitives. Radix-on-React-18.3 is fine for all recommended shadcn parts; none require Next/RSC. Icons: everything uses @stremio/stremio-icons names (more-vertical, close, checkmark, add-to-library, eye/eye-off, play, add, chevron-forward, imdb, thumbs-up, heart, share, edit, symbol) - premade parts that hard-default to lucide should have their icon slot swapped to the Icon component.",
+    "components":  [
+                       {
+                           "name":  "MetaItem",
+                           "currentPath":  "apps/web/src/components/MetaItem/MetaItem.js",
+                           "visualSpec":  "The core poster card. Aspect-locked poster (poster 0.68/landscape/square via --poster-shape-ratio, padding-top trick) over --color-surface, rounded, cover-fit image at 0.9 opacity with an Icon fallback (ICON_FOR_TYPE by type). Overlay layers stacked with negative z-index revealed on hover/focus/active/selected: poster scales 1.02 + outer-glow, image brightness 1.1. Overlays: top-left dismiss X (fades in on hover, backdrop circle, title LIBRARY_RESUME_DISMISS) only if onDismissClick; top-left watched checkmark badge (circle, always shown when watched); top-right vertical stack of two hover-revealed round toggle buttons (add/remove-from-library, eye/eye-off) shown only when libraryState.hasId, hover=surface-hover+scale1.1, active scale0.95, icon fg-muted-\u003eaccent; centered play button (ring outline that fills accent on hover, scales 1.1) only if onPlayClick; bottom progress bar (accent fill over 0.3-opacity track) when progress\u003e0; top-right stacked \u0027new videos\u0027 badge with add icon + count when newVideos\u003e0. Below poster a 4rem title bar: 2-line-clamped centered 600-weight name + a hover-revealed more-vertical Multiselect menu (opacity 0-\u003e1, translateX). Whole card is a Button with href from deepLinks (streams\u003evideos\u003eplayer). Mobile: padding 0.5rem. States: hover/focus/active(menu open)/selected all share the reveal; focus adds accent outline ring.",
+                           "logicToReuse":  "useLibraryItemState(id, fallback) -\u003e {hasId, inLibrary, watched, toggleInLibrary, toggleWatched} (single shared subscription keyed by meta id); useBinaryState for menu open/close; useNavigateWithOrigin().navigateWithOrigin for deepLink nav; ICON_FOR_TYPE from common/CONSTANTS; filterInvalidDOMProps; the metaPreview reconstruction memo (dataset-or-fields) and the selectPrevented native-event convention on all inner controls. Consumes Button, Image, Multiselect, Icon.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom poster card built on shadcn primitives: aspect-ratio (poster/landscape/square lock), dropdown-menu (replaces Multiselect options menu), tooltip (hover controls), plus this family\u0027s Image. No registry poster card carries progress bar + watched badge + hover library/watched toggles + new-videos stack together.",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add aspect-ratio dropdown-menu tooltip",
+                                                  "url":  "https://ui.shadcn.com/docs/components/aspect-ratio",
+                                                  "rationale":  "The card is a bespoke composition; only its sub-pieces have registry equivalents. shadcn AspectRatio cleanly replaces the padding-top ratio trick, dropdown-menu (Radix, React18/Tailwind-v4 fine, route-agnostic) replaces the custom Multiselect for the more-vertical menu, and Radix Tooltip replaces the title-attribute hovers. All themeable to --color-* without fighting defaults.",
+                                                  "gaps":  "No premade part provides the overlay system (dismiss/watched/play/progress/new-videos), the hover-reveal choreography, or the selectPrevented click-suppression contract - all rebuilt by hand. dropdown-menu is internal-trigger driven (fine here; MetaItem\u0027s menu is not a route). Keep useLibraryItemState wiring verbatim."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Card Hover Effect / 3D Card Effect",
+                                                  "source":  "aceternity",
+                                                  "url":  "https://ui.aceternity.com/components/card-hover-effect",
+                                                  "note":  "Motion inspiration for the hover lift only; not a structural fit (no media-card semantics, ships its own grid)."
+                                              },
+                                              {
+                                                  "part":  "hover-card",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/hover-card",
+                                                  "note":  "If a hover meta-preview popover is ever wanted on cards; not in the current design."
+                                              }
+                                          ],
+                           "motionIdeas":  "Poster: whileHover scale 1.02 with a soft spring (stiffness ~300, damping ~30) replacing the CSS transition; layoutId on the poster so it can morph into the MetaPreview hero later (deferred). Overlay toggles: stagger children fade+slide-in (y 4px) on hover via AnimatePresence. Play ring: animate strokeDashoffset/scale on hover. Progress bar: animate width from 0 on mount. New-videos badge: pop-in with a spring + subtle count tick."
+                       },
+                       {
+                           "name":  "MetaPreview",
+                           "currentPath":  "apps/web/src/components/MetaPreview/MetaPreview.js",
+                           "visualSpec":  "The meta-details hero panel (forwardRef, has compact variant). Blurred cover background layer (blur 10px, opacity 0.3, inset -10px). Scrollable meta-info column: logo image (9rem contain, or a text logo-placeholder fallback = the name), then a runtime/release-info row (runtime label, releaseInfo or released year, an IMDb pill button linking to a stremio.com/warning redirect, and right-aligned meta-actions = an ActionsGroup of library/watched/share + a Ratings ActionsGroup), then a SUMMARY-labelled description block, then MetaLinks groups (genres etc; hides imdb/share/writers/cast/directors categories, redirect-allowlisted stremio: links). Compact variant: smaller logo (6rem), condensed spacing, and moves actions to a bottom action-buttons-container with the library/watched ActionsGroup + a wide accent \u0027SHOW\u0027 ActionButton (play) using showHref (player\u003estreams\u003evideos). Share opens a ModalDialog with SharePrompt. Placeholder = MetaPreview.Placeholder (skeleton logo/duration/genre blocks).",
+                           "logicToReuse":  "useBinaryState for share modal; the linksGroups reducer (URL parse, redirect allowlist ALLOWED_LINK_REDIRECTS, IMDB/SHARE special-casing, HIDDEN_LINK_CATEGORIES filter); showHref memo; metaItemActions memo; toggleInLibrary/toggleWatched/ratingInfo props (from MetaDetails core). Consumes ActionsGroup, Ratings (+useRating-\u003ecore.transport Rate dispatch), MetaLinks, ActionButton, Button, Image, ModalDialog, SharePrompt, Icon.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom hero panel. Compose from already-recommended sub-parts (ActionsGroup-\u003ebutton-group, Ratings-\u003etoggle-group, IMDb/SHOW as button, MetaLinks as pill row) plus shadcn dialog for the share modal and aspect/Image for the blurred backdrop. No registry \u0027media hero\u0027 matches this exact layout.",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add dialog scroll-area",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dialog",
+                                                  "rationale":  "This is an app-specific detail layout with domain link-parsing logic; no premade block will fit without heavy fighting. The only genuinely swappable premade pieces are the share ModalDialog -\u003e shadcn Dialog (Radix, route-drivable via open prop) and optionally ScrollArea for the meta-info scroller. Everything else is custom composition of this family\u0027s other rewritten parts.",
+                                                  "gaps":  "No premade covers the links reducer, the compact/non-compact branch, the IMDb warning-redirect pill, or the logo-text fallback. Keep the linksGroups logic and core dispatch wiring verbatim; only restyle."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Aceternity Hero / Spotlight blocks",
+                                                  "source":  "aceternity",
+                                                  "url":  "https://ui.aceternity.com/components",
+                                                  "note":  "Only if a flashier backdrop is wanted; adds Framer deps and does not match the flat token system."
+                                              }
+                                          ],
+                           "motionIdeas":  "Panel entrance: fade + y 8px with a gentle spring. Logo: fade/scale-in. Background blur layer: slow opacity/scale ken-burns loop (very subtle). Description expand/collapse could use layout height animation. Share Dialog: standard shadcn scale+fade. Consider a shared layoutId with the originating MetaItem poster for a morph-in (deferred with PiP work)."
+                       },
+                       {
+                           "name":  "MetaRow",
+                           "currentPath":  "apps/web/src/components/MetaRow/MetaRow.js",
+                           "visualSpec":  "A titled catalog row. Header: right-justified flex with a flex-1 1.6rem/600 title (from title prop or t.catalogTitle(catalog)) and a \u0027SEE ALL\u0027 pill Button (opacity 0.6-\u003e1, overlay bg on hover, chevron-forward icon) when a discover/library deepLink exists. Body: either a single muted message line, or a flex-row of items - renders up to CATALOG_PREVIEW_SIZE via React.createElement(itemComponent, {...item}) each flex-sized by poster shape (1/ratio for poster, 1 for square, 1/landscape-ratio), padded out with empty placeholder divs to keep the row width stable. Not a scroller - a fixed fit-to-width row. Mobile: tighter padding, title truncates. MetaRow.Placeholder renders skeleton poster+title items with the same header.",
+                           "logicToReuse":  "useTranslate (t.catalogTitle, t.string); items = catalog.items ?? catalog.content.content; href = deepLinks.discover ?? deepLinks.library; CATALOG_PREVIEW_SIZE from CONSTANTS; ReactIs.isValidElementType(itemComponent) guard; the fill-with-placeholders width-stabilizing logic. itemComponent is injected (MetaItem/LibItem/ContinueWatchingItem). Consumes Button, Icon.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom row: keep the fixed fit-to-width flex layout, restyle the header \u0027SEE ALL\u0027 as a shadcn button (ghost, rounded-full) with a chevron. Adopt shadcn Carousel ONLY if switching to a true horizontal scroller.",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add button carousel",
+                                                  "url":  "https://ui.shadcn.com/docs/components/carousel",
+                                                  "rationale":  "The current row is intentionally a fixed N-item fit (not a scroller), so the layout stays custom - the only premade swap is the \u0027SEE ALL\u0027 control -\u003e shadcn Button variants. shadcn Carousel (embla, React18-safe, no Next) is the right premade IF the redesign moves to a scrollable, peek-next-item rail, which is a common upgrade for this pattern.",
+                                                  "gaps":  "Carousel would change behavior (scroll vs fixed fit) and drop the placeholder-fill width stabilization - a design decision, not a drop-in. Keep the itemComponent injection and CATALOG_PREVIEW_SIZE slicing regardless."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "ScrollArea (horizontal)",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/scroll-area",
+                                                  "note":  "Lighter alternative to Carousel for a plain scroll rail without embla snap."
+                                              }
+                                          ],
+                           "motionIdeas":  "Header \u0027SEE ALL\u0027 chevron nudges x+2px on hover. If Carousel adopted: momentum scroll + snap, and per-item stagger fade/slide-in on first paint using whileInView. Skeleton-\u003econtent crossfade when the catalog resolves (AnimatePresence keyed on loading state)."
+                       },
+                       {
+                           "name":  "LibItem",
+                           "currentPath":  "apps/web/src/components/LibItem/LibItem.js",
+                           "visualSpec":  "NO view of its own - a logic wrapper that renders MetaItem. Computes newVideos (clamped 0-99 from notifications.items[_id]), the options menu array (play/details/dismiss/watched/remove, each conditionally included by deepLinks/progress/removable and i18n-labelled), and an optionOnSelect handler dispatching core actions (LibraryItemMarkAsWatched, RewindLibraryItem+DismissNotificationItem, RemoveFromLibrary) plus navigation for play/details, and an onPlayClick that navigates to the player deepLink.",
+                           "logicToReuse":  "ENTIRE FILE is the data contract - useNavigate + toPath, useCore().transport.dispatch for the five Ctx actions, i18next t for option labels, notifications-\u003enewVideos memo, the options filter/map, optionOnSelect switch, onPlayClick memo. This is the library interaction layer for cards.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "No rewrite - keep as-is (logic-only). It has no markup; it configures MetaItem. Only touch it if MetaItem\u0027s props (options/optionOnSelect/onPlayClick/newVideos) are renamed in the rewrite.",
+                                                  "confidence":  "high",
+                                                  "install":  "",
+                                                  "url":  "",
+                                                  "rationale":  "There is no view layer here to clean-room. Rewriting it would only risk the core-dispatch wiring. The premade-part decision lives entirely in MetaItem.",
+                                                  "gaps":  "None visual. If MetaItem\u0027s options menu moves to shadcn dropdown-menu, adapt the options array shape (value/label) to the menu\u0027s item model, but keep the dispatch switch identical."
+                                              },
+                           "alternates":  [
+
+                                          ],
+                           "motionIdeas":  "N/A (no view). Any motion belongs to the MetaItem it renders."
+                       },
+                       {
+                           "name":  "ContinueWatchingItem",
+                           "currentPath":  "apps/web/src/components/ContinueWatchingItem/ContinueWatchingItem.js",
+                           "visualSpec":  "NO view of its own - a thin logic wrapper over LibItem. Sets posterChangeCursor=true, forwards notifications, and supplies onDismissClick that dispatches RewindLibraryItem + DismissNotificationItem for _id (this is what surfaces MetaItem\u0027s dismiss X and zoom cursor for the Board/Continue-Watching row).",
+                           "logicToReuse":  "Entire file: useCore().transport.dispatch for RewindLibraryItem + DismissNotificationItem, the onDismissClick handler, and the posterChangeCursor flag. It is the \u0027continue watching\u0027 specialization of LibItem.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "No rewrite - keep as-is (logic-only). Renders LibItem which renders MetaItem; the dismiss overlay it enables lives in MetaItem\u0027s rewrite.",
+                                                  "confidence":  "high",
+                                                  "install":  "",
+                                                  "url":  "",
+                                                  "rationale":  "Pure behavior wrapper; nothing to redesign. Preserve the dismiss dispatch and posterChangeCursor pass-through.",
+                                                  "gaps":  "None visual. Ensure MetaItem\u0027s rewritten dismiss layer still reads onDismissClick + posterChangeCursor."
+                                              },
+                           "alternates":  [
+
+                                          ],
+                           "motionIdeas":  "N/A (no view). Dismiss animation belongs to MetaItem\u0027s dismiss overlay."
+                       },
+                       {
+                           "name":  "Image",
+                           "currentPath":  "apps/web/src/components/Image/Image.tsx",
+                           "visualSpec":  "A thin \u003cimg\u003e wrapper adding graceful fallback: tracks a \u0027broken\u0027 state, resets it on src change (useLayoutEffect), and on error (or empty/non-string src) renders either renderFallback() (a render-prop, used everywhere for the type-icon / logo-text placeholders) or a fallbackSrc \u003cimg\u003e. Always loading=\u0027lazy\u0027, forwards alt/className and arbitrary img props, chains a user onError. No visual chrome of its own - styling comes from the caller\u0027s className (object-fit cover, opacity, blur, etc.).",
+                           "logicToReuse":  "The broken-state machine + src-change reset + renderFallback/fallbackSrc branching is the contract; MetaItem (poster+type icon), MetaPreview (logo+text fallback, blurred background), and Video (thumbnail+symbol icon) all depend on renderFallback. Keep loading=\u0027lazy\u0027 and the onError chaining.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Keep custom (tiny). No general-purpose image-with-fallback exists in the target registries (shadcn only has Avatar\u0027s Image/Fallback, which is avatar-scoped and not a drop-in for arbitrary posters/logos/thumbnails).",
+                                                  "confidence":  "high",
+                                                  "install":  "",
+                                                  "url":  "",
+                                                  "rationale":  "It is ~30 lines and already framework-agnostic (no Next/RSC). The Avatar pattern is the only registry analog and does not generalize to cover-fit posters or the render-prop fallback callers rely on. Rewriting gains nothing.",
+                                                  "gaps":  "If a blur-up/placeholder shimmer is desired, add it here (registry has no equivalent that avoids next/image). Preserve the renderFallback API exactly - many callers pass icon/text fallbacks."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Avatar (AvatarImage + AvatarFallback)",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/avatar",
+                                                  "note":  "Only conceptually similar; avatar-shaped, not suitable for posters/logos/thumbnails."
+                                              }
+                                          ],
+                           "motionIdeas":  "Optional fade-in on load (opacity 0-\u003e1 on the img\u0027s onLoad) and a crossfade from fallback-\u003ereal image via AnimatePresence. A shimmer keyframe while loading would pair with the placeholder skeletons."
+                       },
+                       {
+                           "name":  "Video",
+                           "currentPath":  "apps/web/src/components/Video/Video.js",
+                           "visualSpec":  "An episode/video list row (flat, borderless, overlay-bg on hover/focus/active). Left: thumbnail (8x5rem, cover, 0.9 opacity, optional spoiler blur when hideSpoilers \u0026\u0026 season \u0026\u0026 episode \u0026\u0026 !watched, symbol-icon fallback) with a bottom accent progress bar when progress\u003e0. Right info column: 2-line-clamped title (\u0027{episode}. {title||id}\u0027), then a row with a localized released date (or TBA when scheduled) and right-aligned flag pills: \u0027UPCOMING\u0027 (accent-soft bg, accent text) when upcoming \u0026\u0026 !watched, and \u0027WATCHED\u0027 (eye icon, overlay bg, muted) when watched. Selected rows run a 3s border-accent-fade animation and scrollIntoView. A context menu (via custom Popup) opens on right-click / Ctrl+click / long-press (non-mouse): three options WATCH / mark-(un)watched / mark-(un)watch-rest-of-season, overlay-bg hover, positioned by Popup with direction classes. Video.Placeholder = skeleton row. Clicking navigates player or metaDetailsStreams (replace on desktop).",
+                           "logicToReuse":  "useRouteFocused (auto-close menu on blur), useProfile (settings.hideSpoilers, interfaceLanguage), usePlatform (isMobile replace nav), useBinaryState (menu), useNavigate+toPath; the Popup long-press/context-menu event dance (togglePopupPrevented/buttonClickPrevented flags), onSelect/onMarkVideoAsWatched/onMarkSeasonAsWatched callbacks, selected-\u003escrollIntoView effect. Consumes Popup, Button, Image, Icon.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Item (ItemMedia=thumbnail, ItemContent=ItemTitle/ItemDescription, ItemActions=flag pills) inside an ItemGroup with ItemSeparator, plus ContextMenu for the right-click/long-press menu. Badge for UPCOMING/WATCHED flags.",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add item context-menu badge",
+                                                  "url":  "https://ui.shadcn.com/docs/components/item",
+                                                  "rationale":  "shadcn Item is an almost-exact match for this flat, borderless, media+title+description+actions row and its ItemGroup+ItemSeparator gives the divide-y look the design system wants. ContextMenu (Radix) is the native premade for the right-click menu. Both are React18/Tailwind-v4 safe, no Next, themeable to --color-* directly.",
+                                                  "gaps":  "Item has no thumbnail progress bar, spoiler-blur, or the selected 3s border-flash - add those to ItemMedia. Radix ContextMenu handles right-click but NOT the custom Ctrl+click and non-mouse long-press triggers, nor the togglePopupPrevented flag contract - keep the Popup gesture logic and either feed ContextMenu programmatically or retain Popup for menu positioning. Keep useProfile/usePlatform/scrollIntoView wiring verbatim."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "dropdown-menu",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dropdown-menu",
+                                                  "note":  "If the menu should also open from a visible trigger button rather than only right-click/long-press."
+                                              }
+                                          ],
+                           "motionIdeas":  "Row hover: bg tint fade + slight x+2px content shift. Selected: replace the 3s CSS border-fade with a Framer highlight that pulses the accent ring once then settles. Thumbnail: scale 1.03 on row hover. Context menu: shadcn\u0027s scale/fade origin-aware entrance. Progress bar animates width on mount. List reflow (mark-watched removing a row) via layout animations + AnimatePresence."
+                       },
+                       {
+                           "name":  "ActionsGroup",
+                           "currentPath":  "apps/web/src/components/ActionsGroup/ActionsGroup.tsx",
+                           "visualSpec":  "A horizontal segmented pill of icon buttons. Container: overlay-color bg, rounded-full (--radius-pill), 4rem tall (3rem mobile), backdrop-blur(5px), fit-content width. Each item: 4rem square (3rem mobile) flex-centered icon button, icon at 0.7 opacity-\u003e1 on hover/focus, focus-visible accent outline (offset -2px), pointer, rounded-full; disabled = pointer-events none. Optional Tooltip (top) per item from item.label. Icons via @stremio/stremio-icons name. Used by MetaPreview (library/watched/share, sized down to 2.5rem via CSS import override) and Ratings (thumbs-up/heart toggles).",
+                           "logicToReuse":  "items: {icon,label?,disabled?,className?,onClick?}[]; renders Tooltip from rillio/common/Tooltips and Icon. Callers own state (Ratings toggles icon by liked/loved; MetaPreview swaps add/remove + eye/eye-off). The CSS-import size-override from MetaPreview styles must keep working (icon-container/icon class names) or be replaced by a size prop.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "ButtonGroup wrapping icon Buttons, each with a Tooltip. Use size variants instead of the LESS :import size-override hack.",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add button-group button tooltip",
+                                                  "url":  "https://ui.shadcn.com/docs/components/button-group",
+                                                  "rationale":  "shadcn ButtonGroup is purpose-built for a connected segmented cluster of buttons and matches the rounded-full pill/one-accent language; pairing with Radix Tooltip replaces the custom Tooltip usage cleanly. React18/Tailwind-v4 safe, no Next. A size prop replaces the fragile cross-component LESS class import currently used to shrink the group inside MetaPreview.",
+                                                  "gaps":  "ButtonGroup does not do the backdrop-blur pill background by default - add via className. It is stateless (fine); toggle visuals (Ratings liked/loved, library add/remove) stay caller-driven by swapping the icon, OR migrate the toggle cases to ToggleGroup (see alternate). Preserve the icon-name-driven API so MetaPreview/Ratings pass through unchanged."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "ToggleGroup (type=multiple)",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/toggle-group",
+                                                  "note":  "Better for the genuinely toggly uses (Ratings like/love, library in/out) since it models pressed state natively."
+                                              },
+                                              {
+                                                  "part":  "Button group / segmented",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/buttons",
+                                                  "note":  "Origin UI has many segmented/icon button-group variants if a different visual is wanted."
+                                              }
+                                          ],
+                           "motionIdeas":  "Icon buttons: whileTap scale 0.92, whileHover opacity+scale 1.05. Toggle fill (thumbs-up/heart, add/remove): animate the icon swap with a small spring pop + AnimatePresence crossfade between outline/filled glyphs. Container: subtle backdrop-blur fade-in on mount."
+                       },
+                       {
+                           "name":  "ShortcutsGroup",
+                           "currentPath":  "apps/web/src/components/ShortcutsGroup/ShortcutsGroup.tsx",
+                           "visualSpec":  "A titled column of keyboard-shortcut rows (35rem wide, 2rem gaps). Title = muted 0.6-opacity label (i18n). Each shortcut row: baseline-aligned space-between with a left label (i18n, ellipsis) and right-aligned Combos. Combos (Combos.tsx): wrap-flex, right-justified; each combo is a run of Keys separated by a localized \u0027OR\u0027 (SETTINGS_SHORTCUT_OR, 0.6 opacity, 3.5rem wide). Keys (Keys.tsx): renders \u003ckbd\u003e chips (2.5rem tall, min 2.5rem, overlay bg, rounded 0.25em, a 4px bottom inset shadow) with symbol/label mapping (Shift-\u003eâ‡§, arrows-\u003eglyphs, Space/Ctrl/Esc/Backspace localized, else uppercased); joins with \u0027+\u0027 separators, and collapses pure-numeric ranges to first/last joined by localized \u0027TO\u0027.",
+                           "logicToReuse":  "useTranslation for all labels + the keyLabelMap; the isRange numeric-collapse logic and filteredKeys memo in Keys; the combos [][] shape (array of combos, each an array of key strings). Data is static shortcut config passed as shortcuts: {name,label,combos}[].",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Kbd + KbdGroup for the key chips (replaces the raw \u003ckbd\u003e + Keys/Combos styling); keep the group/row layout custom.",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add kbd",
+                                                  "url":  "https://ui.shadcn.com/docs/components/kbd",
+                                                  "rationale":  "shadcn\u0027s Kbd/KbdGroup (added Oct 2025) is exactly the primitive for keyboard-key display and pairs with the flat token system; KbdGroup handles the multi-key run. React18/Tailwind-v4 safe, no Radix runtime needed, no Next. The surrounding two-column shortcut list is app-specific layout that stays custom.",
+                                                  "gaps":  "Kbd won\u0027t do the symbol/localization mapping, the numeric-range collapse, or the \u0027OR\u0027/\u0027TO\u0027/\u0027+\u0027 separators - keep all of Keys.tsx\u0027s logic and just render Kbd instead of bare \u003ckbd\u003e. The 4px bottom-inset 3D shadow is a style choice to re-apply or drop."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Kbd",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/kbd",
+                                                  "note":  "Origin UI kbd variants if a different key-chip look is preferred."
+                                              }
+                                          ],
+                           "motionIdeas":  "Rows: whileInView stagger fade+y on the settings page. Key chips: on the corresponding shortcut firing (if ever surfaced live), a quick press-down translateY + shadow-collapse to mimic a physical keypress. Otherwise keep static - this is a reference panel."
+                       },
+                       {
+                           "name":  "DisplayNameEdit",
+                           "currentPath":  "apps/web/src/components/DisplayNameEdit/DisplayNameEdit.tsx",
+                           "visualSpec":  "Inline click-to-edit display name. Default state: a bold (700) truncated name label (size/max-width via --display-name-* custom props) + a low-opacity pencil Button that brightens on hover (whole row hover raises the button to opacity 1). Clicking the pencil swaps to an input (700 weight, overlay bg, 1px line border -\u003e accent border on focus, small radius) that autofocuses + selects-all on mount. Enter commits, Escape cancels, blur commits; empty handling is the owner\u0027s job. All click/key events stopPropagation so a hosting menu stays open. Sizing is themed per call site (account menu defaults vs Settings overrides) via the --display-name-size/-max-width/-icon-size custom properties on the passed className.",
+                           "logicToReuse":  "The edit state machine (editing/draft state, startEdit sets draft+editing, commit calls onCommit(draft), Enter/Escape/blur handlers, autofocus+select effect) and the stopPropagation contract; props value/maxLength(40)/onCommit; the --display-name-* CSS custom-property theming hook. Consumes Button, Icon(\u0027edit\u0027).",
+                           "recommendation":  {
+                                                  "source":  "other-registry",
+                                                  "part":  "Dice UI Editable (Editable / EditablePreview / EditableInput / EditableTrigger, with EditableSubmit/Cancel optional) - matches the exact behavior: preview\u003c-\u003einput toggle, autofocus, Enter commit, Escape cancel, commit-on-blur.",
+                                                  "confidence":  "high",
+                                                  "install":  "npx shadcn@latest add https://diceui.com/r/editable",
+                                                  "url":  "https://www.diceui.com/docs/components/editable",
+                                                  "rationale":  "Dice UI Editable is a near-exact behavioral match (Radix-principled, Tailwind/shadcn-compatible, React18, no Next) and would replace the hand-rolled state machine while preserving the pencil-trigger + inline-input UX. Themeable to --color-* and the --display-name-* sizing props.",
+                                                  "gaps":  "Does not know about the empty-name-reverts-to-random-handle rule (keep that in the owner\u0027s onCommit) nor the select-all-on-focus nicety (add via onFocus). Must verify stopPropagation still holds when embedded in the account dropdown so the menu doesn\u0027t close. If avoiding a new dependency, keep the current custom component - it is already small and correct."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "inline-editable-field",
+                                                  "source":  "other-registry",
+                                                  "url":  "https://www.shadcn-form.com/components/inline-editable-field",
+                                                  "note":  "shadcn-form\u0027s inline-editable-field: save-on-blur/Enter, Escape-cancel; simpler single-file alternative to Dice UI."
+                                              },
+                                              {
+                                                  "part":  "Input",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/input",
+                                                  "note":  "If keeping the custom toggle logic, use shadcn Input for the edit field and Button for the pencil - lowest-risk path."
+                                              }
+                                          ],
+                           "motionIdeas":  "Label\u003c-\u003einput swap: AnimatePresence crossfade + slight width grow into the input. Pencil: fades/scales in on row hover (whileHover). On commit: a brief accent flash on the label to confirm the save. Escape-cancel: quick shake or fade back to the old value."
+                       }
+                   ]
+}

@@ -1,0 +1,227 @@
+{
+    "family":  "form-primitives",
+    "familyNotes":  "These 9 are the app\u0027s lowest-level input primitives; several build on each other, so rewrite Button FIRST (Toggle, Chip, NumberInput, ColorInput all import it via `rillio/components`). Global visual language: flat/borderless, one accent #FFA033 (`--primary-accent-color`), track/fills use `--overlay-color` for the off/unfilled state, foreground `--primary-foreground-color`, focus via an OUTLINE (`--focus-outline-size`) not a ring, corners are `--radius-pill` for pill shapes and 0.3rem for the checkbox. Everything must theme to our semantic `--color-*`/legacy stremio-color tokens; shadcn defaults (border-heavy, card-like, ring-offset focus) need retokenizing to our outline-based, borderless look. Radix + shadcn are all React-18.3 and Tailwind-v4 compatible (\"use client\", no RSC), so the whole family is safe to adopt EXCEPT the player-grade Slider. Icons today come from @stremio/stremio-icons (`checkmark`, `remove`, `add`); parts that hard-depend on Lucide (Kibo color picker, most shadcn examples) need an icon swap or Lucide adopted locally. Custom onChange payload shapes (Checkbox emits `{type,checked,reactEvent,nativeEvent}`) are consumed by callers verbatim â€” the rewrite must preserve those signatures or adapt at the call site.",
+    "components":  [
+                       {
+                           "name":  "Button",
+                           "currentPath":  "apps/web/src/components/Button/Button.tsx",
+                           "visualSpec":  "Low-level polymorphic clickable primitive, NOT a styled CTA. Renders \u003ca\u003e when href is a non-empty string, else \u003cdiv\u003e. Always tabIndex=0, cursor:pointer. Focus shows a solid outline (accent color, inset via negative outline-offset). disabled =\u003e pointer-events:none + opacity 0.5 (via global .disabled class). No visual variants/sizes/colors of its own - it is the unstyled base every other button-like primitive composes; callers pass className for looks. Behaviors: Enter key triggers .click() (unless nativeEvent.buttonClickPrevented); onMouseDown blurs the active element and preventDefault (unless nativeEvent.buttonBlurPrevented) so buttons never keep focus after click; long-press support; onDoubleClick passthrough.",
+                           "logicToReuse":  "use-long-press (LongPressEventType.Pointer) for onLongPress; the buttonClickPrevented / buttonBlurPrevented nativeEvent escape hatches other components rely on; polymorphic href-\u003eanchor; forwardRef. Consumed by Toggle, Chip, NumberInput, ColorInput, Checkbox link.",
+                           "motionIdeas":  "whileTap scale 0.97 spring (stiffness 400, damping 25); hover brightness via CSS not motion; focus outline can animate width with a 120ms ease. Keep it cheap since this primitive renders hundreds of times.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Button",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "shadcn Button gives us the cva variant/size vocabulary (variant: default/ghost/outline/link, size: default/sm/lg/icon) and Radix Slot `asChild` polymorphism that cleanly replaces the href-\u003eanchor branch. But it is a STYLED button, whereas ours is an unstyled behavioral base. Adopt shadcn\u0027s variant system for the foundation kit, but preserve our behavioral layer (long-press, Enter-\u003eclick, mousedown-blur, the *Prevented escape hatches) - those are load-bearing and have no shadcn equivalent. The `size:icon` variant plus explicit inline-flex/size-N/items-center/justify-center matches our canonical bare-glyph icon-button rule.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/button",
+                                                  "install":  "npx shadcn@latest add button",
+                                                  "gaps":  "No long-press, no Enter-\u003esynthetic-click, no mousedown-blur, no buttonClickPrevented/buttonBlurPrevented hooks. Default focus is ring-offset, not our inset outline - retokenize. Keep our behavior layer as a thin wrapper around the shadcn variants."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Custom (keep current Button, add cva variants)",
+                                                  "source":  "custom",
+                                                  "note":  "Because so many primitives depend on its exact behavior, safest is to keep our Button.tsx and only bolt cva variants + Slot onto it, rather than swap wholesale."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Checkbox",
+                           "currentPath":  "apps/web/src/components/Checkbox/Checkbox.tsx",
+                           "visualSpec":  "1.5rem square, radius 0.3rem, `--overlay-color` background; checked =\u003e background `--primary-accent-color` with a `checkmark` glyph filling the box in foreground color. role=checkbox on the box, tabIndex 0 (or -1 disabled), aria-checked, Enter/Space toggles. Hidden native \u003cinput type=checkbox\u003e for the real state. Optional trailing label (0.9rem, 60% opacity) and an optional inline link (accent, underline on hover) rendered via Button when href+link given. States: checked (accent bg), disabled (cursor not-allowed), error (border danger). Focus/hover =\u003e solid outline (light5).",
+                           "logicToReuse":  "onChange emits a custom payload `{type:\u0027select\u0027, checked, reactEvent, nativeEvent}` - callers depend on this exact shape. name maps input id/htmlFor. forwardRef to the input. Keyboard toggle handler.",
+                           "motionIdeas":  "Checkmark draw-in via SVG pathLength 0-\u003e1 (Framer motion path) on check; box bg cross-fade 150ms; a subtle scale 0.9-\u003e1 pop on the box when checked (spring). Unchecking fades the mark out.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Checkbox",
+                                                  "confidence":  "high",
+                                                  "rationale":  "shadcn Checkbox (Radix Checkbox primitive) is the canonical fit: accessible by construction, checked/disabled states built in, trivially themed to our accent bg + 0.3rem radius + checkmark glyph. Radix handles the a11y our hand-rolled role=checkbox+aria-checked+keyboard code currently reimplements, so the rewrite gets simpler. Wrap it to keep our label+optional-link layout and to adapt Radix\u0027s onCheckedChange(boolean) into our `{type,checked,reactEvent,nativeEvent}` payload at the boundary.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/checkbox",
+                                                  "install":  "npx shadcn@latest add checkbox",
+                                                  "gaps":  "onCheckedChange gives a boolean, not our rich payload - adapt at the wrapper. No built-in label+inline-link row or error state - compose those (Radix has no error variant; add via data attr + token). Swap Lucide Check for our stremio `checkmark` icon or accept Lucide."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Checkbox (various)",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/checkbox",
+                                                  "note":  "Origin UI has label+description checkbox layouts on Radix that closely match our labelled variant if we want a prebuilt row."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Toggle",
+                           "currentPath":  "apps/web/src/components/Toggle/Toggle.tsx",
+                           "visualSpec":  "A SWITCH (on/off), not a toggle-button. 3.2rem x 1.7rem pill track, `--overlay-color` off; checked =\u003e track `--primary-accent-color` and the round thumb (foreground color) translates to the right. Thumb size = height minus 0.5rem margin. Transitions: bg 0.1s, thumb transform 0.1s. Built by composing our Button (so it inherits focus-outline, disabled opacity, long-press, keyboard). Optional children rendered next to the switch.",
+                           "logicToReuse":  "Composes rillio Button (keep that dependency chain). checked prop drives the `.checked` class; disabled/tabIndex passthrough to Button. Note: parent owns state - Toggle itself has no onChange, the click handler comes through Button props from the caller.",
+                           "motionIdeas":  "Thumb translate as a spring (stiffness 500, damping 30) for a springy snap instead of the current linear 0.1s; track color cross-fade; optional thumb width-stretch on drag/press (layout). Framer `layout` on the thumb keeps it smooth if track size ever changes.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Switch",
+                                                  "confidence":  "high",
+                                                  "rationale":  "shadcn Switch (Radix Switch) is the exact semantic and visual match - pill track + sliding thumb, checked/disabled built in, keyboard + a11y free. Retokenize track-off to `--overlay-color`, checked to accent, thumb to foreground, and size to 3.2x1.7rem. This is a cleaner, more accessible base than our Button-composition approach and drops the manual keyboard code.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/switch",
+                                                  "install":  "npx shadcn@latest add switch",
+                                                  "gaps":  "Radix Switch owns its checked/onCheckedChange - our current Toggle is controlled purely via Button props, so the rewrite should move to onCheckedChange and update call sites (they mostly already pass checked + a click handler). The optional trailing children layout is not part of Switch - wrap in a label row."
+                                              },
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "RadioButton",
+                           "currentPath":  "apps/web/src/components/RadioButton/RadioButton.tsx",
+                           "visualSpec":  "Single 1.75rem circle: 3px `--color-placeholder` border, transparent center; selected =\u003e inner 1.25rem circle fills with accent (opacity 0-\u003e1 fade). role=radio, tabIndex 0/-1, aria-checked, Enter/Space toggles. States: disabled (cursor not-allowed), error (border danger), focus (solid outline). Note: this is a standalone radio dot - it does NOT implement grouping/name/exclusive selection; the parent manages which one is selected.",
+                           "logicToReuse":  "onChange(checked:boolean) simple signature; selected/disabled/error props; keyboard handler. Parent owns group exclusivity today.",
+                           "motionIdeas":  "Inner dot scale 0-\u003e1 spring on select (stiffness 400) plus opacity fade; border color tween to accent on select; press whileTap scale 0.9.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "RadioGroup / RadioGroupItem",
+                                                  "confidence":  "high",
+                                                  "rationale":  "shadcn RadioGroup (Radix RadioGroup) is the right primitive and is actually an UPGRADE: our component is just a lone dot with no real grouping, so callers hand-roll exclusivity. Radix RadioGroup gives roving focus, arrow-key navigation, and single-selection for free. Style RadioGroupItem to the 1.75rem ring + accent inner dot. Where a caller only needs one bare dot, RadioGroupItem still works inside a group of one.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radio-group",
+                                                  "install":  "npx shadcn@latest add radio-group",
+                                                  "gaps":  "Moving from standalone dot to a real RadioGroup changes the data contract (value/onValueChange on the group instead of per-item onChange boolean) - worth doing but touches call sites. No built-in error state; add via data attr + `--color-danger` token."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Radio (card/label variants)",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/radio",
+                                                  "note":  "Origin UI radio group examples on Radix if we want labelled/description rows out of the box."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Slider",
+                           "currentPath":  "apps/web/src/components/Slider/Slider.js",
+                           "visualSpec":  "A MEDIA scrubber, not a form slider. Four stacked absolute layers: (1) base track (accent @20% opacity, or an audio-boost gradient white-\u003ewarning-\u003edanger @30%), (2) a `track-before` buffered underlay (overlay color, width = buffered %), (3) a `track-after` filled portion (accent, revealed by a linear-gradient mask up to thumb), (4) the round thumb (foreground color, translateX -50%). Sizes via CSS vars --track-size/--thumb-size. Horizontal only. disabled =\u003e pointer-events none + opacity 0.5. Grabbing sets html.active-slider-within (cursor grabbing, body pointer-events none).",
+                           "logicToReuse":  "CRITICAL - reuse as-is: window-level mouse/touch drag with useAnimationFrame throttling, useLiveRef for value/buffered/callbacks, useRouteFocused to release on route change, calculateValueForMouseX geometry, retainThumb/releaseThumb global-listener lifecycle. Props: value, buffered, minimumValue, maximumValue, onSlide (during drag), onComplete (on release), audioBoost. This is player logic - do NOT rewrite it.",
+                           "motionIdeas":  "Thumb scale-up on grab (1-\u003e1.25 spring); filled track has no entrance (tracks playback). Keep motion minimal - this is real-time; avoid layout animations that fight the RAF loop. A hover-grow on the thumb via CSS is enough.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Keep the existing Slider (player scrubber); do not adopt a registry slider",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Radix Slider (shadcn) models a single value/range track + thumb and has NO concept of a separate BUFFERED underlay or an audio-boost gradient-masked fill, and it does not expose onSlide-vs-onComplete or the window-level grab semantics this player relies on. Forcing our buffered/audioBoost/RAF scrubber into Radix would fight the primitive. Per project rules player logic is reused and player chrome is rewritten last - keep this component, only restyle the track/thumb via tokens. Note the video surface / player controls similarly have no registry equivalent.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/slider",
+                                                  "install":  "npx shadcn@latest add slider",
+                                                  "gaps":  "shadcn/Radix Slider is a fine fit ONLY for simple settings sliders (single value, no buffer, no dual callbacks). If any non-player settings slider exists, use Radix there; keep custom for the seekbar/volume+audioBoost."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Slider",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/slider",
+                                                  "note":  "Use for plain settings sliders only, not the buffered media scrubber."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "TextInput",
+                           "currentPath":  "apps/web/src/components/TextInput/TextInput.tsx",
+                           "visualSpec":  "Thin wrapper over native \u003cinput\u003e. No box styling of its own beyond user-select:text and removing the Firefox focus inner border - all look comes from caller className (search palette, settings fields, etc). Hardcodes size=1, autoCorrect/autoCapitalize/autoComplete off, spellCheck false, tabIndex 0. disabled =\u003e global .disabled class. forwardRef. Spreads all native input attrs.",
+                           "logicToReuse":  "onKeyDown passthrough plus an onSubmit convenience that fires on Enter. Spreads InputHTMLAttributes so callers set value/placeholder/type. forwardRef to the input.",
+                           "motionIdeas":  "Focus: animate a bottom-border or bg tint in 150ms; on invalid, a short shake (x keyframes) using Framer. Placeholder can fade. Keep subtle - inputs are everywhere.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Input",
+                                                  "confidence":  "high",
+                                                  "rationale":  "shadcn Input is the canonical themeable native-input wrapper - same forwardRef + spread-props shape as ours. Retokenize to our flat borderless look (bg `--overlay-color`, radius pill where used, inset outline focus instead of ring). Keep our onSubmit-on-Enter helper as a thin extension. Straightforward drop-in.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/input",
+                                                  "install":  "npx shadcn@latest add input",
+                                                  "gaps":  "No onSubmit(Enter) helper - re-add. shadcn Input default is bordered with ring-offset focus; restyle to our outline-based, mostly-borderless fields. Our hardcoded autoCorrect/autoCapitalize/spellCheck defaults should be preserved."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Input (search/with-icon variants)",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/input",
+                                                  "note":  "Origin UI has many prebuilt input compositions (search, with leading/trailing icon, clear button) useful for the search palette."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "NumberInput",
+                           "currentPath":  "apps/web/src/components/NumberInput/NumberInput.tsx",
+                           "visualSpec":  "Pill container (max-width 14rem, height 3.5rem, `--overlay-color` bg, radius-pill). Optional round -/+ Buttons (3.5rem, `remove`/`add` glyphs) on each side when showButtons; the minus disables at min, plus at max (and when disabled). Center column shows an optional small 0.7rem label above a centered 1.2rem numeric value; native spinner arrows stripped. Controlled (props.value) or uncontrolled (defaultValue via internal state). Clamps to [min,max] on both button steps and typed input. memo\u0027d.",
+                           "logicToReuse":  "clampValueToRange logic; controlled/uncontrolled duality (props.value ?? internal); onChange fires a synthetic `{target:{value:string}}` ChangeEvent - callers expect an event, not a raw number; onKeyDown + onSubmit(Enter). Built on rillio Button for the steppers.",
+                           "motionIdeas":  "Digit change: AnimatePresence slide/roll of the number (y +/-, like an odometer) on increment/decrement; button whileTap 0.9; disabled buttons fade. Long-press repeat could accelerate (pairs with Button\u0027s long-press).",
+                           "recommendation":  {
+                                                  "source":  "originui",
+                                                  "part":  "Number input with +/- stepper buttons (react-aria-components NumberField)",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "Origin UI\u0027s number-input examples are built on react-aria-components NumberField (Group + Input + increment/decrement Buttons) and match our exact layout: a pill group with minus/value/plus, min/max clamping, and disable-at-bound behavior - all of which we currently hand-roll. React Aria gives us robust clamping, keyboard step, and long-press repeat for free, and themes cleanly to our pill. shadcn/ui has NO first-party number stepper, so a registry pick or react-aria is the right call over rebuilding.",
+                                                  "url":  "https://originui.com/input",
+                                                  "install":  "Copy the Origin UI number-input block (registry component); requires react-aria-components",
+                                                  "gaps":  "Adds a react-aria-components dependency (not present today; it is React-18 compatible and no RSC). NumberField emits value:number via onChange, not our synthetic `{target:{value:string}}` event - adapt at the wrapper to keep caller contract. Our optional inline `label` above the value and stripped-spinner styling need to be recreated. Swap Lucide chevrons for our `add`/`remove` glyphs."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "NumberField (Base UI)",
+                                                  "source":  "other-registry",
+                                                  "url":  "https://base-ui.com/react/components/number-field",
+                                                  "note":  "Base UI NumberField is another headless option with steppers, scrub-on-drag, and clamping; unstyled, themes to our pill."
+                                              },
+                                              {
+                                                  "part":  "Custom on our Button",
+                                                  "source":  "custom",
+                                                  "note":  "Our current impl is small and correct; if we do not want react-aria, keep it and just restyle - a valid low-risk path."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "ColorInput",
+                           "currentPath":  "apps/web/src/components/ColorInput/ColorInput.tsx",
+                           "visualSpec":  "Two parts. (A) ColorInput: a Button whose background IS the current color (a swatch); title shows the hex or \u0027Transparent\u0027; if the color is transparent (hex ends in 00) it overlays a centered \u0027Transparent\u0027 label. Clicking opens a ModalDialog titled \u0027Choose color\u0027 with a SELECT (autofocus) button; picking commits tempValue via onChange only on Select (cancel/close discards). (B) ColorPicker: wraps the third-party a-color-picker lib (createPicker with showHSL/HEX/RGB off, showAlpha on) into a div; syncs value in/out, parses to hexcss4 (#rrggbbaa). i18n via react-i18next.",
+                           "logicToReuse":  "a-color-picker createPicker + change event wiring; parseColor to hexcss4; the modal commit/cancel pattern via useBinaryState; openModalPrevented escape hatch; i18n keys (SELECT, CHOOSE_COLOR, BUTTON_COLOR_TRANSPARENT); alpha/transparent detection. Used in subtitle-styling settings.",
+                           "motionIdeas":  "Swatch: color cross-fade 150ms on change; the modal picker mounts with a scale/opacity spring (AnimatePresence). Saturation cursor can have a whileDrag scale. Transparent label cross-fades with the swatch.",
+                           "recommendation":  {
+                                                  "source":  "kibo",
+                                                  "part":  "Color Picker (ColorPicker + ColorPickerSelection/Hue/Alpha/EyeDropper/ColorPickerOutput)",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "Kibo UI Color Picker (shadcn-registry, hosted at shadcn.io) is a modern compound picker with a 2D saturation/lightness canvas, hue AND alpha sliders, eyedropper, and HEX/RGB/HSL output - a direct, better-maintained replacement for the aging a-color-picker lib. It is plain React client (no RSC), themeable to our tokens, and its slider parts are Tailwind/Radix-friendly. Drop it inside our existing ModalDialog route to preserve the swatch-button + Select/Cancel commit flow.",
+                                                  "url":  "https://www.kibo-ui.com/components/color-picker",
+                                                  "install":  "npx kibo-ui add color-picker",
+                                                  "gaps":  "Depends on the `color` (Qix-/color) package + Lucide icons (add or swap). Emits color values via its own onChange, not hexcss4 (#rrggbbaa) - normalize with our parseColor so the stored subtitle color format stays identical. It provides only the picker body; keep our swatch trigger, transparent detection, ModalDialog wrapper, i18n, and Select-to-commit semantics. Alpha output format must be verified to match our #rrggbbaa persistence.",
+                                                  "part_note":  "shadcn.io hosts the same Kibo component; either registry works."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Color Picker",
+                                                  "source":  "other-registry",
+                                                  "url":  "https://www.shadcn.io/components/color-picker",
+                                                  "note":  "Same Kibo component via the shadcn.io registry/MCP; alpha + eyedropper + hex."
+                                              },
+                                              {
+                                                  "part":  "react-colorful based shadcn color picker",
+                                                  "source":  "custom",
+                                                  "note":  "If we want zero new heavy deps, wrap react-colorful (2.8KB, hex+alpha) in our modal - closest lightweight swap for a-color-picker."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Chips",
+                           "currentPath":  "apps/web/src/components/Chips/Chips.tsx",
+                           "visualSpec":  "A horizontally-scrolling row (HorizontalScroll, gap 1rem) of Chip pills for multi-select filtering. Each Chip: 2.75rem tall fully-rounded pill, 1rem/500 capitalized label, transparent + 60% opacity by default; hover =\u003e `--overlay-color` bg + full opacity; active =\u003e full opacity, accent bg, `--secondary-foreground-color` text. Built on rillio Button (inherits focus/keyboard/long-press). Active chip auto-scrolls into view (scrollIntoView center, smooth). Multi-select: selected is a string[] and onSelect toggles by value.",
+                           "logicToReuse":  "options[{label,value}] + selected string[] + onSelect(value) contract; active auto-scroll-into-view effect; data-value plumbing; HorizontalScroll wrapper; memo. Used for genre/category filters.",
+                           "motionIdeas":  "Active pill: Framer `layoutId` shared highlight that slides between chips (magic-move) instead of instant bg swap; whileTap 0.95; the row can stagger-in on mount. Overlay hover tint via CSS.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Toggle Group (type=\"multiple\", ToggleGroupItem as pills)",
+                                                  "confidence":  "high",
+                                                  "rationale":  "shadcn Toggle Group (Radix ToggleGroup) is the semantic match for a multi-select set of pressable pills: `type=\"multiple\"` gives the string[] selection and per-item pressed state with roving keyboard focus and a11y built in, replacing our manual selected.includes + role plumbing. Style ToggleGroupItem to our 2.75rem rounded-full pill (transparent/60% default, overlay hover, accent+secondary-fg active). Wrap the group in our HorizontalScroll and keep the active-into-view effect.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/toggle-group",
+                                                  "install":  "npx shadcn@latest add toggle-group",
+                                                  "gaps":  "ToggleGroup value is string[] with onValueChange(next[]) whereas our onSelect(value) toggles one - adapt at the wrapper. It does not scroll or auto-center the active item - keep HorizontalScroll + the scrollIntoView effect. No long-press (fine; chips do not need it)."
+                                              },
+                           "alternates":  [
+                                              {
+                                                  "part":  "Badge (interactive/removable)",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/badge",
+                                                  "note":  "If some chip usages are display/removable tags rather than toggles, Badge fits those; Toggle Group is right for the filter selection here."
+                                              }
+                                          ]
+                       }
+                   ]
+}

@@ -1,0 +1,322 @@
+{
+    "family":  "route-metadetails",
+    "familyNotes":  "One dense route rendered by MetaDetails.js. Layout (styles.less): a position:fixed backdrop image layer (opacity .16 + bottom-fading gradient to --color-bg, z-index -1) sits behind everything; a HorizontalNavBar (shared component, backButton+fullscreenButton+navMenu) is the top bar; an optional VerticalNavBar (shared) appears on the left only when meta-extension tabs exist; the main-column is a single vertical overflow-y:auto scroll column with padding 0.5rem 2rem 2.5rem. Inside it: a `.top` band that is exactly 50vh tall (min 22rem) laid out as a row of [MetaPreview details | HeroMedia 16:9 video], gap 2rem; below it the full-width StreamsList (movies + selected episode) OR VideosList (series). Under 60rem the top band stacks vertically and HeroMedia reverts to aspect-ratio 16:9. A meta-extension addon iframe opens in a shared ModalDialog (80%x80%, sandboxed). DATA CONTRACT (reuse as-is): useMetaDetails(urlParams) -\u003e {selected:{metaPath,streamPath}, metaItem (RS-style {content:{type:\u0027Loading\u0027|\u0027Ready\u0027|\u0027Err\u0027, content:{name,logo,background,poster,runtime,releaseInfo,released,description,links,inLibrary,watched,id,videos,trailerStreams}}}), libraryItem, streams, ratingInfo, metaExtensions}; useSeason(urlParams) -\u003e [season,setSeason]; useMetaExtensionTabs -\u003e [tabs,metaExtension,clearMetaExtension]; core.transport.dispatch for AddToLibrary/RemoveFromLibrary/MarkAsWatched/ToggleLibraryItemNotifications/MarkVideoAsWatched/MarkSeasonAsWatched/UpdateSettings; useCore, useProfile, usePlatform, useToast, useBinaryState, useRouteFocused, useContentGamepadNavigation, useCacheDownload, useScreenCapability, useNavigateWithOrigin. Icons are @stremio/stremio-icons (play, chevron-back/forward, caret-down, download, link, magnet-link, addons, imdb, eye/eye-off, add/remove-from-library, share, ic_broken_link). The whole route is wrapped in withCoreSuspender with a nav-only fallback. Rewrite is view-layer only: every hook/dispatch/quality-parser (streamQuality.js) is reused untouched. Note MetaPreview lives in src/components (shared family) but is the details block of this route, so I audit it here and the rewrite consumes it. Nothing in this family needs Next.js/RSC; all Radix parts run fine on React 18.3.1; Tailwind v4 tokens (--color-*, --radius-pill, bg-white/5 etc.) are already used by the newer CuratedStreams code, so premade Radix+Tailwind parts drop in cleanly.",
+    "components":  [
+                       {
+                           "name":  "MetaDetails route shell + 50vh split layout",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/MetaDetails.js",
+                           "visualSpec":  "Full-height flex column. Fixed backdrop image layer (Image src=background, opacity .16, object-position center top) with a ::after linear-gradient fading to --color-bg, z-index -1; rendered only when metaItem is Ready/Err and has a string background. HorizontalNavBar (shared: backButton, fullscreenButton, navMenu, originPath) pinned top, z-1. Body row: optional left VerticalNavBar (shared, only when meta-extension tabs exist, selected=metaExtension.url) + main-column (flex:1, overflow-y:auto, one scroll context). main-column holds `.top` (50vh band, min 22rem, row, gap 2rem, align stretch) = MetaPreview (flex 0 0 clamp(20rem,40%,38rem)) + HeroMedia (flex 1). Below: StreamsList (when streamPath set) or VideosList (when metaPath set). States: metaPath null -\u003e DelayedRenderer(500ms) empty.svg + ERR_NO_META_SELECTED; metaItem null -\u003e ERR_NO_ADDONS_FOR_META; content Err -\u003e ERR_NO_META_FOUND; content Loading -\u003e MetaPreview.Placeholder; Ready -\u003e MetaPreview + HeroMedia with animation-fade-in. Meta-extension addon opens in shared ModalDialog (80%x80%) with sandboxed iframe. Responsive \u003c60rem: top stacks column, height auto. @minimum: main-column padding shrinks, backdrop object-position center.",
+                           "logicToReuse":  "useMetaDetails, useSeason, useMetaExtensionTabs, useCore + core.transport.dispatch (AddToLibrary/RemoveFromLibrary/MarkAsWatched/ToggleLibraryItemNotifications), useContentGamepadNavigation, useNavigateWithOrigin.getStoredOrigin, useParams/useLocation/useNavigate, withCoreSuspender. Shared components HorizontalNavBar, VerticalNavBar, DelayedRenderer, Image, MetaPreview, ModalDialog.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom route layout (fixed backdrop layer + gradient scrim + 50vh flex split). No registry ships a media-detail scaffold that matches. Wrap only the scrolling main-column in shadcn ScrollArea if you want a themed thin scrollbar; keep the flex/50vh/clamp rules verbatim from styles.less.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "The two-column 50vh band, fixed backdrop with gradient-to-bg, and single-scroll-column behavior are bespoke product decisions with no premade equivalent. A registry part here would fight the layout. Only the scrollbar styling is a candidate for a premade primitive.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/scroll-area",
+                                                  "install":  "pnpm dlx shadcn@latest add scroll-area",
+                                                  "gaps":  "ScrollArea (if adopted) only restyles the scrollbar; the backdrop layer, gradient scrim, 50vh band, stacking breakpoint, and meta-extension modal are all hand-authored. Keep them."
+                                              },
+                           "motionIdeas":  "Route enter: backdrop layer fades opacity 0-\u003e.16 over 600ms; `.top` children stagger up (opacity 0-\u003e1, y 12-\u003e0, 60ms stagger) replacing the current animation-fade-in class. AnimatePresence on the StreamsList\u003c-\u003eVideosList swap (crossfade + slight y). Meta-extension modal via AnimatePresence scale .96-\u003e1 + backdrop blur fade.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "ScrollArea",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/scroll-area",
+                                                  "note":  "Optional, for the main-column scrollbar only."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "HeroMedia banner carousel (image + YT trailer slides)",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/HeroMedia/HeroMedia.tsx",
+                           "visualSpec":  "16:9 rounded (12px) panel, bg --color-surface, overflow hidden. Slides = [backdrop-or-poster still] + up to 3 trailer VIDEO slides. Image slides are absolutely-stacked \u003cimg\u003e (object-fit cover, object-position center 25%) crossfading via opacity 400ms; the hidden ones get pointer-events none. A VIDEO slide\u0027s youtube-nocookie iframe (autoplay=0, controls=1, rel=0, modestbranding, playsinline) is MOUNTED ONLY while active so cycling away stops playback. Image slides auto-advance every 7000ms; a video slide never auto-advances. Meta change resets to slide 0. When count\u003e1: left/right circular arrow buttons (2.25rem, blurred bg color-mix(bg 55%), appear only on hover of the panel, hover deepens to 65%-\u003e75%), and a bottom-center dots pill (blurred bg, dots .4rem, video-slide dot is a wider .75rem pill, active dot = --color-accent). count===0 -\u003e empty surface.",
+                           "logicToReuse":  "Pure presentational, props {ytIds, background, poster, name}. No hooks. Slide-model useMemo, active-index state, auto-advance effect are the reusable behavior to preserve.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Carousel (Embla) + embla-carousel-autoplay plugin, composed as CarouselContent/CarouselItem/CarouselPrevious/CarouselNext with a custom dots row and custom CarouselItem bodies (img vs conditionally-mounted iframe).",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "shadcn Carousel is the official Embla wrapper: it gives keyboard/swipe/loop, the setApi hook for the active index and dot syncing, and an Autoplay plugin - matching arrows, dots, and gentle auto-advance without custom carousel math. Themes cleanly to our tokens (arrows are just Buttons). Best long-term maintenance vs Aceternity/Magic UI carousels.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/carousel",
+                                                  "install":  "pnpm dlx shadcn@latest add carousel   (+ pnpm add embla-carousel-autoplay)",
+                                                  "gaps":  "Embla Autoplay runs on ALL slides; we must gate it to image slides only (stop on the trailer slide) - replicate with autoplay.stop()/reset() keyed on the active slide type via setApi. The conditional iframe mount (only when active), the video-vs-image dot shapes, hover-reveal arrows, and object-position 25% crop are all custom on top. The reset-to-0-on-meta-change effect stays."
+                                              },
+                           "motionIdeas":  "Keep Embla\u0027s snap for arrows/swipe but crossfade stills (opacity, not translate) to match current 400ms feel - use a fade Embla plugin or a Framer AnimatePresence layer over CarouselContent. Arrows: whileHover scale 1.08, whileTap .94, and a container hover variant to fade them in (opacity 0-\u003e1, 150ms). Dots: active dot layoutId \u0027hero-dot\u0027 so the accent fill slides between dots; video dot animates width .4rem-\u003e.75rem.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Carousel",
+                                                  "source":  "aceternity",
+                                                  "url":  "https://ui.aceternity.com/components/carousel",
+                                                  "note":  "Flashier, heavier motion; overkill and harder to theme flat/borderless. Only if a more cinematic hero is wanted."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "MetaPreview details column (logo, meta row, action pills, summary, genre links)",
+                           "currentPath":  "apps/web/src/components/MetaPreview/MetaPreview.js",
+                           "visualSpec":  "Shared component (lives in src/components) used as the left half of the 50vh band; full mode (compact=false). Stacks: logo Image (fallback = name text in logo-placeholder); runtime-release-info row = runtime label + releaseInfo/year + optional IMDb pill button (label + imdb icon, opens stremio.com/warning redirect in _blank); a meta-actions row = ActionsGroup of pills {add/remove-from-library, eye/eye-off watched, optional share} + Ratings group; description block (SUMMARY label + text, uses episode overview when a video is selected else meta description); then genre/other MetaLinks pill groups (Cast/Directors/Writers/imdb/share categories hidden). Share opens a ModalDialog+SharePrompt. Has a Placeholder variant. Links are sanitized (only stremio: internal redirects to search/discover/metadetails, external -\u003e warning redirect).",
+                           "logicToReuse":  "linksGroups sanitizer useMemo (KEEP verbatim - it is security-relevant, gates redirect targets), metaItemActions builder, ActionsGroup, Ratings, MetaLinks, ActionButton, SharePrompt, ModalDialog, useBinaryState, CONSTANTS link categories, routesRegexp. Props: name,logo,background,runtime,releaseInfo,released,description,links,inLibrary,toggleInLibrary,watched,toggleWatched,ratingInfo,deepLinks,compact.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom composition. Rebuild the container/stack by hand; assemble from primitives: action pills = shadcn Button (variant ghost/secondary, rounded-full) grouped in a divide-x or gap row; genre/link pills = shadcn Badge asChild \u003ca\u003e; IMDb pill = Button asChild; share dialog = shadcn Dialog (route-drivable); Ratings/MetaLinks stay as-is.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "This is a domain-specific metadata panel (sanitized links, ratings, library/watched toggles) - no registry ships it whole. The right move is composing shadcn primitives (Button, Badge, Dialog) under our tokens, which matches the flat/borderless/pill language exactly.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/badge",
+                                                  "install":  "pnpm dlx shadcn@latest add button badge dialog",
+                                                  "gaps":  "The link sanitizer, warning-redirect wrapping, Ratings, and ActionsGroup are custom domain logic to keep. Badge/Button/Dialog only supply the pill/button/modal chrome. The SharePrompt Dialog should be wired as a route-layer (URL open state) per the router convention, not internal useBinaryState, if it is elevated to a route."
+                                              },
+                           "motionIdeas":  "Logo + meta rows stagger-in with the route enter (y 8-\u003e0, opacity). Action pills: whileHover brightness/scale 1.03, whileTap .97; library toggle does a tiny icon pop (scale 1-\u003e1.25-\u003e1) on state flip. Genre pills: subtle whileHover y -1. Ratings numbers count-up on first appear (optional).",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Badge",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/badge",
+                                                  "note":  "Origin UI badges if more pill variants (with leading icon/flag) are wanted for genre chips."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "StreamsList container + addon filter + states",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/StreamsList/StreamsList.js",
+                           "visualSpec":  "Column. Top select-choices-wrapper: for a selected episode, a circular back-button (chevron-back, ghost, hover overlay tint) + episode-title (S{n}E{n} Title, ellipsis) + right-aligned addon-filter MultiselectMenu (compact pill, bg white/5, hover overlay, only when \u003e1 addon has streams). Body states: no streams -\u003e message-container (series shows EpisodePicker) + empty.svg + ERR_NO_ADDONS_FOR_STREAMS; all Err -\u003e optional UPCOMING label + empty.svg + NO_STREAM + optional yellow \u0027install addons\u0027 CTA (accent bg pill, brightness hover, only for new/no-auth users); some Ready but filtered empty -\u003e two Stream.Placeholder; Ready -\u003e streams-container with \u003cCuratedStreams\u003e + a quiet \u0027more addons\u0027 link (bg white/5 pill) + an addons-loading footer bar (count + accent bar) while addons still resolve. Addon change scrolls streams-container to top.",
+                           "logicToReuse":  "streamsByAddon/filteredStreams/selectableOptions useMemos, countLoadingAddons, showInstallAddonsButton (profile-gated), backButtonOnClick (toPath deep link), handleEpisodePicker, useProfile, usePlatform, useNavigate. Shared Button, Image, MultiselectMenu. Renders CuratedStreams, Stream.Placeholder, EpisodePicker.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Select (Radix) for the addon filter dropdown, replacing the legacy MultiselectMenu in the compact-pill slot; keep the container/state machine custom. Trigger styled as a rounded-full bg-white/5 pill.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "The addon filter is a single-select of addon names - shadcn Select is the canonical, accessible Radix dropdown and themes to a compact pill trivially. The surrounding empty/error/loading states and the install CTA are bespoke and stay custom.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/select",
+                                                  "install":  "pnpm dlx shadcn@latest add select",
+                                                  "gaps":  "Select supplies only the addon dropdown. Message states, the accent install CTA, addons-loading bar, back-button, and episode-title are custom. The dropdown menu must render in a portal (Radix does) because streams-container is an overflow-scroll clip context - the current MultiselectMenu had to fight this."
+                                              },
+                           "motionIdeas":  "Empty/error illustrations fade+scale in. addons-loading bar: an indeterminate shimmer (repeating x gradient) instead of a static bar. Install CTA: whileHover brightness 1.1 + scale 1.02. Stream rows list-stagger on first paint.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Dropdown Menu",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dropdown-menu",
+                                                  "note":  "Use instead of Select if the filter should later carry icons/checkmarks per addon."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "CuratedStreams preset segmented switch",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/StreamsList/CuratedStreams.js",
+                           "visualSpec":  "Centered inline pill group: rounded-full bg-white/5 p-0.5 wrapping three segment Buttons (Auto/Quality/Speed). Active segment = bg-accent text-bg; inactive = text-fg-muted hover:text-fg. Drives the recommendation shown in the Watch button and the highlighted tile.",
+                           "logicToReuse":  "preset state + recommendStream(curated, preset, screen, lang) from streamQuality.js, useScreenCapability. PRESETS array.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "ToggleGroup type=\u0027single\u0027 (Radix) styled as a rounded-full segmented pill.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "A mutually-exclusive 3-option switch is exactly ToggleGroup single-select; it gives roving-focus keyboard a11y and value control for free, and themes to our accent-fill pill without fighting. Cleaner than Tabs (no panels here).",
+                                                  "url":  "https://ui.shadcn.com/docs/components/toggle-group",
+                                                  "install":  "pnpm dlx shadcn@latest add toggle-group",
+                                                  "gaps":  "Only the visual+a11y shell; the recommendation logic (recommendStream) stays. Ensure controlled value binds to `preset`."
+                                              },
+                           "motionIdeas":  "Sliding accent thumb behind the active segment via a Framer layoutId=\u0027preset-thumb\u0027 motion.div so the fill glides between Auto/Quality/Speed instead of hard-cutting; segment label color crossfades.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Tabs (segmented)",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/tabs",
+                                                  "note":  "Origin UI segmented tabs already ship the sliding-pill look if you prefer not to hand-build the layoutId thumb."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "CuratedStreams Watch button + tiles + show-all + rows grid",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/StreamsList/CuratedStreams.js",
+                           "visualSpec":  "Below the controls row: a primary Watch button (h-9 rounded-full bg-accent text-bg, play icon + \u0027Watch Â· {tierLabel}\u0027, hover brightness-110, active scale .98) that plays the recommended stream. Then a centered horizontal overflow-x carousel of Tiles: each Tile is a w-44 transparent Button (rounded-xl px-3.5 py-3), tier label + play glyph (accent when highlighted, fade-in on hover otherwise) + a right-aligned DownloadToCache icon (hover-reveal), provider name (truncate), and an 11px meta row (size Â· seeders Â· flags). Highlighted (recommended) tile = bg-accent/10. Then, if extra streams: a centered \u0027All N streams\u0027 Collapsible toggle (rounded-full bg-white/5 pill with a caret that rotates 180 when open) revealing a responsive grid (1 / sm:2 / xl:3 cols) of compact Rows: quality Badge (w-16 bg-white/10) + provider (truncate) + flags + size + seeders + hover-reveal DownloadToCache.",
+                           "logicToReuse":  "curateStreams/recommendStream/formatSize/badgeFor/providerOf/playHref from streamQuality.js, showAll state, tiles useMemo (fastest-tile injection), useProfile, cn. Button (href=playHref, onClick=stream.onClick).",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Collapsible (Radix) for the \u0027Show all\u0027 expand; Button for Watch/Tiles/Rows; keep the tile carousel as native overflow-x (no library needed). Quality chip = shadcn Badge (see badge component).",
+                                                  "confidence":  "high",
+                                                  "rationale":  "The only stateful primitive here is the expand/collapse - shadcn Collapsible is the exact, animatable Radix match. Watch/Tiles/Rows are already flat token-styled Buttons; a carousel lib would be heavier than the current CSS overflow scroll for ~5 tiles.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/collapsible",
+                                                  "install":  "pnpm dlx shadcn@latest add collapsible",
+                                                  "gaps":  "Collapsible ships closed height animation but you must add the grid content and caret rotation. Tiles/rows/Watch are custom compositions. The recommendation and tier logic stay in streamQuality.js untouched."
+                                              },
+                           "motionIdeas":  "Collapsible content: animate height auto + opacity (Framer\u0027s height 0-\u003eauto). Rows stagger-in on expand (20ms). Watch button: whileTap scale .98 (already), add a subtle box-shadow accent glow on hover. Tiles: whileHover y -2 + bg tint; highlighted tile gets a soft pulsing accent ring on mount. DownloadToCache reveal: opacity+scale 0.9-\u003e1 on group hover.",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "LanguagePicker (flag combobox dropdown)",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/StreamsList/CuratedStreams.js",
+                           "visualSpec":  "A rounded-full bg-white/5 pill Button trigger: flag emoji + language label + caret-down (rotates 180 open). Opens a position:fixed (anchored to trigger rect, because the streams panel clips absolute children) menu: max-h-64 min-w-40 rounded-xl border-line bg-surface shadow-elevated, scrollable, each option a full-width Button (flag + label; selected = bg-accent/10 text-accent, else hover bg-white/5). Closes on outside pointerdown / window scroll / resize (but not scroll inside the menu).",
+                           "logicToReuse":  "lang state = profile.settings.subtitlesLanguage (core UpdateSettings dispatch), langOptions (availableLanguages + interface lang), flagFor/languages.label/languages.toCode, core.transport.dispatch. The fixed-anchoring + outside-close behavior is the workaround to preserve OR replace with a portaled Radix popover.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Combobox (Popover + Command) - the shadcn combobox pattern: a Popover trigger pill + Command list with CommandInput search, CommandItem per language with a leading flag and a check on the selected one.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "This is a searchable single-select of languages - the canonical shadcn Combobox. Radix Popover portals to body, which cleanly eliminates the hand-rolled position:fixed anchoring + manual scroll/resize close listeners currently needed inside the overflow-clip streams panel. Command adds type-to-filter which is a UX upgrade for long language lists.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/combobox",
+                                                  "install":  "pnpm dlx shadcn@latest add popover command",
+                                                  "gaps":  "Combobox provides trigger+list+search; the flag emoji rendering, binding to core subtitlesLanguage, and the first-run default-language dispatch stay custom. Drop the manual getBoundingClientRect anchoring and outside-click effect - Radix handles positioning and dismissal."
+                                              },
+                           "motionIdeas":  "Radix Popover content: Framer scale .96-\u003e1 + y -4-\u003e0, 140ms, transform-origin top. Caret rotate 180 spring. Selected check fades/scales in. Flag on hover row: tiny x nudge.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Select",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/select",
+                                                  "note":  "If search is unwanted, plain Select is lighter - but loses type-to-filter for long lists."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "DownloadToCache icon button",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/StreamsList/CuratedStreams.js",
+                           "visualSpec":  "Bare download-glyph button: inline-flex size-6 items-center justify-center rounded-full text-fg-subtle, hover bg-white/10 + text-fg. Renders only for torrent streams (stream.infoHash is a string). stopPropagation so it never triggers the enclosing play link. Hover-revealed inside Tiles/Rows (opacity 0 -\u003e group-hover 100). title tooltip explains \u0027watch later, kept on Cached page\u0027.",
+                           "logicToReuse":  "useCacheDownload() hook, infoHash guard, event stopPropagation/preventDefault. This is the canonical icon-button pattern from the design language (explicit square + flex centering, never padding-based).",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom canonical icon button (the project\u0027s inline-flex size-N items-center justify-center rounded-full glyph pattern). Optionally wrap in shadcn Tooltip for the explanatory hover text.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "This is exactly the design-language icon button spec that must not be padding-sized; a registry Button adds nothing. The only premade upgrade is a real Tooltip instead of the native title attribute.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/tooltip",
+                                                  "install":  "pnpm dlx shadcn@latest add tooltip",
+                                                  "gaps":  "Tooltip (if adopted) replaces the native title only; the infoHash gating, cache dispatch, and stopPropagation are custom and reused."
+                                              },
+                           "motionIdeas":  "Reveal: opacity+scale 0.85-\u003e1 on group hover. On click: brief spinner/checkmark swap (AnimatePresence) to confirm the cache download started; icon does a small downward nudge.",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "Stream legacy row + right-click context menu",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/StreamsList/Stream/Stream.js",
+                           "visualSpec":  "A Popup (shared) whose label is a Button row: bordered (--color-line) rounded-card bg-surface, hover -\u003e surface-hover, gap 1rem, wrap. Left info-container: either a 8x5rem thumbnail (Image, broken-link fallback icon) or an addon-name block, plus a 100%-wide progress bar (accent fill over 20%-opacity track) when progress\u003e0. Center description (line-clamp 3, pre). Right: a circular accent play icon (3rem, opacity 0 -\u003e 1 on hover/focus/selected). Right-click / ctrl-click / long-press opens a context menu: title (the description) + Play + conditional Copy Stream Link / Copy Magnet Link / Copy Download Link (each icon + label, clipboard write + toast). Href resolution picks external-player/web/openPlayer[platform]/playlist/player. Has Stream.Placeholder.",
+                           "logicToReuse":  "useCore, useProfile, usePlatform, useToast, useBinaryState, useRouteFocused, href/download/target/streamLink/downloadLink/magnetLink useMemos, markVideoAsWatched dispatch, copy handlers, all the togglePopupPrevented event plumbing. Shared Button, Image, Popup. This is the fallback per-stream row (CuratedStreams is the primary view); may be retired but audited for completeness.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "ContextMenu (Radix) replacing the custom Popup for the right-click/long-press menu; the row body stays a custom Button. shadcn ContextMenu even ships long-press support for touch, matching the current onLongPress path.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "The bespoke Popup reimplements right-click + ctrl-click + long-press + outside-close that Radix ContextMenu provides accessibly out of the box, with portal rendering (no z-index/overflow-clip fights) and keyboard nav. Menu items map 1:1 to ContextMenuItem with leading icons.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/context-menu",
+                                                  "install":  "pnpm dlx shadcn@latest add context-menu",
+                                                  "gaps":  "ContextMenu handles trigger/menu/dismissal; the href resolution, clipboard copy + toast, markVideoAsWatched, and progress-bar/thumbnail row are custom. The current togglePopupPrevented flag plumbing can be dropped in favor of Radix\u0027s own event handling."
+                                              },
+                           "motionIdeas":  "Row: whileHover bg tint + play icon opacity/scale 0-\u003e1 spring. ContextMenu content: Radix data-state open drives a Framer scale .95-\u003e1 + y -4 fade. Progress bar animates width from 0 on mount. Copy success: item flashes an accent tint + check swap.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Dropdown Menu",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dropdown-menu",
+                                                  "note":  "If a click-triggered kebab menu is preferred over right-click, use DropdownMenu with the same items."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Stream quality badge / tier chip",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/StreamsList/streamQuality.js",
+                           "visualSpec":  "Small quality label chip: Tile uses a text label (4K HDR / 1080p HDR / 4K / 1080p / SD), Row uses badgeFor() rendered as an inline-flex w-16 rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-fg-muted pill. Plus inline flag/HDR flag strings (quality.flags) shown as tiny tracking-tight text.",
+                           "logicToReuse":  "badgeFor(quality), parseStream/quality facets (resolution, hdr, size, seeders, flags, langs) from streamQuality.js - all reused untouched.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Badge (variant secondary/outline), themed to bg-white/10 text-fg-muted for the quality tier chip; also usable for HDR/DV flag chips.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "A static quality label is precisely shadcn Badge - one small themable primitive, consistent across Tile/Row. Avoids re-hand-rolling pill styles per usage.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/badge",
+                                                  "install":  "pnpm dlx shadcn@latest add badge",
+                                                  "gaps":  "Badge is pure chrome; the quality-string derivation stays in streamQuality.js. May want a variant map (4K HDR -\u003e accent-tinted, SD -\u003e muted) which is a custom prop on top of Badge."
+                                              },
+                           "motionIdeas":  "Badges fade/scale in with their row. Optional: HDR/DV badge gets a subtle animated gradient sheen to signal premium quality (keep restrained per flat design).",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Badge",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/badge",
+                                                  "note":  "Origin UI has more badge variants (with dot/icon) if flags should carry leading glyphs."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Stream / Video skeleton placeholders",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/StreamsList/Stream/StreamPlaceholder/StreamPlaceholder.js",
+                           "visualSpec":  "Loading placeholders shown before streams/videos resolve: StreamsList renders two Stream.Placeholder (grey row shapes matching the stream row: thumbnail block + text lines + trailing circle), VideosList renders SeasonsBar.Placeholder + five Video.Placeholder, and MetaPreview.Placeholder fills the details column. All are static shimmer/grey blocks using --color-surface / overlay tints.",
+                           "logicToReuse":  "Component shapes only (no hooks). Must mirror the real row dimensions so layout doesn\u0027t jump.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Skeleton - compose the placeholder shapes (thumbnail rect + text lines + trailing circle) from shadcn Skeleton blocks.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "shadcn Skeleton is the standard animated placeholder primitive; it themes to our surface tokens and unifies all the ad-hoc placeholder styles across Stream/Video/SeasonsBar/MetaPreview into one pulse treatment.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/skeleton",
+                                                  "install":  "pnpm dlx shadcn@latest add skeleton",
+                                                  "gaps":  "Skeleton gives the pulsing block; each placeholder\u0027s exact geometry (to match its real row) is composed by hand. Keep dimensions in sync with the real Tile/Row/Video card."
+                                              },
+                           "motionIdeas":  "Prefer a left-to-right shimmer sweep (translateX gradient) over the default opacity pulse for a more premium feel; fade skeletons out (AnimatePresence) as real content fades in to avoid a hard swap.",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "VideosList episode grid + notifications toggle",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/VideosList/VideosList.js",
+                           "visualSpec":  "Series episode view. Optional notifications Toggle (shared, checked=!noNotif, label DETAIL_RECEIVE_NOTIF_SERIES) shown when in-library with videos. SeasonsBar when seasons exist. Then a responsive CSS grid of Video cards (grid-template-columns repeat(auto-fill, minmax(min(24rem,100%),1fr)), gap .5rem 1rem) - each Video (shared component) shows thumbnail, S/E, title, released, watched, progress, upcoming/scheduled, selected highlight, with mark-watched actions. States: Loading -\u003e SeasonsBar.Placeholder + 5 Video.Placeholder; Err/empty -\u003e EpisodePicker + empty.svg + ERR_NO_VIDEOS_FOR_META. Preserves/restores scroll position across navigation; scrolls to top on season change unless the selected video is in view.",
+                           "logicToReuse":  "videos/seasons/selectedSeason/videosForSeason/seasonWatched useMemos, savedScrollTop restore (useLayoutEffect), season-change scroll effect, onMarkVideoAsWatched/onMarkSeasonAsWatched/onSeasonSearch dispatches, useCore. Shared Video, Toggle, Image, SeasonsBar, EpisodePicker.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Switch (Radix) for the notifications toggle; keep the episode grid as the native CSS auto-fill grid (no library). The Video card is a separate shared component (own family).",
+                                                  "confidence":  "high",
+                                                  "rationale":  "The notifications control is a boolean on/off - shadcn Switch is the canonical accessible toggle and themes to the accent. The auto-fill grid is a solved CSS problem that no registry improves; the Video card belongs to the components family, not this route.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/switch",
+                                                  "install":  "pnpm dlx shadcn@latest add switch",
+                                                  "gaps":  "Switch replaces only the shared Toggle here. Grid layout, scroll-preservation, season filtering, and the Video card stay. Video-card rewrite is out of scope for this family."
+                                              },
+                           "motionIdeas":  "Episode cards stagger-in (grid order) on season change via AnimatePresence + layout. Season change: crossfade the grid (exit y+opacity, enter). Switch: spring thumb + accent-fill fade. Mark-watched: card overlays a check that scales in.",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "SeasonsBar (prev / season-select / next)",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/VideosList/SeasonsBar/SeasonsBar.js",
+                           "visualSpec":  "Row, space-between: a Prev button (chevron-back + BUTTON_PREV label, 6.5rem wide, rounded-pill, hover overlay, disabled+dimmed at first season) | a center MultiselectMenu season dropdown (title = \u0027Season N\u0027/\u0027Special\u0027, options per season, transparent, hover overlay) | a Next button (BUTTON_NEXT label + chevron-forward, disabled at last season). Prev/next step through the seasons array. Has a Placeholder variant.",
+                           "logicToReuse":  "options/selectedSeason/prevDisabled/nextDisabled useMemos, prevNextButtonOnClick, seasonOnSelect, onSelect callback contract ({type:\u0027select\u0027,value}). Shared Button, MultiselectMenu.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Select (Radix) for the season dropdown + two shadcn Buttons (ghost, rounded-full) for prev/next, composed as a pager row.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Season choice is a single-select -\u003e shadcn Select (portaled, accessible), replacing the legacy MultiselectMenu; prev/next are plain Buttons with disabled states. Clean token theming, no custom popup positioning needed.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/select",
+                                                  "install":  "pnpm dlx shadcn@latest add select button",
+                                                  "gaps":  "Select + Button supply the controls; the season-stepping index math and disabled-edge logic stay. Bind Select value to selectedSeason (string), onValueChange to onSelect."
+                                              },
+                           "motionIdeas":  "Prev/next: whileTap scale .95, disabled fades opacity. On season change, the dropdown label crossfades. Optional: a directional slide hint (the whole videos grid slides left/right) when stepping seasons.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Pagination",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/pagination",
+                                                  "note":  "If seasons should read as numbered pager pills rather than a dropdown + arrows."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "EpisodePicker (season/episode number steppers + submit)",
+                           "currentPath":  "apps/web/src/routes/MetaDetails/EpisodePicker/EpisodePicker.tsx",
+                           "visualSpec":  "Shown in empty/error stream+video states so the user can jump to a specific episode. Two NumberInput steppers (Season min 0, Episode min 1, with +/- buttons, seeded from the current path\u0027s videoId \u0027id:season:episode\u0027), plus a Submit Button (SIDEBAR_SHOW_STREAMS label) disabled until the values differ from the initial. onSubmit(season, episode) rewrites the video hash.",
+                           "logicToReuse":  "initialSeason/initialEpisode parse from location.pathname, season/episode state, disabled-when-unchanged guard, onSubmit contract. Shared Button, NumberInput.",
+                           "recommendation":  {
+                                                  "source":  "originui",
+                                                  "part":  "Number Input with increment/decrement (chevron) buttons - Origin UI\u0027s number input, built on react-aria-components (NumberField). Replaces the legacy shared NumberInput.",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "shadcn/ui has NO number-input primitive; Origin UI ships a polished stepper number input that is Tailwind-first and themes to our tokens, with proper min/clamp and keyboard support via react-aria. Closest premade match for the +/- stepper spec.",
+                                                  "url":  "https://originui.com/input",
+                                                  "install":  "Copy from originui.com/input (number-input variant); adds react-aria-components as a dep",
+                                                  "gaps":  "Origin UI\u0027s number field pulls in react-aria-components (fine on React 18.3, no Next.js) - confirm the team accepts that dep, else keep the existing NumberInput and only restyle. The path-parsing seed, disabled-until-changed guard, and submit wiring stay custom. Verify the exact variant on the input page (WebFetch was 403-blocked, so confirm the number-input block name when installing)."
+                                              },
+                           "motionIdeas":  "Stepper buttons: whileTap scale .9; value change does a tiny digit roll/bump. Submit: enables with a fade + subtle accent glow when values differ. The whole picker card slides in above the empty illustration.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Number field",
+                                                  "source":  "jolly",
+                                                  "url":  "https://www.jollyui.dev/docs/components/number-field",
+                                                  "note":  "Jolly UI (react-aria based, shadcn-styled) NumberField - an alternative if Origin UI\u0027s variant is not a clean fit; same react-aria dep."
+                                              }
+                                          ]
+                       }
+                   ]
+}

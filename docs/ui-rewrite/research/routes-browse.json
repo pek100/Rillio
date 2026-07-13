@@ -1,0 +1,240 @@
+{
+    "family":  "routes-browse",
+    "familyNotes":  "These five routes are compositional shells, not atoms. Every one wraps its body in the shared `MainNavBars` (top nav + vertical nav rails + bottom overlay) and is gated by `withCoreSuspender(Component, Fallback)` - both are cross-family primitives the rewrite must keep as the outer wrapper; do NOT try to replace them with a registry layout. Four of the five (Board, Discover, Library, Search) are just a scroll container that maps a `catalogs`/`catalog` model into either `MetaRow` (horizontal poster rows) or `MetaItem` (grid cells), both of which live in the components family - so the ONLY genuinely route-specific view work here is: (1) Board\u0027s HeroCarousel, (2) Discover/Library filter bars + all-filters modal + empty/err/placeholder states, (3) Calendar\u0027s whole two-pane month view. Recurring reused data contract across all: models expose `catalog.content.type` as one of `\u0027Loading\u0027 | \u0027Ready\u0027 | \u0027Err\u0027` with `content.content` being either an item array, an error string, or the sentinel `\u0027EmptyContent\u0027`; deep-link navigation is always `navigate(toPath(deepLinks.*))` via the custom `rillio-router`, never internal state - this is the reason every dialog/menu recommendation must be URL/route-driven, not trigger-state-driven. Big cross-cutting compatibility caveat: Aceternity/Magic UI blocks almost universally assume `next/image` and Next.js app-router; they must be de-Next\u0027d (swap `next/image` for the app\u0027s `Image` component) before use - factor that cost into every Aceternity pick. Infinite scroll everywhere uses the shared `useOnScrollToBottom` / `getVisibleChildrenRange` helpers plus a 250ms lodash.debounce; keep those, no registry part covers windowed lazy row loading. Icons are `@stremio/stremio-icons`; parts that hard-depend on lucide (shadcn defaults) need an icon swap noted per component.",
+    "components":  [
+                       {
+                           "name":  "Board (route shell + lazy catalog rows)",
+                           "currentPath":  "apps/web/src/routes/Board/Board.js",
+                           "visualSpec":  "Vertical scroll page inside MainNavBars(route=\u0027board\u0027). Order: HeroCarousel (if any item has a backdrop), then a Continue-Watching MetaRow (if items\u003e0), then N catalog MetaRows. Each catalog row switches on content.type: \u0027Ready\u0027 -\u003e MetaRow of MetaItem (className keyed to posterShape: poster/square/landscape), \u0027Err\u0027 non-EmptyContent -\u003e MetaRow with a message, else -\u003e MetaRow.Placeholder (skeleton). Rows lazy-load on scroll: getVisibleChildrenRange + a boardCatalogsOffset that accounts for hero+CW rows shifting the index map, THRESHOLD=5, 250ms debounce, re-run on layout. Responsive nth-child hiding trims visible posters per breakpoint. A floating StreamingServerWarning pins bottom when the streaming server errored and the dismissal date passed. Padding 0 1rem; hero margin .5rem 0 2rem; rows margin 1rem/2rem. Entire content fades in via \u0027animation-fade-in\u0027.",
+                           "logicToReuse":  "useBoard() -\u003e [board(catalogs), loadBoardRows({start,end})]; useContinueWatchingPreview(); useStreamingServer(); useNotifications(); useProfile(); getVisibleChildrenRange; withCoreSuspender. Reused view components (other family): MetaRow (+MetaRow.Placeholder), MetaItem, ContinueWatchingItem, EventModal, MainNavBars. lodash.debounce.",
+                           "visualSpecShort":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Keep as a custom orchestration shell. No registry \u0027home page\u0027 block models windowed lazy-loaded catalog rows with a posterShape-keyed skeleton/error tri-state and an index-offset for hero+CW rows. The row atom (MetaRow) is the reuse surface and belongs to the components family.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "This file is pure data-to-row mapping + scroll bookkeeping; its value is the loadBoardRows windowing contract, which is app-specific. A registry block would only replace the MetaRow atom, not this shell. Rewrite should stay ~1:1 and just consume the redesigned MetaRow.",
+                                                  "gaps":  "Registry parts cover none of: visible-range lazy loading, posterShape row variants, EmptyContent sentinel handling, streaming-server warning gating.",
+                                                  "install":  "n/a",
+                                                  "url":  ""
+                                              },
+                           "motionIdeas":  "Replace the CSS \u0027animation-fade-in\u0027 with a Framer Motion staggered container: rows animate in with opacity 0-\u003e1 + y 12-\u003e0, stagger 0.05s, so catalogs cascade as they lazy-load. Wrap the row list in AnimatePresence so newly loaded rows fade rather than pop. StreamingServerWarning: slide-up + fade from bottom (y 24-\u003e0, spring stiffness ~300 damping ~30).",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "HeroCarousel (3D poster coverflow hero)",
+                           "currentPath":  "apps/web/src/routes/Board/HeroCarousel/HeroCarousel.tsx",
+                           "visualSpec":  "Full-width banner, height clamp(18rem,46vh,34rem), radius var(--radius-card). Layered: (1) stack of backdrop \u003cimg\u003e cover, object-position center 25%, cross-fading on opacity 0.7s (active slide=1); (2) a left+bottom scrim gradient (color-mix on --color-bg); (3) content block bottom-left (max 40%/34rem): title logo img OR text title (2.25rem/700), 3-line-clamped description (muted), and an actions row: an accent \u0027Watch now\u0027 pill (bg --color-accent, play icon, brightness-110 hover) + a surface \u0027More info\u0027 pill (border --color-line, surface-hover on hover); (4) a right-half 3D coverflow: every poster is absolutely centered and fanned by inline transform translateX(d*58%)+translateZ(-abs*5rem)+rotateY(d*-24deg), zIndex 30-abs, side cards dimmed brightness .55 (front=1), hidden beyond VISIBLE_SIDES=3, front card links to details, side cards click-to-select; coverflow hidden below 60rem; (5) bottom-right pager dots (active dot widens to 1.5rem + accent). Auto-rotates every 7s, pauses on mouseenter, resumes on leave; index wraps mod count.",
+                           "logicToReuse":  "Local state only (index, paused, setInterval 7s). Consumes item fields: background, poster, logo, name, description, deepLinks (metaDetailsStreams/player/metaDetailsVideos). Reuses rillio/components/Button (renders router-aware \u003ca href\u003e from deepLinks) and @stremio/stremio-icons. items come from Board\u0027s first Ready catalog.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Keep custom, but rebuild the motion on Framer Motion. The 3D coverflow (per-card signed-distance translate/rotateY/translateZ) is bespoke and already matches the design; no registry carousel reproduces it. Optionally drive the autoplay/index/dots with embla-carousel-react (headless) while keeping the custom card transforms.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Aceternity \u0027Apple Cards Carousel\u0027 and shadcn Carousel are flat horizontal scrollers, not a perspective coverflow, and Aceternity assumes next/image - adapting either is more work than porting the existing 40-line transform. The current component is well-built and on-brand (accent pill, dots, scrim). The only upgrade worth making is swapping hand-rolled setInterval/opacity transitions for Framer Motion springs and adding embla for robust wrap/keyboard/swipe.",
+                                                  "gaps":  "shadcn Carousel gives embla wiring + a11y + swipe but zero 3D; you supply the transforms. Aceternity apple-cards gives Apple-style layout animation but wrong shape + Next.js coupling.",
+                                                  "install":  "npm i embla-carousel-react framer-motion (embla optional)",
+                                                  "url":  ""
+                                              },
+                           "motionIdeas":  "Coverflow cards: motion.div with animate={{x,rotateY,z,scale,filter}} on a spring (stiffness 260, damping 30) instead of CSS transition - gives momentum as the front card swaps. Backdrop cross-fade: AnimatePresence mode=\u0027sync\u0027, opacity + a subtle scale 1.05-\u003e1 Ken-Burns on the active backdrop over the 7s dwell. Front card entrance: slight pop (scale 0.96-\u003e1). Dots: layoutId on the active pill so the widen animates with layout. Content block: key on index, slide-up + fade the title/description on each rotate.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Carousel (embla)",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/base/carousel",
+                                                  "note":  "Use only as the headless index/swipe/keyboard engine under the custom card transforms; its default flat slide layout is discarded."
+                                              },
+                                              {
+                                                  "part":  "Apple Cards Carousel",
+                                                  "source":  "aceternity",
+                                                  "url":  "https://ui.aceternity.com/components/apple-cards-carousel",
+                                                  "note":  "Wrong shape (horizontal scroll, not coverflow) and depends on next/image; reference only for the layout-animation feel."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Discover (route: filter bar + poster grid + all-filters modal)",
+                           "currentPath":  "apps/web/src/routes/Discover/Discover.js",
+                           "visualSpec":  "MainNavBars(route=\u0027discover\u0027). Top: horizontal selectable-inputs bar - up to 3 MultiselectMenu dropdowns (type, addon extras/genre, catalog), each flex-basis 15rem on --overlay-color; beyond 3 collapse into a circular 3rem filter Button (icon \u0027filters\u0027, surface-hover on hover, scale .95 active) that opens an all-filters ModalDialog stacking the same menus. Optional \u0027addon not installed\u0027 warning row with an accent Install pill opening AddonDetailsModal. Body states: catalog===null -\u003e DelayedRenderer(500ms) empty.svg + \u0027no catalog selected\u0027; content \u0027Err\u0027 -\u003e empty.svg + error string; \u0027Loading\u0027 -\u003e CSS-grid of CATALOG_PAGE_SIZE skeletons (poster-container padded by --poster-shape-ratio + a title bar); \u0027Ready\u0027 -\u003e responsive CSS grid (repeat(10..3,1fr) by breakpoint, gap .5rem) of MetaItem, one flagged \u0027selected\u0027 for keyboard focus. Infinite scroll via useOnScrollToBottom (threshold 400) + auto-fill if content shorter than viewport. animation-fade-in on the grid.",
+                           "logicToReuse":  "useDiscover(urlParams, queryParams) -\u003e [discover, loadNextPage]; useSelectableInputs(discover) -\u003e [selectInputs[], hasNextPage]; useBinaryState for the two modals; useOnScrollToBottom; CONSTANTS.CATALOG_PAGE_SIZE; useParams/useSearchParams. Reused view comps: MultiselectMenu, MetaItem, ModalDialog, AddonDetailsModal, DelayedRenderer, Image, MainNavBars. selectInputs shape: {title, options:[{value,label,title?}], value, onSelect} where onSelect navigates via toPath(deepLink).",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Select (for each single-value filter: type, catalog) + Dialog (all-filters overflow modal). The multiselect bar is a row of Selects; the overflow modal is a route-drivable Dialog. Keep the app\u0027s CSS grid for the poster grid (it is already a clean responsive repeat()).",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "The MultiselectMenu here is effectively a labeled single-select dropdown that navigates on choose; shadcn Select (Radix, React 18.3 fine, tokens via CSS vars) maps cleanly and is the best-maintained option. Dialog is the canonical overflow-filters container and can be opened from URL state to satisfy the route-driven-layer rule. The grid itself needs no part - a registry \u0027bento/grid\u0027 block would fight the fixed posterShape aspect ratios.",
+                                                  "gaps":  "shadcn Select is single-value; Discover\u0027s catalog menu is conceptually single-select-that-navigates so it fits, but the addon \u0027extra\u0027 filters that allow a null option need the \u0027NONE\u0027 item wired manually. Dialog default is trigger-driven - drive open state from useBinaryState/URL instead. Neither part covers the skeleton grid, the DelayedRenderer empty states, or the auto-load-if-short-viewport logic (keep custom). Icons default to lucide - swap for stremio \u0027filters\u0027.",
+                                                  "install":  "npx shadcn@latest add select dialog",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/select"
+                                              },
+                           "motionIdeas":  "Grid items: Framer Motion stagger on the Ready grid (opacity+scale 0.96-\u003e1, stagger 0.02) replacing animation-fade-in; use layout so newly appended pages slot in smoothly. Filter Select content: Radix already animates; add a subtle y-2 fade via data-state variants. All-filters Dialog: scale 0.96-\u003e1 + backdrop blur-in. Skeleton-\u003econtent: crossfade the skeleton grid out via AnimatePresence so posters don\u0027t pop.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Multiselect / Select (Base UI)",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/select",
+                                                  "note":  "Rich cmdk-based multiselect with search; good if a real multi-value filter is wanted. Newer Origin UI is Base UI (not Radix) - verify React 18.3 + our token theming before adopting."
+                                              },
+                                              {
+                                                  "part":  "Combobox",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/base/combobox",
+                                                  "note":  "Use if the catalog list grows long enough to need type-ahead search."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Library (route: type select + sort chips + grid)",
+                           "currentPath":  "apps/web/src/routes/Library/Library.js",
+                           "visualSpec":  "MainNavBars(route=model) where model is \u0027library\u0027 or \u0027continue_watching\u0027 (chosen by withModel from pathname; unknown -\u003e NotFound). Inputs bar: a single MultiselectMenu type filter (flex-basis 15rem, height 2.75rem, --overlay-color) + a Chips sort control (segmented pill toggles). Body: selected===null -\u003e DelayedRenderer empty.svg + \u0027library not loaded\u0027 / \u0027CW not loaded\u0027; catalog empty -\u003e empty.svg + \u0027library empty\u0027 / \u0027CW empty\u0027; else responsive CSS grid (repeat(10..3,1fr), gap .5rem) of LibItem passed {...libItem, notifications, removable: model===\u0027library\u0027}. Auto-scrolls to top on page-1/auth change. animation-fade-in. Redirects to first type via navigate(toPath(typeSelect.value)) when no type selected.",
+                           "logicToReuse":  "useLibrary(model, urlParams, queryParams) -\u003e [library, loadNextPage]; useSelectableInputs(library) -\u003e [typeSelect, sortChips, hasNextPage]; useProfile; useNotifications; useOnScrollToBottom; toPath; useParams/useSearchParams/useLocation/useNavigate; withModel HOC; withCoreSuspender. Reused view comps: MultiselectMenu, Chips, LibItem, Image, DelayedRenderer, MainNavBars. sortChips shape: {options:[{value,label}], selected:[value], onSelect}.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Toggle Group (single-select) for the sort Chips + Select for the type filter. Sort chips are exactly a segmented rounded-full toggle set with one active value that navigates - Toggle Group is the canonical match.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "shadcn Toggle Group (Radix, single mode) is a direct semantic and visual fit for the sort pills (our rounded-full, one-accent-active design) and themes to tokens trivially; Select mirrors the Discover type filter. Both are Radix/React-18.3 safe with no Next.js coupling. The grid stays the app\u0027s own CSS grid (no registry gain).",
+                                                  "gaps":  "Toggle Group\u0027s onValueChange gives the value; wire it to navigate(toPath(...)) rather than local state, and drive the active item from library.selectable.sorts.selected so it stays URL-derived. Default lucide icons unused here. Empty-state (empty.svg + label) and page-1 scroll-to-top are custom - keep. Consider an Empty/EmptyState primitive for the two message states.",
+                                                  "install":  "npx shadcn@latest add toggle-group select",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/toggle-group"
+                                              },
+                           "motionIdeas":  "Toggle Group active pill: layoutId shared element so the accent background slides between sort options. Grid: same Framer stagger as Discover (opacity+scale, stagger 0.02) plus layout on LibItem so removals animate out via AnimatePresence (relevant since library items are removable). Empty state: gentle fade+float on the empty.svg (y oscillate 0-\u003e-6 loop) so the empty screen feels alive.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Toggle Group",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/toggle-group",
+                                                  "note":  "Alternative styled toggle sets if shadcn\u0027s default spacing/looks need less overriding."
+                                              },
+                                              {
+                                                  "part":  "Tabs",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/tabs",
+                                                  "note":  "If sort should read as a tab strip rather than pills; Toggle Group is the closer match to the current chips."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Search (route: query-driven catalog rows)",
+                           "currentPath":  "apps/web/src/routes/Search/Search.js",
+                           "visualSpec":  "MainNavBars(route=\u0027search\u0027, query=\u003cderived\u003e) - the search INPUT itself lives in the top nav, this route only renders results. Reads query from search.selected.extra (reduceRight for name===\u0027search\u0027). Body: query===null -\u003e render nothing (no landing page); catalogs empty -\u003e empty.svg + \u0027no addons\u0027 message; else map catalogs to rows identical to Board: \u0027Ready\u0027 -\u003e MetaRow of MetaItem keyed by posterShape, \u0027Err\u0027 non-EmptyContent -\u003e MetaRow message, else MetaRow.Placeholder(title=catalogTitle). Lazy loads via getVisibleChildrenRange(THRESHOLD=100) + 250ms debounce + layout re-run. animation-fade-in per row.",
+                           "logicToReuse":  "useSearch(queryParams) -\u003e [search, loadSearchRows(range)]; getVisibleChildrenRange; useTranslate; useSearchParams; withCoreSuspender. Reused view comps: MetaRow (+Placeholder), MetaItem, Image, MainNavBars. Same catalog.content tri-state contract as Board.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Keep as a custom shell (near-identical to Board\u0027s row-mapping logic, minus hero/CW). Factor the shared \u0027catalogs -\u003e MetaRow tri-state\u0027 mapping into one reused helper/component so Board and Search share it. The empty state can adopt a shared Empty primitive.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Nothing in this route is a registry candidate - it is the same windowed row mapper as Board. The only opportunity is DRY: extract the switch(content.type) row renderer so both routes and the rewrite consume it once. Search palette/input is a separate modal-route family, not here.",
+                                                  "gaps":  "No registry part for visible-range lazy loading or the EmptyContent sentinel. The \u0027no addons\u0027 empty screen could use a shared Empty/EmptyState block for consistency across routes.",
+                                                  "install":  "n/a",
+                                                  "url":  ""
+                                              },
+                           "motionIdeas":  "Rows: Framer stagger identical to Board so results cascade as the query resolves. On query change, AnimatePresence exit (fade+y) the previous result set before the new rows enter, so switching searches reads as a transition not a flash. Empty state: fade-in + subtle float on empty.svg.",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "Calendar (route: two-pane month view)",
+                           "currentPath":  "apps/web/src/routes/Calendar/Calendar.tsx",
+                           "visualSpec":  "MainNavBars(route=\u0027calendar\u0027). Centered content max-width 78rem, flex row gap 1rem, padding 0 1.5rem 1.5rem (0 at minimum bp). Left main column (flex auto): Selector (month nav) stacked over Table (month grid). Right: List (per-day agenda). A BottomSheet (title=selected day \u0027D Month\u0027, show when a day is selected) holds Details for narrow screens. Selecting a day (setSelected) highlights it across Table+List and opens the sheet. animation-fade-in on content.",
+                           "logicToReuse":  "useCalendar(urlParams) -\u003e Calendar model (selected, selectable, items[], monthInfo); useCalendarDate(profile) -\u003e {toMonth,toDayMonth}; useProfile; useParams; withCoreSuspender. Sub-views: Selector, Table, List, Details. Reused view comp: BottomSheet (components family), MainNavBars. CalendarItem = {date:{day}, items:CalendarContentItem[]}; monthInfo={firstWeekday, today}.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Keep the two-pane content-calendar layout custom (it is a media schedule grid, NOT a date-picker). Do NOT reach for shadcn Calendar / react-day-picker here - that renders a compact date input, not a full-bleed month grid with per-day episode posters. Only the BottomSheet is a registry candidate (see the Details sub-entry).",
+                                                  "confidence":  "high",
+                                                  "rationale":  "react-day-picker models day SELECTION, not day CONTENT cells that hold scrollable poster strips and an agenda list. Forcing it would fight the whole design. The custom CSS grid (7-col week header + firstWeekday offset spacers + Cells) is the right primitive and already flat/borderless on-brand.",
+                                                  "gaps":  "shadcn Calendar covers none of: content cells, per-day poster HorizontalScroll, agenda List, or the month Selector nav. Reuse it nowhere in this route.",
+                                                  "install":  "n/a",
+                                                  "url":  ""
+                                              },
+                           "motionIdeas":  "Month change: AnimatePresence on the Table keyed by year-month, slide+fade the grid left/right matching prev/next direction (directional variants). Selected-day highlight: layoutId shared ring so the active outline animates between cells. List item auto-scrollIntoView already exists - pair with a highlight pulse on the active day heading.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Calendar (react-day-picker)",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/calendar",
+                                                  "note":  "Explicitly NOT a fit - date-picker, not a content month grid. Listed to record it was evaluated and rejected."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Calendar / Selector (month prev-next nav)",
+                           "currentPath":  "apps/web/src/routes/Calendar/Selector/Selector.tsx",
+                           "visualSpec":  "Horizontal bar: left Button = chevron-back icon + short prev-month label; center = big year over long current-month name; right Button = short next-month label + chevron-forward icon. Buttons navigate via navigate(toPath(deepLinks.calendar)). Bare, borderless.",
+                           "logicToReuse":  "useCalendarDate(profile) -\u003e toMonth(sel,\u0027short\u0027|\u0027long\u0027); useNavigate + toPath; selectable.prev/next.deepLinks.calendar; selected.year. Reuses rillio/components/Button + stremio-icons chevron-back/forward.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom - a 3-slot segmented month pager. Trivial to hand-build with the app\u0027s Button + icons; no registry part is a cleaner fit than the existing ~30 lines. (A shadcn Button/Pagination could back it but adds no value.)",
+                                                  "confidence":  "high",
+                                                  "rationale":  "It is two icon+label nav buttons around a title. The current code is already minimal and on-brand; a registry Pagination component models numbered pages, not a month stepper.",
+                                                  "gaps":  "Pagination parts assume page numbers, not prev/current/next month labels.",
+                                                  "install":  "n/a",
+                                                  "url":  ""
+                                              },
+                           "motionIdeas":  "On month change, crossfade+slide the center year/month label in the nav direction (x 8-\u003e0). Chevron buttons: whileTap scale 0.9, whileHover x nudge (-2 back / +2 forward). Sync direction with the Table\u0027s slide transition.",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "Calendar / Table + Cell (month grid of content cells)",
+                           "currentPath":  "apps/web/src/routes/Calendar/Table/Table.tsx",
+                           "visualSpec":  "Table: a 7-col week header (Mon..Sun, long label on wide / 3-char short on narrow) over a CSS grid; leading empty \u003cspan\u003e spacers for monthInfo.firstWeekday, then one Cell per item. Cell: a Button with \u0027active\u0027(selected day) + \u0027today\u0027 modifiers, a day-number heading, a HorizontalScroll strip of poster Buttons (each = play icon overlay + Image, links to deepLinks.metaDetailsStreams, poster click stops propagation and navigateWithOrigin), and a \u0027more-horizontal\u0027 icon when items exist. Click selects the day.",
+                           "logicToReuse":  "monthInfo.firstWeekday/today; items[].date.day + items[].items[] (id,name,poster,deepLinks.metaDetailsStreams); useNavigateWithOrigin; useTranslation for weekday names. Reuses Button, HorizontalScroll, Image, stremio-icons play/more-horizontal.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom CSS-grid month table + custom Cell. The poster strip inside each cell is a HorizontalScroll (embla could optionally back it). No registry calendar renders content-bearing day cells; keep the grid, keep HorizontalScroll (or swap to embla for momentum/snap).",
+                                                  "confidence":  "high",
+                                                  "rationale":  "This is the core reason the whole Calendar stays custom: day cells hold scrollable poster strips + play affordances, which react-day-picker/shadcn Calendar cannot express. The existing firstWeekday-offset grid is correct and minimal.",
+                                                  "gaps":  "If richer per-cell scrolling is wanted, embla-carousel-react can replace HorizontalScroll for snap/drag; otherwise no external part applies.",
+                                                  "install":  "embla-carousel-react (optional, for the in-cell poster strip)",
+                                                  "url":  ""
+                                              },
+                           "motionIdeas":  "Cell hover: lift (y -2) + poster brightness up. Today cell: subtle persistent accent ring pulse. Active cell: layoutId ring shared with the List selection. Poster play-icon: fade+scale in on cell hover. Grid mount: stagger cells in row-major order (opacity+scale, stagger 0.01).",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "Calendar / List + Item (per-day agenda)",
+                           "currentPath":  "apps/web/src/routes/Calendar/List/List.tsx",
+                           "visualSpec":  "Right-pane vertical agenda. Empty -\u003e 3 ItemPlaceholder skeletons; else filter to days with items and render an Item per day. Item: \u0027active\u0027/\u0027today\u0027 modifiers, a day heading (\u0027D Month\u0027), and a body list of episode Buttons each = name + \u0027SxxEyy\u0027 info + play icon, linking to deepLinks.metaDetailsStreams (click stops propagation, navigateWithOrigin). Active item auto-scrollIntoView smooth on select.",
+                           "logicToReuse":  "filteredItems (days with items); useCalendarDate.toDayMonth; useNavigateWithOrigin; date.day vs selected/monthInfo.today; item.items[] (id,name,season,episode,deepLinks). Reuses Button + stremio-icons play. ItemPlaceholder skeleton.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom divide-y agenda list (matches the \u0027divide-y lists over cards\u0027 design rule). Rows are simple flat list items with a play affordance; the app\u0027s Button + a list wrapper suffice. No registry list part beats hand-built here.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "A borderless day-grouped agenda with skeletons is exactly the flat divide-y pattern the design language prescribes; registry \u0027list\u0027/\u0027timeline\u0027 blocks add card chrome we explicitly avoid. Keep the auto-scroll-into-view behavior.",
+                                                  "gaps":  "Kibo/registry timeline components impose vertical rails/cards not wanted. Keep placeholders custom (Skeleton primitive optional).",
+                                                  "install":  "npx shadcn@latest add skeleton (optional, for ItemPlaceholder only)",
+                                                  "url":  ""
+                                              },
+                           "motionIdeas":  "Active day: layout highlight that slides between agenda groups (shared layoutId with the Table cell). Episode rows: stagger-in per group; whileHover reveal/scale the play icon. Skeletons: shimmer via a looping gradient x-translate. Active auto-scroll: pair the existing scrollIntoView with a brief background flash on the target group.",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "Calendar / Details in BottomSheet (mobile day detail)",
+                           "currentPath":  "apps/web/src/routes/Calendar/Details/Details.tsx",
+                           "visualSpec":  "Content of a bottom sheet (title = selected \u0027D Month\u0027). Lists the selected day\u0027s videos as Buttons: name + \u0027SxxEyy\u0027 + play icon, href=deepLinks.metaDetailsStreams. Empty -\u003e \u0027no new episodes\u0027 placeholder. Presented inside the shared BottomSheet (show + onClose), used on narrow layouts where the right List pane collapses.",
+                           "logicToReuse":  "items.find(date.day===selected.day).items; useTranslation(\u0027CALENDAR_NO_NEW_EPISODES\u0027). Reuses BottomSheet (components family) + Button + stremio-icons play. Sheet open state is driven by `selected` (setSelected/onDetailsClose) from Calendar.tsx.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Drawer (vaul) - the bottom BottomSheet wrapper. shadcn Drawer with direction=\u0027bottom\u0027 + snap points is the canonical vaul-backed bottom sheet, matching the current iOS-style sheet. Note the sheet itself is the shared BottomSheet component (components family); this entry\u0027s recommendation is what that primitive should be rebuilt on.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "vaul/shadcn Drawer is the standard for exactly this pattern (drag-dismiss bottom sheet, Radix Dialog under the hood, React 18.3 + tokens fine) and supports being opened from external/URL-derived state (show prop) rather than a DrawerTrigger, satisfying the route-driven-layer rule. Details\u0027 inner content stays a custom flat video list.",
+                                                  "gaps":  "Drive Drawer open from the `selected` state (controlled open/onOpenChange), not a DrawerTrigger. Default lucide grabber/close - keep bare per our icon-button convention. The inner video list + \u0027no new episodes\u0027 empty stay custom. Confirm vaul version\u0027s Radix peer works on React 18.3 (it does).",
+                                                  "install":  "npx shadcn@latest add drawer",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/drawer"
+                                              },
+                           "motionIdeas":  "Drawer already springs up (vaul); add snap points (peek + full). Inner video rows: stagger-in after the sheet settles. Empty \u0027no new episodes\u0027: fade + slight scale. whileTap on each video row (scale 0.98) for tactile feedback.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Sheet",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/sheet",
+                                                  "note":  "Radix-Dialog side sheet - use if a non-draggable edge panel is preferred over a draggable bottom sheet on tablet widths."
+                                              }
+                                          ]
+                       }
+                   ]
+}

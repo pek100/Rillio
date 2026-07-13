@@ -1,0 +1,120 @@
+{
+    "family":  "selection-search",
+    "familyNotes":  "Two distinct dropdown lineages coexist and should be unified in the rewrite: the legacy CommonJS `Multiselect` (Popup/ModalDialog-based, multi-value join, `mode=\u0027popup\u0027|\u0027modal\u0027` responsive switch) used almost everywhere (Discover, Library, Addons, Settings, SeasonsBar, StreamsList), and the newer TSX `MultiselectMenu` (single-value, absolute-positioned dropdown with nested `level` submenu drill-down + Back button, `compact` pill variant) used in the redesigned Settings routes. Both render the same visual grammar: a rounded-full pill trigger with a label + rotating `caret-down`, and a list of options each showing an accent-dot (#FFA033) on the selected row via `--primary-accent-color`, `--overlay-color` hover. A single Radix-Select-based primitive with an optional cascading (drill-in) mode can replace both. IMPORTANT data contract to keep: all four consume core-backed hooks/services that MUST be reused unchanged - Multiselect is fed `options/selected/onSelect` from route selectableInputs (core deep-links); MultiselectMenu consumes `MultiselectMenuOption` (types.d.ts: id/label/value/destination/default/hidden/level[]); SearchModal wires `useSearchHistory`, `useLocalSearch` (core LocalSearch model dispatch), `usePlayUrl`, `withCoreSuspender`, react-router `useNavigate`. SearchModal today is opened by internal `searchOpen` state in TopNav.tsx (line 47/147), NOT the URL - the rewrite should make the palette a route-driven layer (open state from URL) to match the router\u0027s modal-route convention, while keeping the createPortal + non-animated blurred backdrop (an intentional perf choice documented in the file). Icons are @stremio/stremio-icons (`search`, `caret-down`, `caret-left`, `caret-right`); cmdk/Radix parts default to Lucide, so icon swaps are needed. Registry note: shadcn Select/Combobox docs now live under ui.shadcn.com/docs/components/radix/*; Origin UI (originui.com) has rebranded parts of its site to \"coss ui\" on Base UI, but its React/Radix copy-paste select and search-input examples remain shadcn-compatible.",
+    "components":  [
+                       {
+                           "name":  "Multiselect (legacy filter dropdown)",
+                           "currentPath":  "apps/web/src/components/Multiselect/Multiselect.js",
+                           "visualSpec":  "Rounded-full pill trigger (height 2.75rem, padding 0 1.5rem, bg --overlay-color) built on rillio Button: flex row with a 500-weight ellipsized label + a 1rem caret-down icon (opacity 0.4) that rotates 180deg when open (.active). Label shows: renderLabelContent()/renderLabelText() override, else comma-joined labels of selected values, else the title placeholder. Dropdown menu (via Popup for desktop, ModalDialog for mobile when mode=\u0027modal\u0027) is a scrollable list (max-height 7 rows) of option Buttons; each option is flex row with label + a hidden 0.5rem accent dot (--primary-accent-color) shown only when .selected. Empty state = centered \u0027NO_OPTIONS\u0027 label. States: hover/focus on options = --overlay-color bg; disabled dims the trigger; open toggles active. Interactions: click trigger toggles menu (with a toggleMenuPrevented native-event guard so clicking the open menu doesn\u0027t retoggle), option click fires onSelect and closes unless closeMenuPrevented. VARIANTS: mode popup|modal; direction prop for popup placement.",
+                           "logicToReuse":  "Reuses rillio/components/Popup, rillio/components/ModalDialog, rillio/components Button, useBinaryState (open/close/toggle), react-i18next. Data contract: options[{value,title,label}], selected string[] (multi), dataset passthrough, onSelect({type,value,reactEvent,nativeEvent,dataset}), onOpen/onClose/onClick, renderLabelContent/renderLabelText render-prop overrides. Fed by every route\u0027s selectableInputs (core deep-link options). The multi-value join + render-prop overrides + native-event prevention flags must survive the rewrite.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Select (SelectTrigger/SelectContent/SelectItem, Radix Select) as the primitive; wrap with our pill trigger + accent-dot SelectItemIndicator. Add DropdownMenuCheckboxItem only for the rare true multi-value callers.",
+                                                  "confidence":  "medium",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/select",
+                                                  "rationale":  "Radix Select gives us exactly this shape: styled trigger + portalled scrollable content + per-item selected indicator + full keyboard/focus/ARIA, and it themes cleanly to a rounded-full pill and an accent dot with our --color-* tokens (no fight). React 18.3 + Tailwind v4 + webpack compatible, no Next/RSC. Radix Select also handles the mobile case (scroll-locked overlay) so the popup/modal split can collapse to one primitive. Deviation: Radix Select is single-select, so the (uncommon) multi-value callers need DropdownMenuCheckboxItem or a small custom multi mode.",
+                                                  "gaps":  "No native multi-select (current comma-join callers need checkbox items or a custom multi variant); the render-prop label overrides (renderLabelContent/renderLabelText) and the toggleMenuPrevented/closeMenuPrevented native-event guards are app-specific and must be re-implemented as trigger children + controlled open state. mode=\u0027modal\u0027 responsive behavior maps to Radix Select\u0027s overlay or a Drawer on mobile."
+                                              },
+                           "logicToReuseNote":  "",
+                           "motionIdeas":  "Content: Framer Motion AnimatePresence on Radix open state, scale 0.96-\u003e1 + y -4-\u003e0 + opacity, 140ms easeOut, transform-origin top. Caret: animate rotate 0-\u003e180 spring (stiffness 300, damping 24). Selected accent dot: layoutId shared element so it slides between rows on selection. Respect prefers-reduced-motion (fade only).",
+                           "alternates":  [
+                                              {
+                                                  "part":  "DropdownMenu + DropdownMenuCheckboxItem",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dropdown-menu",
+                                                  "note":  "Better base for the genuinely multi-value callers (checkbox rows, stays open across toggles)."
+                                              },
+                                              {
+                                                  "part":  "Select-05 / Select with icons and indicator",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/select",
+                                                  "note":  "Prestyled Radix Select variants (checkmark indicator, compact triggers) to crib token styling from."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "MultiselectMenu (nested drill-in select)",
+                           "currentPath":  "apps/web/src/components/MultiselectMenu/MultiselectMenu.tsx",
+                           "visualSpec":  "Pill trigger (min-width 8.5rem, height 3rem, padding .75rem 1.5rem, border-radius 2.75rem) built on rillio Button with aria-haspopup=listbox/aria-expanded: ellipsized label (title fn/string else selectedOption.label) + caret-down (opacity 0.6, rotates 180 when open). Hover/active = --overlay-color; disabled = opacity 0.3 + pointer-events none. Dropdown (Dropdown.tsx, role=listbox) is absolutely positioned under the trigger (top 100%, width 100%, z-10, --modal-background-color, --outer-glow shadow, --border-radius, max-height 7 rows scroll). Each row = Option.tsx (height 3rem, flex, padding 1rem): label + accent dot when selected \u0026\u0026 no children, or a caret-right when the option has a nested `level` array (submenu). NESTED behavior: selecting a parent with children increments `level` to render the child set and shows a Back button (caret-left + \u0027BACK\u0027) at top; selecting a leaf fires onSelect + closes. On open, the selected option scrollIntoView({block:\u0027nearest\u0027}). Outside-click closes. VARIANT: `compact` global class shrinks the trigger to a 1.75rem chip (0.8rem label) and right-aligns/auto-widths the menu (min-width 11rem).",
+                           "logicToReuse":  "Reuses rillio/components Button, useBinaryState, useOutsideClick, react-i18next, @stremio/stremio-icons. Data contract: MultiselectMenuOption (id/label/value/destination/default/hidden/level[] - types.d.ts), value (single), onSelect(value), disabled, title (string|fn). Consumed by Settings/Interface, Settings/Streaming, Settings/Player, useLanguageSorting. The level-based drill-down state machine, hidden-option filtering, and scroll-to-selected are app logic to preserve.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Select (Radix Select) for the trigger + listbox + selected indicator + compact pill variant; keep the level/Back cascading drill-down as custom logic layered on SelectGroup swaps.",
+                                                  "confidence":  "medium",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/select",
+                                                  "rationale":  "The flat single-select surface (pill trigger, scrollable listbox, accent-dot indicator, scroll-selected-into-view, ARIA listbox) is exactly Radix Select and themes to our tokens without fighting. Compact chip variant is just a trigger size variant. Tailwind v4 / React 18.3 / webpack safe, no Next/RSC. The nested `level` drill-in with a Back button is NOT a Radix hover-submenu pattern (that would be DropdownMenuSub), it is a mobile-style cascading push/pop - keep that as our own state on top of the primitive.",
+                                                  "gaps":  "Radix Select has no drill-in/Back cascade - the `level` push/pop navigation, the caret-right affordance, and Back button are custom and must be reimplemented. DropdownMenuSub is a hover flyout, not the current push-in interaction, so it is not a drop-in either. Merge this with the Multiselect rewrite into one primitive with an optional cascade mode."
+                                              },
+                           "logicToReuseNote":  "",
+                           "motionIdeas":  "Cascade transitions: Framer Motion slide between levels (parent list exits x -100%, child enters x 100%-\u003e0, ~180ms easeInOut), reverse on Back - a small push/pop stack. Dropdown enter: opacity+scaleY from top like Multiselect. Selected-row auto-scroll can pair with a brief highlight pulse (bg tint 0.2s). prefers-reduced-motion: cross-fade instead of slide.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "DropdownMenuSub / SubTrigger / SubContent",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dropdown-menu",
+                                                  "note":  "Radix submenu primitives if the team accepts hover-flyout instead of drill-in-with-Back; controllable, ARIA-complete."
+                                              },
+                                              {
+                                                  "part":  "Combobox (Popover + Command)",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/combobox",
+                                                  "note":  "If these filters should gain type-to-filter for long option lists (e.g. language sorting)."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "SearchBar (inline pill input)",
+                           "currentPath":  "apps/web/src/components/SearchBar/SearchBar.js",
+                           "visualSpec":  "A \u003clabel\u003e pill (height 3rem, padding 0 1.5rem, border-radius pill, bg --overlay-color, cursor text, transparent focus-outline-size border that turns --primary-accent-color on :focus-within) wrapping a borderless TextInput (flex 1, 1rem, placeholder color at 0.6 opacity) + a trailing 1.5rem search icon (opacity 0.6). Controlled value/onChange. Also exports SearchBar.Placeholder (SearchBarPlaceholder): a non-interactive skeleton twin (height 3.5rem, --color-placeholder-background bg, --color-placeholder-text label, icon tinted to match bg so it reads as a loading shimmer).",
+                           "logicToReuse":  "Reuses rillio/components/TextInput and @stremio/stremio-icons. Trivial data contract: className/title(placeholder)/value/onChange. TextInput is the app\u0027s controlled input wrapper - keep it or swap for a raw input; nothing core-backed here.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Input, composed inside a relative pill wrapper with an absolutely-positioned leading/trailing search Icon (shadcn Input has no icon slot, so wrap it - this is the standard shadcn search-input pattern).",
+                                                  "confidence":  "high",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/input",
+                                                  "rationale":  "shadcn Input is a plain themeable input (no Radix, no Next/RSC, zero compatibility risk) that maps 1:1 to our pill + focus-within accent border with --color-* tokens. The icon-inside-pill composition is idiomatic and matches our canonical bare-glyph-at-opacity icon style. Official part = best long-term maintenance.",
+                                                  "gaps":  "No built-in leading-icon slot (wrap it), and no built-in skeleton - SearchBarPlaceholder should become a shadcn Skeleton pill or a small custom placeholder. Keep focus-within accent border and cursor:text on the wrapper label."
+                                              },
+                           "logicToReuseNote":  "",
+                           "motionIdeas":  "Focus: animate the accent border/ring via Framer Motion (borderColor + subtle boxShadow glow, 150ms). Search icon: nudge scale 1-\u003e1.05 on focus-within. Placeholder skeleton: shimmer via a transl-x gradient sweep (2s loop) rather than opacity pulse.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Input with search icon + kbd shortcut",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/input",
+                                                  "note":  "Ready-made leading-search-icon and clearable input variants to copy the icon-slot composition and clear-button affordance from."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "SearchModal (command palette)",
+                           "currentPath":  "apps/web/src/components/SearchModal/SearchModal.tsx",
+                           "visualSpec":  "createPortal(document.body) full-viewport layer (z-50): a black/60 backdrop-blur-xl backdrop (intentionally NOT animated - animating a backdrop-filter re-rasterizes the blur every frame; documented in-file) that closes on click, plus a centered dialog (role=dialog aria-modal, w min(40rem,100vw-2rem), rounded-squircle, border --line, bg --surface, shadow-elevated). Top: a form row with a leading search icon + a borderless 3.5rem autofocused input (placeholder SEARCH_OR_PASTE_LINK); submit navigates to /search?search=\u003cq\u003e; paste triggers usePlayUrl (paste-a-link-to-play). Body (max-h 22rem scroll, p-2): a Search History group (heading + \u0027CLEAR_HISTORY\u0027 button, up to 8 \u003ca\u003e rows each with search icon + truncated query linking to deepLinks.search) and a Suggestions group (heading + rows from local search), each row = ITEM class (flex, gap-2.5, rounded-card, hover bg-surface-hover + text-fg). Empty state = centered non-interactive SEARCH_OR_PASTE_LINK row. Closes on Escape and restores previously-focused element on unmount. Deliberately no close button.",
+                           "logicToReuse":  "Reuses useSearchHistory (items + clear), useLocalSearch (core LocalSearch model: dispatch Search, maxResults 5, debounced 250ms), usePlayUrl (paste-to-play), withCoreSuspender (only mounts hooks while open), react-router useNavigate, react-i18next, cn(). deepLinks.search hrefs come from core. All of this data wiring MUST be reused verbatim - only the presentation changes.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Command + CommandDialog (CommandInput/CommandList/CommandGroup with heading/CommandItem/CommandEmpty), built on cmdk",
+                                                  "confidence":  "high",
+                                                  "url":  "https://ui.shadcn.com/docs/components/command",
+                                                  "rationale":  "This is a textbook command palette and CommandDialog is the canonical premade for it: CommandInput = the search field, CommandGroup heading = our History/Suggestions section headings, CommandItem = the rows (built-in keyboard nav + active styling we currently lack), CommandEmpty = the empty state. cmdk is plain React (works on 18.3, Tailwind v4, webpack; the docs show \u0027use client\u0027 but there is no RSC hard-dependency), and CommandDialog\u0027s open/onOpenChange can be driven by URL state so it becomes the route-driven modal layer the router convention wants. Themes cleanly to --surface/--line/--fg tokens and our rounded-squircle/shadow-elevated.",
+                                                  "gaps":  "Keep our own createPortal + non-animated backdrop-blur backdrop (CommandDialog\u0027s default Radix Dialog overlay animates; either disable its animation or keep our bespoke backdrop to preserve the documented no-jank blur). Custom bits cmdk does not provide: paste-to-play (onPaste -\u003e usePlayUrl), the CLEAR_HISTORY button, deepLinks.search \u003ca\u003e navigation + submit-to-/search, focus-restore-on-close, and withCoreSuspender gating. cmdk items ship Lucide-flavored defaults - keep @stremio/stremio-icons `search`. Wire open state to the URL rather than TopNav\u0027s internal searchOpen useState."
+                                              },
+                           "logicToReuseNote":  "",
+                           "motionIdeas":  "Dialog panel only (leave the blurred backdrop un-animated by design): Framer Motion scale 0.98-\u003e1 + y 8-\u003e0 + opacity, 160ms easeOut, transform-origin center. Result rows: subtle stagger fade-in (delay index*12ms, cap ~6) on query change. Active/selected row: layoutId highlight bar that glides between rows under keyboard nav. prefers-reduced-motion: instant.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "cmdk (raw)",
+                                                  "source":  "other-registry",
+                                                  "url":  "https://github.com/pacocoursey/cmdk",
+                                                  "note":  "Use cmdk directly if we want the palette without shadcn\u0027s Dialog wrapper, keeping our own portal/backdrop."
+                                              },
+                                              {
+                                                  "part":  "Command Menu / raycast-style palette",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/command",
+                                                  "note":  "Prestyled cmdk palette variants for visual reference on group headings and footer hints."
+                                              }
+                                          ]
+                       }
+                   ]
+}

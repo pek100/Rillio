@@ -1,0 +1,401 @@
+{
+    "family":  "routes-modal",
+    "familyNotes":  "Three of the five routes (Addons, Settings, Cached) are literal modal-route overlays that share crates/apps/web/src/common/modal-shell.less (root = absolute inset-0 flex-center z-1; backdrop = absolute inset-0 rgba(0,0,0,.6) + backdrop-filter blur(24px); panel = flex-col overflow-hidden 1px var(--color-line) border, var(--radius-squircle), var(--color-surface), var(--shadow-elevated)). Each route hand-rolls the same three-div structure (root / backdrop onClick=close / panel role=dialog aria-modal) plus its own Escape keydown listener wired to useCloseModalRoute() from rillio-router, and a *Fallback twin rendered by withCoreSuspender during core suspense. THE SINGLE HIGHEST-LEVERAGE FOUNDATION DECISION for this family: build ONE ModalRoute shell primitive on shadcn Dialog (Radix), open={true} controlled, onOpenChange -\u003e useCloseModalRoute(), so Escape + backdrop-click + focus-trap + aria come free and each route stops re-implementing them. It MUST accept the open state from the URL/router (not internal trigger state) and support a suspense fallback (render an empty DialogContent). Radix Dialog on React 18.3 is fine. Note shadcn now ships TWO variants per primitive (ui.shadcn.com/docs/components/base/* built on Base UI vs /docs/components/radix/* on Radix); pick ONE variant family kit-wide - Radix is the safer, most-documented choice for React 18.3 and themes cleanly to our tokens. Intro and NotFound are NOT modal routes: Intro is a full-screen auth page, NotFound a full-screen empty state; they do not use modal-shell and should not be forced into the Dialog primitive. Cross-cutting: every route reuses the same handful of leaf components already targeted by other families (Button, Toggle, MultiselectMenu, TextInput, ColorInput, RadioButton, Checkbox, Image, ModalDialog, ShortcutsGroup, SharePrompt, HorizontalNavBar) - the rewrite should consume the foundation-kit versions of those rather than redefine them here. The Cached route is already written in Tailwind v4 utility classes (the target idiom); Settings/Addons/Intro/NotFound are still .less. Keep all i18n (react-i18next t()), all core.transport dispatch wiring, and every use* hook exactly as-is.",
+    "components":  [
+                       {
+                           "name":  "ModalRoute shell (shared modal-shell.less pattern)",
+                           "currentPath":  "apps/web/src/common/modal-shell.less (consumed by Addons/styles.less, Settings/Settings.less, Cached/styles.less)",
+                           "visualSpec":  "Centered floating panel over a heavily blurred dark scrim. Root: absolute inset-0, z-1, flex, items/justify-center. Backdrop: absolute inset-0, rgba(0,0,0,.6) + backdrop-filter blur(24px), click closes. Panel: relative flex-col, overflow-hidden, 1px var(--color-line) border, var(--radius-squircle) corners, var(--color-surface) bg, var(--shadow-elevated). Each route sets its own panel size via min(): Addons min(72rem, 100vw-4rem) x min(46rem,100vh-6rem); Settings 64rem x 46rem; Cached 52rem x 42rem. role=dialog aria-modal aria-label. Escape closes (unless a nested dialog is open, per Addons). Has a Fallback twin (empty panel) shown during core suspense. The page beneath stays mounted and visible.",
+                           "logicToReuse":  "useCloseModalRoute() from rillio-router (drives close from the URL/router view-stack, NOT internal state); withCoreSuspender(Component, Fallback) HOC; the router \u0027modal: true\u0027 flag in routerPaths. Any premade dialog MUST be a controlled open={true} component whose onOpenChange calls useCloseModalRoute - never an internal trigger-driven open.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Dialog (Radix variant) - build a thin ModalRoute wrapper: \u003cDialog open onOpenChange={o=\u003e!o\u0026\u0026close()}\u003e with a themed DialogContent (max-w/h via className), DialogOverlay restyled to blur(24px)+rgba(0,0,0,.6), size passed per-route. Skip DialogTrigger entirely (URL-driven).",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/dialog",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Radix Dialog gives focus-trap, Escape, scroll-lock, backdrop-click and aria-modal for free - exactly the three things each route hand-rolls today - and it is fully controllable from router state, satisfying the route-driven-layer requirement. Themes to var(--color-surface)/--color-line/--radius-squircle with zero fighting. Radix works on React 18.3, no Next/RSC dependency.",
+                                                  "gaps":  "Radix locks body scroll and traps focus globally; our shell keeps the view beneath visible+interactive-looking (it is not, but the design implies depth) - keep modal={true} for focus-trap but verify the blurred underlayer still renders. The nested-dialog Escape precedence in Addons (let inner ModalDialog eat Escape first) maps naturally to nested Radix Dialogs. Per-route width/height must be passed as className overrides since DialogContent centers with its own max-w."
+                                              },
+                           "motionIdeas":  "Foundation-kit ModalRoute transition: overlay fade 0-\u003e1 (150ms), panel scale .96-\u003e1 + opacity + y:8-\u003e0 with a soft spring (stiffness ~320, damping ~30). Use AnimatePresence so close animates out (Radix + framer via forceMount on Dialog.Portal). Backdrop blur can animate 0-\u003e24px for a \u0027frosting\u0027 feel. Respect prefers-reduced-motion (fade only).",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Dialog (Base UI variant)",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/base/dialog",
+                                                  "note":  "shadcn\u0027s newer Base-UI-backed Dialog; also React-18-safe. Only pick if the kit standardizes on Base UI - do not mix Base + Radix primitives across the kit."
+                                              },
+                                              {
+                                                  "part":  "Sheet",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/sheet",
+                                                  "note":  "Side-anchored variant of Dialog. Not the right fit for these centered panels, but the same primitive is worth adopting for any future edge-anchored surface."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Addons route (panel body: filters bar + addon list + nested modals)",
+                           "currentPath":  "apps/web/src/routes/Addons/Addons.js",
+                           "visualSpec":  "Inside the modal panel: a sticky top \u0027selectable-inputs-container\u0027 row (1.5rem pad) holding N MultiselectMenu filter pills (type/catalog, flex-basis 15rem each, --overlay-color bg), a spacer, an \u0027Add addon\u0027 pill (accent-soft bg, + icon, brightness-110 hover, scale .97 active), a bare SearchBar (18rem), and a filter icon button (only shown \u003c @minimum, opens a filters ModalDialog). Below: scrollable addons-list-container of Addon cards (1.5rem gap, animation-fade-in), or a large 2rem muted message (NO_ADDONS / NO_ADDONS_FOR_TYPE / remote Err), or 6 AddonPlaceholder skeletons while Loading. Four nested modals via ModalDialog: filters, add-addon (TextInput + directory link), share (logo+name+version + SharePrompt), and AddonDetailsModal.",
+                           "logicToReuse":  "useCore(); useInstalledAddons/useRemoteAddons/useAddonDetailsTransportUrl/useSelectableInputs hooks; usePlatform (openExternal); useBinaryState; useToast; useCloseModalRoute; core.transport.dispatch Ctx InstallAddon/UninstallAddon; the searchFilterPredicate; nestedModalOpen Escape guard. Components consumed: MultiselectMenu, SearchBar, Button, TextInput, Image, ModalDialog, SharePrompt, AddonDetailsModal.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Compose from foundation-kit parts: ModalRoute shell (Dialog) as the frame; a filter row of shadcn Select/Combobox (replacing MultiselectMenu) + an Input-based search + the accent \u0027Add\u0027 Button; the list stays a custom map of Addon cards. The four nested dialogs each become nested ModalRoute/Dialog instances.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/combobox",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "No single registry block matches an \u0027addon manager\u0027; this is a bespoke composition. The only premade wins are the leaf controls (Select/Combobox for the filter pills, Input for search, Dialog for the four nested modals). The layout, empty states and card grid are project-specific and should stay custom.",
+                                                  "gaps":  "MultiselectMenu is a project component with specific pill styling + i18n options; a shadcn Select must be re-skinned to the --overlay-color rounded-full pill look. AddonDetailsModal and SharePrompt are separate components (other families) - reference, do not rebuild here. The mobile fixed-position Add button + filter-icon-opens-modal behavior is custom responsive logic to preserve."
+                                              },
+                           "motionIdeas":  "Stagger the addon list on mount (children fade+y:8, 30ms stagger) replacing the CSS animation-fade-in. Filter pills: layout animation when the active set changes. Add-addon success: brief accent pulse. Skeleton-\u003econtent crossfade when Loading resolves.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Select",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/select",
+                                                  "note":  "Simpler than Combobox if the type/catalog filters are short static lists (they are)."
+                                              },
+                                              {
+                                                  "part":  "originui select variants",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/select",
+                                                  "note":  "Many pre-styled Select looks (with-icon, pill) that get closer to our --overlay-color pill filter without heavy restyling."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Addon card",
+                           "currentPath":  "apps/web/src/routes/Addons/Addon/Addon.js",
+                           "visualSpec":  "A clickable Button row (opens details on click/Enter): left logo-container (Image with an \u0027addons\u0027 Icon fallback), middle info column (name/id title, version pill via ADDON_VERSION_SHORT, types joined \u0027A, B \u0026 C\u0027, clamped description), right buttons-container: optional configure icon button (settings glyph, only when configurable \u0026\u0026 !configurationRequired), a primary Install/Uninstall/Configure label pill (label switches on installed + configurationRequired), and a Share icon+label button. All action buttons stopPropagation and are tabIndex=-1 (row owns focus). Flat, borderless, one accent.",
+                           "logicToReuse":  "Pure presentational + callback props (onInstall/onUninstall/onConfigure/onOpen/onShare each wrapped to emit {type,nativeEvent,reactEvent,dataset}); useTranslation; behaviorHints shape {configurable, configurationRequired, adult, p2p}; installed bool. Consumes foundation Button + Image.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom flat row built on a divide-y/list idiom (not a bordered Card). Reuse foundation Button for the row and the action buttons; a shadcn Badge for the version/type chips; the canonical bare icon-button for configure/share.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/base/badge",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Our design language explicitly favors divide-y lists over nested cards, so premade Card blocks are the wrong shape. The card is a thin composition of Button + Image + Badge + icon buttons already in the kit; the value-add of a registry part here is only the Badge for version/type chips.",
+                                                  "gaps":  "The install/uninstall/configure label logic and the stopPropagation-on-nested-actions pattern are behavioral and must be preserved. Badge needs re-theming to the muted pill look (px-1.5 py-0.5 text-[10px] like the Cached quality badges) rather than shadcn\u0027s default filled look."
+                                              },
+                           "motionIdeas":  "Row hover: subtle bg tint + the action buttons fade/slide in (opacity-0 group-hover:opacity-100), matching the Cached Row pattern. Install click: the primary pill morphs label with a layout+crossfade (Uninstall\u003c-\u003eInstall), plus a one-shot accent check pulse. whileTap scale .98 on the row.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "shadcnblocks card/list blocks",
+                                                  "source":  "other-registry",
+                                                  "url":  "https://www.shadcnblocks.com/",
+                                                  "note":  "Has feature-list rows that resemble an addon row, but all are card-heavy; more to strip than to keep."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "AddonPlaceholder (loading skeleton)",
+                           "currentPath":  "apps/web/src/routes/Addons/AddonPlaceholder/AddonPlaceholder.tsx",
+                           "visualSpec":  "Static skeleton mirroring the Addon card layout: logo square placeholder + 4 stacked placeholder pills in the info column, and 2+1 placeholder pills in the buttons column. Rendered 6x while remote/installed catalogs load. Pills are shimmer/pulse blocks.",
+                           "logicToReuse":  "Purely presentational, className passthrough. No hooks.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Skeleton - replace each placeholder block with \u003cSkeleton className=...\u003e; keep the same layout scaffold so it matches the real Addon card footprint.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/base/skeleton",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Exactly what shadcn Skeleton is for; it gives the standard pulse animation and themes to our surface tokens. Drop-in for the hand-built placeholder pills.",
+                                                  "gaps":  "shadcn Skeleton uses animate-pulse; if the kit standardizes on a shimmer sweep instead, wrap it or add a shimmer keyframe. Layout scaffold stays custom to match the Addon card."
+                                              },
+                           "motionIdeas":  "Prefer a diagonal shimmer sweep (translateX gradient) over pulse for a more premium feel; crossfade skeleton-\u003ereal cards when data arrives (AnimatePresence, 200ms).",
+                           "alternates":  [
+                                              {
+                                                  "part":  "originui skeleton",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/",
+                                                  "note":  "Origin UI ships shimmer-style skeletons if a sweep is preferred over pulse."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Settings route (panel: scrollspy menu + scrolling sections)",
+                           "currentPath":  "apps/web/src/routes/Settings/Settings.tsx",
+                           "visualSpec":  "Two-column modal panel: left fixed 18rem Menu (scrollspy nav), right scrollable sections-container (0 3rem pad) stacking General/Interface/Player/Streaming/(Shortcuts on desktop)/Info. Scroll position drives the selected menu item (throttled onScroll -\u003e updateSelectedSectionId, with an at-bottom snap-to-last); clicking a menu item smooth-scrolls to that section. On \u003c @minimum the layout flips to column-reverse and the menu hides. Fallback twin renders an empty panel during suspense.",
+                           "logicToReuse":  "useProfile/usePlatform/useStreamingServer/useRouteFocused; SECTIONS constants; the scrollspy math (offsetTop markers, throttle from lodash.throttle, smooth scrollTo); useCloseModalRoute + Escape; withCoreSuspender. Passes profile/streamingServer down to each section.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Keep the scrollspy as custom logic inside the ModalRoute shell. The left nav can adopt shadcn Tabs styling OR a vertical nav list, but the scroll-linked active state is bespoke - do not replace with Tabs\u0027 internal state (it would break deep-scroll sync).",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/scroll-area",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "A settings scrollspy is a known custom pattern with no clean registry equivalent; forcing Radix Tabs would fight the scroll-driven selection. The only premade wins are ScrollArea for the sections column (nicer overflow) and the ModalRoute shell as the frame.",
+                                                  "gaps":  "Radix ScrollArea changes scroll internals (custom scrollbar); verify the throttled onScroll still fires on its viewport (attach to ScrollArea\u0027s Viewport ref, not the outer div). If ScrollArea complicates the scrollspy, keep a plain overflow-y-auto div."
+                                              },
+                           "motionIdeas":  "Animate the active menu-item indicator with framer layoutId (a sliding pill/underline that glides between items as you scroll) - a big premium upgrade over the current instant .selected swap. Section headers can fade/slide in on scroll-into-view.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Tabs (vertical)",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/tabs",
+                                                  "note":  "Only if the team decides to switch from scrollspy to true tabbed panes (one section visible at a time) - a design change, not a like-for-like."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Settings Menu (scrollspy nav)",
+                           "currentPath":  "apps/web/src/routes/Settings/Menu/Menu.tsx",
+                           "visualSpec":  "Vertical 18rem column, 3rem/1.5rem pad. Each item is a Button (2.75rem tall, rounded-full pill, 1.05rem/500 weight, opacity .62). Selected = accent color + --color-surface-hover bg + weight 600 + opacity 1. Hover = surface-hover bg + full opacity; active = scale .98. Spacer pushes a stack of muted (opacity .4, .8125rem) version-info labels to the bottom: app version, build hash, server version, shell version. Hidden below @xsmall.",
+                           "logicToReuse":  "usePlatform (shell.state.version, isMobile); streamingServer.settings serverVersion; SECTIONS; process.env.VERSION/COMMIT_HASH; onSelect(event) reads data-section. Consumes foundation Button.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom vertical pill-nav (a list of Buttons) with a framer layoutId active indicator. No registry part is closer than a plain nav list; the version-info footer is bespoke.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/tabs",
+                                                  "confidence":  "low",
+                                                  "rationale":  "This is a rounded-full pill nav that is trivial to build with our foundation Button + tokens; premade nav/tabs parts add state machinery we do not want (selection is externally driven by scroll). Custom is the honest answer.",
+                                                  "gaps":  "Must keep externally-controlled selected prop (from scrollspy) and the data-section click contract; any Tabs part manages its own selection and would need to be forced controlled."
+                                              },
+                           "motionIdeas":  "Shared-layout sliding indicator (layoutId \u0027settings-active\u0027) behind the selected pill; opacity/weight tween on selection; version labels stagger-fade on open.",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "Settings Section / Option / Category / Link primitives",
+                           "currentPath":  "apps/web/src/routes/Settings/components/{Section,Option,Category,Link}",
+                           "visualSpec":  "Section: titled group wrapper (optional i18n label heading + children). Category: icon + label heading then children (used inside Player: Subtitles/Audio/Controls/Auto-play/Advanced). Option: a horizontal row, two 50% columns with 2rem gap and 2rem bottom margin - left heading (optional 1.5rem icon + 500-weight label, 2-line clamp), right content centered (hosts a Toggle, MultiselectMenu \u0027.multiselect\u0027 full-width --overlay-color, ColorInput, or a 3.5rem rounded-full \u0027.button\u0027 with surface-hover+brightness hover, scale .97 active). Link: a full-width Button row rendering just a label, used as a stacked list of external/action links (opens _blank by default).",
+                           "logicToReuse":  "i18next t(); classNames; forwardRef (Section). All purely presentational layout primitives - the data/toggles are injected by parent sections. The :global(.multiselect/.button/.color-input) hooks style injected leaf components.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "shadcn Field (+ Label) as the Option row primitive (label/control pair), plus Separator/divide-y for the Section list rhythm. Category = Field group with an icon heading. Link rows = foundation Button styled as a divide-y list item.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/base/field",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "shadcn\u0027s new Field/FieldGroup primitive is purpose-built for label+control settings rows and maps cleanly onto Option/Category, giving consistent spacing and a11y linkage. It themes to our tokens and needs no Next/RSC. The 50/50 two-column layout is a className tweak.",
+                                                  "gaps":  "Field defaults to stacked label-over-control; our Option is a 50/50 side-by-side row - needs a horizontal variant. The :global control-styling hooks (.multiselect/.button/.color-input) disappear once controls become real shadcn Switch/Select - restyle at the component level instead. Link is just a themed Button; no premade part needed."
+                                              },
+                           "motionIdeas":  "Rows fade/slide-in on section-scroll-into-view (stagger 24ms). Toggle/select value changes get a micro settle animation. Link rows: hover bg-tint sweep left-to-right.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "originui inputs \u0026 form rows",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/",
+                                                  "note":  "Large set of pre-styled label+control settings rows (switch-with-description, select-with-label) that could seed the Option variants faster than raw Field."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Settings sub-sections (General/Interface/Player/Streaming/Info forms)",
+                           "currentPath":  "apps/web/src/routes/Settings/{General,Interface,Player,Streaming,Info}",
+                           "visualSpec":  "Each is a Section composing Option rows. Interface: language MultiselectMenu + several Toggles (quit-on-close, esc-exit-fullscreen, blur-unwatched, gamepad; some shell-gated). Player: Category groups (Subtitles size Select + 3 ColorInputs; Audio Select+Toggle; Controls Selects+Toggle; Auto-play Toggle+Select+Toggle; Advanced external-player Select + hwdec/gpu/videoMode/pauseMinimize/ass toggles, mostly shell/platform-gated). Streaming: URLsManager + remote-url copy Option + endpoint/cacheSize/torrentProfile/transcodeProfile Selects + a faster-downloads Toggle. General: User header + a stack of Link rows (data export, calendar, support, source, TOS, privacy, delete, change password) + Trakt auth Button + Discord Toggle. Info: read-only version rows.",
+                           "logicToReuse":  "useInterfaceOptions/usePlayerOptions/useStreamingOptions/useFasterDownloads/useDataExport hooks (each returns pre-wired Toggle/Select prop bundles); useCore dispatch (UpdateSettings/LogoutTrakt/InstallTraktAddon); useDiscord; useToast; usePlatform gating (shell.active, shell.capabilities.gpuVideoProcessing, platform.name===\u0027windows\u0027, isMobile). The hooks are the data contract - REUSE untouched; the rewrite only swaps the visual leaf controls.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Switch (for every Toggle), Select (for every MultiselectMenu), and a custom ColorInput (subtitle colors). Compose inside the Field/Option row primitive.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/switch",
+                                                  "confidence":  "high",
+                                                  "rationale":  "These sections are pure compositions of toggles + selects fed by hooks; the premade wins are the leaf controls. shadcn Switch and Select are the canonical, well-themed, React-18-safe replacements for the project Toggle and MultiselectMenu and accept the hooks\u0027 {checked,onClick}/{options,selected,onSelect} bundles with a thin adapter.",
+                                                  "gaps":  "The hooks emit the legacy MultiselectMenu prop shape ({options,selected,onSelect,...}); a small adapter maps it to shadcn Select\u0027s value/onValueChange. ColorInput has no shadcn equivalent (see its own entry). Preserve every shell/platform gate exactly - these decide which rows render."
+                                              },
+                           "motionIdeas":  "Switch thumb: spring slide (stiffness 500, damping 30) + a brief accent glow when turning on. Select: content scale/opacity in. Conditionally-revealed rows (shell-gated) animate height/opacity in via AnimatePresence.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "originui switch",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/switch",
+                                                  "note":  "20+ switch variants (with icons/labels/loading) if a richer toggle than shadcn\u0027s default is wanted."
+                                              },
+                                              {
+                                                  "part":  "Combobox",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/combobox",
+                                                  "note":  "For the language/audio selects if they grow long enough to need search."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Settings User (profile header)",
+                           "currentPath":  "apps/web/src/routes/Settings/General/User/User.tsx",
+                           "visualSpec":  "Horizontal header: round avatar (backgroundImage from profile.auth.user.avatar, or anonymous/default SVG) + a column with an inline-editable DisplayNameEdit, a muted email/anonymous label, and a wrapped row of Link actions (Sync \u0026 backup, Import from Stremio, Upload to Stremio, and Log out when authed).",
+                           "logicToReuse":  "useCore (Logout dispatch); useDisplayName hook; openSync from syncEvents; DisplayNameEdit component; profile.auth shape. Consumes Link.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Avatar for the profile image; compose the rest as a custom header with the Link list. (DisplayNameEdit is a separate inline-edit component to reference, not rebuild.)",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/avatar",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "shadcn Avatar handles the image+fallback cleanly (our current code hand-rolls backgroundImage with SVG fallbacks); everything else is a bespoke header composition of foundation parts. No account-header block fits our flat, borderless language.",
+                                                  "gaps":  "Avatar\u0027s fallback is initials/icon; our fallbacks are branded anonymous/default SVGs - pass them as the AvatarImage src chain. DisplayNameEdit inline editing stays custom."
+                                              },
+                           "motionIdeas":  "Avatar hover: subtle ring/scale. Link row hover bg-tint. Display-name commit: brief check/settle micro-interaction.",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "Streaming URLsManager (list + add + reload)",
+                           "currentPath":  "apps/web/src/routes/Settings/Streaming/URLsManager/URLsManager.tsx",
+                           "visualSpec":  "A small table-like block: header row (URL | STATUS labels), a content list of Item rows, an inline AddItem editor when addMode, and a footer with an \u0027Add URL\u0027 Button (add icon) and a \u0027Reload\u0027 Button (reset icon + label).",
+                           "logicToReuse":  "useStreamingServerUrls hook (streamingServerUrls, addServerUrl, reloadServer); addMode local state. Consumes Button, Item, AddItem.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom divide-y list (header + rows + footer actions) using foundation Button and the canonical icon buttons. No table primitive needed at this scale.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/base/separator",
+                                                  "confidence":  "high",
+                                                  "rationale":  "A 2-column URL/status list with inline add is project-specific and tiny; a shadcn Table would be overkill and card-heavy. The divide-y idiom matches our design language directly.",
+                                                  "gaps":  "Keep the add/reload wiring and the inline AddItem toggle exactly. Just restyle to divide-y + rounded-full action buttons."
+                                              },
+                           "motionIdeas":  "AddItem editor: height/opacity expand-in (AnimatePresence) when addMode flips. New Item row: fade+slide-in. Reload button: rotate the reset icon 360deg on click.",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "URLsManager Item (radio-selected URL row + status + delete)",
+                           "currentPath":  "apps/web/src/routes/Settings/Streaming/URLsManager/Item/Item.tsx",
+                           "visualSpec":  "Row: left RadioButton (selected = current streamingServerUrl, disabled when already selected) + URL label. Right: a status pill (colored dot ready/error/loading + text ONLINE/ERROR/NotLoaded from streamingServer.settings.type) shown only for the selected row, and a delete icon Button (bin) shown for non-default URLs.",
+                           "logicToReuse":  "useProfile, useStreamingServer, useStreamingServerUrls (deleteServerUrl, selectServerUrl); DEFAULT_STREAMING_SERVER_URL constant; selected/defaultUrl memos. Consumes RadioButton, Button, Icon.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Radio Group (the whole URL list is a single-select radio group) + a custom status pill + the canonical bin icon button.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radio-group",
+                                                  "confidence":  "high",
+                                                  "rationale":  "The list is a mutually-exclusive selection - exactly Radio Group\u0027s model - and lifting selection to a group is cleaner than per-row RadioButton components. shadcn Radio Group themes to our accent and is React-18-safe.",
+                                                  "gaps":  "Selection currently lives in profile.settings via selectServerUrl - wire RadioGroup value/onValueChange to that, keep the disabled-when-selected behavior. The status dot/pill is a custom indicator (map settings.type -\u003e color token: ready=success, error=warning)."
+                                              },
+                           "motionIdeas":  "Status dot: gentle pulse while \u0027loading\u0027, settle to solid on ready. Delete: row collapse (height+opacity) on removal. Radio check: scale-in dot.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "originui radio variants",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/radio",
+                                                  "note":  "Card/row-style radio variants that resemble a selectable list row more than shadcn\u0027s bare radio."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "URLsManager AddItem (inline URL editor)",
+                           "currentPath":  "apps/web/src/routes/Settings/Streaming/URLsManager/AddItem/AddItem.tsx",
+                           "visualSpec":  "Inline row: a TextInput (placeholder from i18n) + two icon Buttons - confirm (checkmark) and cancel (close). Submit on Enter or checkmark.",
+                           "logicToReuse":  "Local inputValue state; onSubmit-\u003ehandleAddUrl; onCancel. Consumes TextInput, Button, Icon.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Input for the field + the canonical confirm/cancel icon buttons. Optionally an Input-with-inline-actions Origin UI variant.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/base/input",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Trivial: a themed Input plus two icon buttons. shadcn Input replaces the project TextInput with token theming and proper focus ring; the confirm/cancel are the standard bare icon buttons.",
+                                                  "gaps":  "Keep Enter-to-submit and the addMode lifecycle. Icon set: checkmark/close come from @stremio/stremio-icons today; keep or swap to Lucide check/x if the kit standardizes on Lucide."
+                                              },
+                           "motionIdeas":  "Expand-in on appear (width/opacity); confirm button success flash; cancel dismiss slides row up.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "originui input with inline buttons",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/input",
+                                                  "note":  "Pre-built input-with-trailing-action-buttons variants matching this exact inline-add pattern."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Cached route (panel: header + torrent rows)",
+                           "currentPath":  "apps/web/src/routes/Cached/Cached.tsx",
+                           "visualSpec":  "Already Tailwind-v4. Modal panel: header (title \u0027Cached\u0027 + \u0027\u003cn\u003e GB on disk\u0027 + a subtitle, plus a bare close icon button opacity-60). Body: min-h-0 flex-1 overflow-y-auto with a divide-y divide-surface list of Rows, or centered muted messages (failed / Loading / empty). This is the target visual idiom for the whole family (flat, divide-y, bare icon buttons, one accent).",
+                           "logicToReuse":  "useCachedTorrents (entries, failed, setPaused, remove); useLibraryLinksByInfoHash (mines continue_watching_preview -\u003e infoHash-\u003edeep links via core.transport decodeStream); useCore encode/decodeStream; useNavigate + toPath; useCloseModalRoute. formatBytes/stateLabel helpers. parseStream from MetaDetails/StreamsList/streamQuality.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Keep as-is structurally; only swap the frame to the shared ModalRoute (Dialog) shell and the close button to the canonical icon button. The divide-y list + Row are already the reference idiom.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/dialog",
+                                                  "confidence":  "high",
+                                                  "rationale":  "This route already embodies the target design language in Tailwind v4; the only foundation alignment is adopting the shared Dialog shell (so it stops re-implementing backdrop/Escape) and using kit tokens. No registry block matches a \u0027cached torrents\u0027 list.",
+                                                  "gaps":  "The infoHash-\u003elibrary-link mining and stream encode/decode are load-bearing playback wiring - do not touch. Ensure the Dialog shell\u0027s focus-trap does not break the row action buttons."
+                                              },
+                           "motionIdeas":  "Rows stagger-in on open; row removal collapses (height+opacity) via AnimatePresence; \u0027on disk\u0027 total counts up (framer animate) when it changes.",
+                           "alternates":  [
+
+                                          ]
+                       },
+                       {
+                           "name":  "Cached Row (progress bar + quality badges + actions)",
+                           "currentPath":  "apps/web/src/routes/Cached/Cached.tsx (Row + QualityBadges)",
+                           "visualSpec":  "group flex row (px-6 py-4, hover bg-white/5): left = truncated name + QualityBadges (resolution/HDR/flags chips parsed from name) + a second muted line (downloaded / total, state label, file count; warning color on error) + a thin 0.5px accent progress bar (bg-surface track, bg-accent fill, width% with 700ms transition) shown only while incomplete. Right actions: a labeled Pause/Resume PILL (only while transferring - deliberately a text pill, not a triangle, to avoid confusion with media Play), a Play icon button (accent, when fileIdx set), a More-info icon button (opacity-0 group-hover, when metaLink), and a Delete/bin icon button (opacity-0 group-hover, hover:text-warning).",
+                           "logicToReuse":  "CacheEntry shape (state live/paused/initializing/error, downloaded/total/fileCount/fileIdx/infoHash/name); parseStream quality parser; onPlay/onMoreInfo/onSetPaused/onDelete callbacks; progress/complete/pausable derivations.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Progress for the download bar + Badge for the quality chips; keep the row layout and the labeled Pause/Resume pill + icon buttons custom.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/base/progress",
+                                                  "confidence":  "high",
+                                                  "rationale":  "shadcn Progress is the exact primitive for the download bar (value-driven, themeable to bg-accent) and Badge for the quality chips - both replace hand-rolled markup with kit-consistent, token-themed parts. The action affordances are intentional bespoke UX (the text pause pill decision is documented) and stay custom.",
+                                                  "gaps":  "Progress must theme to a 0.5px-thin accent bar with rounded-full track (className overrides shadcn\u0027s default height). Badge needs the muted 10px pill styling. Preserve the pausable/complete logic and the deliberate text-pill-over-triangle decision."
+                                              },
+                           "motionIdeas":  "Progress fill spring-eases to new width (already 700ms CSS - upgrade to framer for interruptible spring); Pause\u003c-\u003eResume label crossfade; completion: bar fades out + a one-shot accent glow; action buttons fade/slide on group-hover (already opacity-0-\u003e100).",
+                           "alternates":  [
+                                              {
+                                                  "part":  "magicui animated progress / number ticker",
+                                                  "source":  "magicui",
+                                                  "url":  "https://magicui.design/docs/components/number-ticker",
+                                                  "note":  "For animating the byte counts / on-disk total with a rolling number effect."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Intro (full-screen auth: login/signup)",
+                           "currentPath":  "apps/web/src/routes/Intro/Intro.js",
+                           "visualSpec":  "NOT a modal route - full-screen. Blurred dual-SVG background (blur 6rem). Centered heading (Logo 78/5rem, 3rem/600 slogan title, 1.5rem muted lowercase sub-slogan). Content row: a form column (email + password CredentialsTextInputs; signup adds confirm-password + 3 Checkboxes for TOS/privacy/marketing; login shows a \u0027forgot password\u0027 Button; inline error message; a primary submit Button) and an options column (Facebook Button w/ icon, Apple Button w/ icon, and a switch-form Button + guest-login Button that vary by form). A reducer manages form/email/password/checkbox/error state. Two overlays: PasswordResetModal and a loader Modal (\u0027Authenticating\u0027 + cancel).",
+                           "logicToReuse":  "useCore Authenticate/Register dispatch + UserAuthenticated event/error listeners; useFacebookLogin/useAppleLogin hooks; useBinaryState; useRouteFocused; useSearchParams (form query); the big useReducer; Logo component; validation (email validity, password match, terms/privacy required). Consumes Button, Image, Checkbox, CredentialsTextInput, ModalDialog, Modal.",
+                           "recommendation":  {
+                                                  "source":  "aceternity",
+                                                  "part":  "Aurora Background for the atmospheric backdrop + a shadcn-based auth form (Input + Label + Field + Button + Checkbox) for the credential card. Reference Aceternity\u0027s login/signup block for the split layout, but keep our reducer/validation/social-login wiring.",
+                                                  "url":  "https://ui.aceternity.com/components/aurora-background",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "Intro is the one place a richer, animated first-impression is warranted; Aceternity\u0027s Aurora Background is a premium, framer-motion-native upgrade over the current blurred-SVG backdrop, and its login blocks give a strong layout reference. The form controls themselves should be shadcn (Input/Checkbox/Button) for maintainability and token theming.",
+                                                  "gaps":  "Aceternity components ship with their own gradient/color choices and sometimes Next-flavored demos - strip to the client-only motion + retheme to our #FFA033 accent and tokens. Do NOT import Aceternity\u0027s form logic; the reducer, email validity, password-match, terms-gating, Facebook/Apple hooks and core Authenticate dispatch are load-bearing and stay. Keep spatial-navigation keydown behavior (CredentialsTextInput)."
+                                              },
+                           "motionIdeas":  "Aurora drift on the background; heading/logo fade+rise on mount (stagger); form fields slide-in sequentially; error message shake + color flash; submit button loading morph into the Authenticating loader; social buttons subtle hover lift.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Login and Signup Sections block",
+                                                  "source":  "aceternity",
+                                                  "url":  "https://ui.aceternity.com/blocks/login-and-signup-sections",
+                                                  "note":  "Full split-screen auth layouts (form + imagery) that mirror Intro\u0027s two-column structure as a starting reference."
+                                              },
+                                              {
+                                                  "part":  "Aurora / gradient backgrounds",
+                                                  "source":  "magicui",
+                                                  "url":  "https://magicui.design/docs/components/animated-gradient-text",
+                                                  "note":  "Magic UI has lighter animated-background options if Aurora is too heavy for the WebView2 GPU budget."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "Intro PasswordResetModal + CredentialsTextInput",
+                           "currentPath":  "apps/web/src/routes/Intro/PasswordResetModal/PasswordResetModal.js, apps/web/src/routes/Intro/CredentialsTextInput/CredentialsTextInput.js",
+                           "visualSpec":  "PasswordResetModal: a ModalDialog (title PASSWORD_RESET, Cancel/Send buttons) containing an email CredentialsTextInput + inline error; Send opens the external reset URL. CredentialsTextInput: a thin forwardRef wrapper over TextInput adding spatial-navigation keydown handling (arrow keys drive window.navigate up/down for TV/remote nav).",
+                           "logicToReuse":  "useRouteFocused (autofocus); usePlatform.openExternal; email validity check; ModalDialog buttons contract. CredentialsTextInput\u0027s spatialNavigationPrevented / window.navigate wiring must be preserved for gamepad/remote users.",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Dialog (via the ModalRoute/AlertDialog shell) for the reset modal + shadcn Input for the field; wrap Input to retain the spatial-navigation keydown.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/dialog",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Small confirm-style dialog + one input - exactly shadcn Dialog + Input. Since it is trigger-driven (not URL-driven) here, it can use Dialog\u0027s normal open state. Input replaces TextInput with token theming.",
+                                                  "gaps":  "The spatial-navigation arrow-key handling in CredentialsTextInput is bespoke accessibility for remote/gamepad and must be layered back on top of shadcn Input via an onKeyDown wrapper. Keep external-URL reset behavior."
+                                              },
+                           "motionIdeas":  "Reset dialog: standard ModalRoute scale/fade; Send button loading state; error shake.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "AlertDialog",
+                                                  "source":  "shadcn",
+                                                  "url":  "https://ui.shadcn.com/docs/components/radix/alert-dialog",
+                                                  "note":  "If a stricter confirm semantics (focus on primary action) is preferred for the reset flow."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "NotFound (full-screen empty state)",
+                           "currentPath":  "apps/web/src/routes/NotFound/NotFound.js",
+                           "visualSpec":  "Full page (not modal): HorizontalNavBar at top (title, back button, fullscreen button, nav menu) + a centered empty state (12rem empty.svg image, opacity .9, + a large 2.5rem muted PAGE_NOT_FOUND label).",
+                           "logicToReuse":  "useTranslation. Consumes HorizontalNavBar (a shared nav component from another family) + Image.",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom centered empty-state (illustration + label) beneath the shared HorizontalNavBar. Optionally an Empty/EmptyState registry part for the centered block.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/base/empty",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "A 404 is a trivial centered illustration + text; shadcn\u0027s Empty component (if adopted) standardizes the empty-state block, otherwise it is a few divs. HorizontalNavBar belongs to the nav family - reference it, do not rebuild.",
+                                                  "gaps":  "shadcn Empty may not exist in the chosen variant set (verify /components/base/empty) - if absent, keep custom. Retain the branded empty.svg rather than a generic icon."
+                                              },
+                           "motionIdeas":  "Illustration gentle float/bob; label fade-rise on mount; optional parallax on pointer move for a touch of life.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Empty state blocks",
+                                                  "source":  "kibo",
+                                                  "url":  "https://www.kibo-ui.com/",
+                                                  "note":  "Kibo UI and other registries ship polished empty-state blocks if a richer 404 is wanted."
+                                              }
+                                          ]
+                       }
+                   ]
+}

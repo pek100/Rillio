@@ -1,0 +1,345 @@
+{
+    "family":  "route-player",
+    "familyNotes":  "CRITICAL ARCHITECTURE FACT that governs every recommendation: Player playback is NOT driven by an HTML `\u003cvideo\u003e` element. It is driven by the `useVideo()`/`usePlayer()` hooks over the mpv bridge; the chrome reads plain state (`video.state.paused/time/duration/buffered/volume/muted/playbackSpeed/audioTracks/videoScale/...`) and calls back (`video.setPaused/setTime/setVolume/...`). Therefore the monolithic \"shadcn video player\" registries surfaced in research (Kibo UI video-player, Limeplay, Shadix UI) are a POOR FIT and should NOT be adopted: they are built on media-chrome / a `\u003cvideo\u003e` context, assume they own the media element, and read state off it. Adopting one would fight our hook state AND break the stated requirement that playback be hoistable to an app-level session for PiP. The right move for the whole family is to COMPOSE our own chrome from unstyled/low-level shadcn primitives (Button, Slider, Sheet, DropdownMenu/RadioGroup, ContextMenu, Sonner) driven by the existing hooks, keeping every chrome piece a pure controlled view that takes value+callbacks and never references a media element. Kibo\u0027s individual chrome atoms are still worth reading as visual reference. Shared low-level primitives already in the repo and reused by this family (NOT rewritten here): `rillio/components` Slider (custom, supports `buffered` secondary range + `audioBoost` \u003e100% zone), Button, Image, Transition (fade/slide-left CSS-transition wrapper), ContextMenu, HorizontalNavBar, MetaPreview, Video (the mpv surface component). The Transition wrapper is the app\u0027s motion primitive today; a Framer Motion foundation kit can replace it, but the route-stack open/close is currently CSS-transition + a `menusOpen` boolean, and the immersion system (`overlayHidden` toggling `opacity:0` on nav/control/menu layers, plus per-menu `xxxMenuClosePrevented` nativeEvent flags to keep outside-mousedown from closing the just-opened menu) is load-bearing app logic that any Radix Popover/DropdownMenu port must preserve or replace deliberately. Icons are @stremio/stremio-icons throughout (play/pause/next/volume-*/more-vertical/more-horizontal/network/speed/cast/subtitles/audio-tracks/episodes/scale/maximize/minimize/chevron-back/chevron-forward/download/link/magnet-link/vlc/remove/add/close). Note VideosMenu is legacy/dead (superseded by SideDrawer, not imported by Player.js) - do not rebuild it.",
+    "components":  [
+                       {
+                           "name":  "Player (route shell / layer stack)",
+                           "currentPath":  "apps/web/src/routes/Player/Player.js",
+                           "visualSpec":  "Full-viewport black stage (position:relative, z-0). Stacks absolutely-positioned full-bleed `.layer`s in paint order: Video (mpv surface, click-to-play/dblclick-fullscreen) -\u003e optional dimmed background image (metaItem.background, opacity .6, shown until loaded) -\u003e Buffering OR Error overlay -\u003e a transparent scrim layer when any menu is open -\u003e transient VolumeChangeIndicator -\u003e HorizontalNavBar (top gradient, title + back) -\u003e SideDrawerButton (fixed, right edge, vertically centered) -\u003e ControlBar (bottom gradient) -\u003e Indicator HUD -\u003e NextVideoPopup / NextEpisodePreloadPrompt -\u003e the Transition-wrapped floating menus (statistics/subtitles/audio/speed/options) anchored bottom-right (`.menu-layer`: modal bg, outer-glow, blur 15px, radius, max-h calc(100%-13rem)) and the slide-in SideDrawer. Immersion: when playing + not casting + no menu open, after 3s idle `overlayHidden` fades nav/control/menu/drawer-button layers to opacity 0 and hides the cursor (`cursor:none`, gated by `html:not(.active-slider-within)`). Extensive keyboard/gamepad/media-key/wheel handlers, space-hold=2x speed, custom 200ms double-click.",
+                           "logicToReuse":  "usePlayer, useVideo, useStatistics, useSlowDownload, useNextEpisodePreload, useSubtitles, useMediaSession, useFullscreen, useBinaryState (per-menu open state), useSettings/useProfile, useStreamingServer, useCore, useServices (chromecast), onShortcut, useDiscord, withCoreSuspender. All the immersion state (immersed/overlayHidden/debounce), menusOpen aggregation, closeMenus, the xxxMenuClosePrevented flag protocol, and next-video navigation must be reused verbatim. This file is the seam where playback can be hoisted for PiP: keep Video + useVideo lifting-friendly.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom layer-stack orchestrator (keep as the route component). Rebuild only the presentational layer wiring in TSX; do not introduce a player-owning wrapper. Use shadcn primitives inside the child chrome, and drive menu layers as URL/state-driven floating panels (not Radix Popover trigger state) so they stay route-hoistable.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "No registry ships an mpv/hook-driven player stage. The value here is the immersion + layer + shortcut orchestration, which is bespoke and must survive. A monolithic player block would own the media element and block PiP.",
+                                                  "gaps":  "Everything visual can be re-expressed with Tailwind tokens; the orchestration logic is out of scope and reused. Ensure the new stage still exposes the `active-slider-within` global hook and the gradient scrims.",
+                                                  "url":  "",
+                                                  "install":  ""
+                                              },
+                           "motionIdeas":  "Framer: crossfade layers via AnimatePresence keyed on overlayHidden (opacity + slight y for the control bar rising 8px). Keep the 3s idle-hide but animate with a spring for the control bar and a plain 200ms tween for cursor/nav to match today\u0027s feel."
+                       },
+                       {
+                           "name":  "ControlBar",
+                           "currentPath":  "apps/web/src/routes/Player/ControlBar/ControlBar.js",
+                           "visualSpec":  "Bottom bar (padding 0 2rem). Row 1: SeekBar. Row 2: flat transparent icon buttons (4rem square, rounded-full, 2.2rem glyph in --primary-foreground-color, hover=brightness(1.1), active=scale(.97), disabled=icon opacity .4): Play/Pause (icon swaps play\u003c-\u003epause, disabled until paused is boolean), Next (only if nextVideo), Mute (icon tiers volume-off/mute/low/medium/high by volume\u003c30/70), then non-mobile inline VolumeSlider (flex 0 1 10rem), a flex spacer, then a right cluster: Statistics(network), Speed, Cast, Subtitles, Audio, Episodes(only if metaItem has videos), Scale(cycles fit/crop/stretch, title=label), Fullscreen(maximize/minimize, only if supported), Options(more-horizontal). Each menu button sets its `event.nativeEvent.xxxMenuClosePrevented=true` onMouseDown so the container mousedown handler doesn\u0027t immediately re-close. On mobile (\u003c=@minimum) the right cluster collapses behind a `more-vertical` toggle into an absolutely-positioned popover (modal bg, outer-glow) and the volume slider is hidden; the bar also becomes a touch surface (onTouchStart/Move/End forwarded to immersion).",
+                           "logicToReuse":  "useServices().chromecast (+stateChanged listener), usePlatform (isMobile, shell), useFullscreen, useBinaryState (mobile buttons menu), i18next t. All the on*Requested / onToggle* callbacks are passed from Player and just forwarded. Keep the closePrevented mousedown protocol and tabIndex={-1} on every button.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "Compose from shadcn Button (icon-size, variant=ghost) inside a shadcn Button Group for the grouped right cluster; keep the bar itself custom. Do NOT use Kibo/Limeplay MediaControlBar (media-chrome, owns \u003cvideo\u003e).",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Our icon-button idiom (bare glyph ~60% opacity, hover bg/brightness, explicit square flex-center, rounded-full) maps cleanly onto shadcn Button ghost+icon size; Button Group gives consistent grouping/separators for the right cluster and the mobile overflow. Both are Radix-free, Tailwind v4 friendly, themeable to our tokens without a fight.",
+                                                  "gaps":  "shadcn has zero media semantics: play/pause icon-swap, volume tiering, scale-cycling, the mobile overflow popover, and the closePrevented protocol are all custom. Button Group\u0027s default look must be flattened to our transparent/brightness idiom.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/button-group",
+                                                  "install":  "pnpm dlx shadcn@latest add button-group button"
+                                              },
+                           "motionIdeas":  "Framer: stagger the icon buttons in on bar reveal (opacity+y 6px, 20ms stagger). Play/pause icon: AnimatePresence swap with a quick scale/rotate. Active press: whileTap scale .97 (replaces the CSS). Mobile overflow: popover scale+opacity from bottom-right origin.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Button Group media pattern (Player Controls)",
+                                                  "source":  "shadcn.io (community pattern)",
+                                                  "url":  "https://www.shadcn.io/patterns/button-group-media-1",
+                                                  "note":  "Good visual reference for grouping play/seek/volume with Button+ButtonGroup, but it is a static \u003cvideo\u003e demo - use for layout ideas only."
+                                              },
+                                              {
+                                                  "part":  "Kibo UI video-player control atoms",
+                                                  "source":  "kibo",
+                                                  "url":  "https://www.kibo-ui.com/components/video-player",
+                                                  "note":  "media-chrome based; reference only, do not adopt (owns the media element, breaks PiP)."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "SeekBar",
+                           "currentPath":  "apps/web/src/routes/Player/ControlBar/SeekBar/SeekBar.js",
+                           "visualSpec":  "Horizontal row: left elapsed-time label (5.5rem, tabular-nums, rtl-ellipsis) -\u003e the Slider (flex 1, accent-filled after-track, accent thumb with inset ring glow, thumb scales 1.2 on hover, track 0.4rem / thumb 1.2rem via CSS vars) -\u003e right duration label wrapped in a Button that toggles remaining-time mode (shows -MM:SS of (duration-time)/playbackSpeed when toggled). While dragging, a local seekTime overrides the displayed value and the label reflects the scrub position; a 1.5s debounce resets seekTime back to live time after release. Disabled (dims/zeros) when time/duration are null/NaN. Slider also renders a `buffered` secondary range.",
+                           "logicToReuse":  "rillio/components Slider (buffered range + onSlide/onComplete), useRouteFocused, useBinaryState (remaining-time toggle), lodash.debounce reset, formatTime helper. onSeekRequested callback from Player. Keep the scrub-preview + debounce + remaining-time toggle behavior exactly.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Keep the custom SeekBar composed around the existing rillio Slider (or shadcn Slider if the foundation kit standardizes on Radix Slider). Custom because of the buffered secondary track + scrub-preview + remaining-time toggle, none of which ship in a stock slider.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "shadcn/Radix Slider and Origin UI sliders render a single value range with no buffered/secondary fill and no scrub-preview label; our seek bar needs both. The current rillio Slider already implements buffered + audioBoost, so reuse it and only restyle the labels/thumb.",
+                                                  "gaps":  "If migrating to Radix Slider you must add: a second buffered range element, a scrub-time label override, and the remaining-time click toggle. Simpler to keep rillio Slider and retheme.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/slider",
+                                                  "install":  "pnpm dlx shadcn@latest add slider"
+                                              },
+                           "motionIdeas":  "Framer: thumb whileHover scale 1.2 (spring), grow the track height on hover/scrub. On seek commit, a subtle pulse on the fill. Animate the remaining-time label swap with a 120ms fade/height.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Origin UI sliders (Base UI)",
+                                                  "source":  "originui",
+                                                  "url":  "https://originui.com/slider",
+                                                  "note":  "Has tooltip/label slider variants for the scrub label, but built on Base UI (not Radix) and still single-range - no buffered fill. Reference for the value-tooltip pattern."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "VolumeSlider",
+                           "currentPath":  "apps/web/src/routes/Player/ControlBar/VolumeSlider/VolumeSlider.js",
+                           "visualSpec":  "Compact horizontal slider (track 0.35rem / thumb 1rem, flex 0 1 10rem). Range 0-100, or 0-200 in the shell (audio boost) with `audioBoost` prop lighting the \u003e100% zone. Reads muted (renders 0 when muted) and a live slidingVolume override during drag with a 100ms reset debounce. Disabled -\u003e renders at 100 and non-interactive. Reused twice: inline in ControlBar and inside the VolumeChangeIndicator HUD.",
+                           "logicToReuse":  "rillio/components Slider (audioBoost zone), usePlatform (shell.active -\u003e maxVolume 200), useRouteFocused, debounce reset. onVolumeChangeRequested callback. Keep the boost-zone + immediate onSlide dispatch.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Keep custom around the rillio Slider (or Radix Slider) - the 0-200 audio-boost zone with a distinct \u003e100% color band is the load-bearing detail no stock slider provides.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Same reasoning as SeekBar: the audio-boost visual band and shell-conditional max are bespoke. Stock sliders give the interaction but not the boost styling.",
+                                                  "gaps":  "Any Radix/Origin slider swap must re-add the \u003e100% boost band and the muted=0 display rule.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/slider",
+                                                  "install":  "pnpm dlx shadcn@latest add slider"
+                                              },
+                           "motionIdeas":  "Framer: fill color lerps toward a warmer accent as it enters the boost zone. Thumb whileTap scale. When shown in the HUD, slide+fade in from the icon."
+                       },
+                       {
+                           "name":  "SubtitlesMenu",
+                           "currentPath":  "apps/web/src/routes/Player/SubtitlesMenu/SubtitlesMenu.js",
+                           "visualSpec":  "Wide (three fixed columns, 25rem tall) floating panel inside a .menu-layer. Col 1 Languages (16rem): bold header + scrollable list of pill/rounded rows; \u0027OFF\u0027 + each language (special-cased \u0027local\u0027); selected row gets a 14% accent tint and a small accent dot on the right; hover=overlay tint. Col 2 Variants (16rem): header + rows of SubtitleVariant for the selected language, or a \u0027subtitles disabled\u0027 empty state. Col 3 Settings (17rem): header + three Steppers (Delay in s step .25, Size in % step 25 clamped to SUBTITLES_SIZES, Vertical position in % step 1 0-100), each disabled until a track is selected. Sets subtitlesMenuClosePrevented on mousedown.",
+                           "logicToReuse":  "useSubtitles-provided props (tracks, selected ids, offsets/sizes/delays + all on*Changed callbacks), languages helper (toCode/label), CONSTANTS (SUBTITLES_SIZES, DEFAULT/LOCAL languages), track sorting/priority logic. Reuse the whole data-shaping useMemo block and the embedded-vs-extra routing on select.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom three-column panel rendered as a state-driven floating layer, composed of shadcn primitives (list rows as ghost Buttons, the settings column using the Stepper below). Not a DropdownMenu - it is a persistent multi-column settings surface, not a click-dismiss menu.",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "Nothing premade matches a 3-column subtitle language/variant/settings panel. The design language (divide-y-ish rows, rounded pills, accent-tint selection, one accent dot) is exactly our tokens, so custom TSX with Tailwind is the honest fit; Radix DropdownMenu would fight the persistent multi-column layout and the closePrevented immersion contract.",
+                                                  "gaps":  "Selection affordance (accent dot + tint), the OFF row, and the local-language special case are all bespoke. Keep it a route/state layer, not a Radix trigger.",
+                                                  "url":  "",
+                                                  "install":  ""
+                                              },
+                           "motionIdeas":  "Framer: panel fade+scale from bottom-right origin (replace the Transition \u0027fade\u0027). Column contents stagger-in. Selected-row accent dot: layoutId shared-element that slides between rows on change."
+                       },
+                       {
+                           "name":  "SubtitlesMenu/Stepper",
+                           "currentPath":  "apps/web/src/routes/Player/SubtitlesMenu/Stepper/Stepper.tsx",
+                           "visualSpec":  "Labeled numeric stepper: small header label + a row of [minus Button][value][plus Button]. Value shows `{value}{unit}` or \u0027--\u0027 when disabled/non-number. Minus/plus disable at min/max. Press-and-hold repeats: 250ms delay then 100ms interval via useTimeout/useInterval; single click steps once; mouseleave cancels. Icons remove/add.",
+                           "logicToReuse":  "useInterval(100)/useTimeout(250) for hold-repeat, clamp helper, onChange callback, i18next label. Keep the hold-to-repeat behavior and the min/max disable.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom stepper on shadcn Button (icon size) - keep the press-and-hold repeat logic. Cite Base UI Number Field / Origin UI number input as the closest premade, but they don\u0027t give free-form units (s / %) or our hold-repeat cadence cleanly.",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "This is a display-only labeled +/- control (no text entry), with custom units and hold-repeat. A full Number Field is heavier than needed and its text-input/scrub affordances are unwanted here. Reusing shadcn Button for the +/- keeps it consistent and tiny.",
+                                                  "gaps":  "Premade number fields assume an editable input and lack the hold-repeat interval + unit suffix; adopting one would add unwanted UI. Keep custom.",
+                                                  "url":  "https://base-ui.com/react/components/number-field",
+                                                  "install":  "",
+                                                  "alternates":  [
+
+                                                                 ]
+                                              },
+                           "motionIdeas":  "Framer: value change animates with a small y-slide/roll (up on increment, down on decrement). Buttons whileTap scale; while held, a subtle repeating pulse on the button.",
+                           "alternates":  [
+                                              {
+                                                  "part":  "Number Field",
+                                                  "source":  "other-registry",
+                                                  "url":  "https://base-ui.com/react/components/number-field",
+                                                  "note":  "Base UI (React 18 compatible, not Radix). Closest premade +/- numeric control, but editable-input-centric and no unit suffix / hold cadence - use as reference."
+                                              }
+                                          ]
+                       },
+                       {
+                           "name":  "SubtitlesMenu/SubtitleVariant",
+                           "currentPath":  "apps/web/src/routes/Player/SubtitlesMenu/SubtitleVariant/SubtitleVariant.tsx",
+                           "visualSpec":  "A selectable variant row (Button): left info block (variant label + origin label like LOCAL/EMBEDDED/EXCLUSIVE), accent dot when selected, hover title tooltip. For non-embedded tracks, a right-click ContextMenu (anchored to the row via triggers ref, autoClose, lock bottom) offering Download subtitle (href+download), Copy subtitle URL, Copy subtitle ID - each a Button with icon + label, firing toast on copy.",
+                           "logicToReuse":  "rillio/components ContextMenu + Button, useToast, languages.label, clipboard copy helpers, onSelect callback. Keep the embedded-track guard (no context menu) and the toast feedback.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "shadcn Context Menu for the right-click actions; the row itself stays a custom selectable Button. Radix Context Menu is a clean, accessible replacement for rillio\u0027s ContextMenu here.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Right-click download/copy actions map exactly onto Radix Context Menu (items with icon+label, separators, autoClose). Radix works on React 18.3 and themes to our tokens. The selection row is trivial custom.",
+                                                  "gaps":  "The current ContextMenu uses a `triggers` ref array + `lock=\u0027bottom\u0027`; Radix uses ContextMenuTrigger wrapping the row instead - a small structural change. Keep it inside a state-driven panel, not a global menu.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/context-menu",
+                                                  "install":  "pnpm dlx shadcn@latest add context-menu"
+                                              },
+                           "motionIdeas":  "Framer: context menu content scale+fade from cursor origin. Selected-row dot shares the SubtitlesMenu layoutId. Row hover: bg tint fade."
+                       },
+                       {
+                           "name":  "AudioMenu",
+                           "currentPath":  "apps/web/src/routes/Player/AudioMenu/AudioMenu.tsx",
+                           "visualSpec":  "Single-column floating panel (.menu-layer): bold \u0027AUDIO_TRACKS\u0027 header + scrollable list of selectable rows (Button). Each row: a two-line info block (language label from lang, then the raw track label) and an accent dot when selected. Sets audioMenuClosePrevented on mousedown.",
+                           "logicToReuse":  "languages.label, onAudioTrackSelected callback (dispatches to core via Player), selectedAudioTrackId. Simple controlled list.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom single-select list panel on shadcn Button rows (or shadcn DropdownMenu RadioGroup if the foundation kit standardizes menu panels on Radix). Given the persistent-panel + immersion contract, a custom divide-y list is the cleaner fit.",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "It is a themed single-select list; our design language (rounded rows, accent-tint/dot selection, divide-y) is trivial custom TSX. DropdownMenuRadioGroup could express single-select semantics but its click-to-dismiss + Radix portal fights the state-driven layer and closePrevented protocol.",
+                                                  "gaps":  "If DropdownMenu is chosen for consistency with SpeedMenu, wire it as a controlled always-open content and preserve closePrevented; otherwise keep custom.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dropdown-menu",
+                                                  "install":  "pnpm dlx shadcn@latest add dropdown-menu"
+                                              },
+                           "motionIdeas":  "Framer: list rows stagger-fade in; selection dot slides via shared layoutId between rows; panel scale+fade from bottom-right."
+                       },
+                       {
+                           "name":  "SpeedMenu (+ Option)",
+                           "currentPath":  "apps/web/src/routes/Player/SpeedMenu/SpeedMenu.js",
+                           "visualSpec":  "Compact floating panel: \u0027PLAYBACK_SPEED\u0027 title + a vertical list of rate options 0.25x..2.0x (8 steps, reversed so 2x is top). Each Option (SpeedMenu/Option/Option.js) is a Button showing `{value}x` + an accent selection dot when it equals the current playbackSpeed. Sets speedMenuClosePrevented on mousedown.",
+                           "logicToReuse":  "onPlaybackSpeedChanged callback, current playbackSpeed. RATES array. Keep the reversed ordering and 0.25 granularity.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "shadcn Dropdown Menu with DropdownMenuRadioGroup/RadioItem is the textbook fit for a mutually-exclusive speed picker - but render it as a controlled, always-open panel layer (open state from our menu state) rather than a trigger-driven menu, to honor the immersion/closePrevented contract.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Single-choice preset list is exactly DropdownMenuRadioGroup\u0027s use case, and it is officially recommended for playback-speed style selectors. Radix on 18.3 is fine and themes to our accent dot easily.",
+                                                  "gaps":  "Radix RadioItem ships a check/dot indicator we restyle to our accent dot; and we must drive open state externally + keep it inside .menu-layer instead of Radix\u0027s portal-to-body default.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/dropdown-menu",
+                                                  "install":  "pnpm dlx shadcn@latest add dropdown-menu"
+                                              },
+                           "motionIdeas":  "Framer: options stagger-in; the selected accent dot animates position with layoutId; whileTap scale on each rate."
+                       },
+                       {
+                           "name":  "OptionsMenu (+ Option)",
+                           "currentPath":  "apps/web/src/routes/Player/OptionsMenu/OptionsMenu.js",
+                           "visualSpec":  "Vertical action list (.menu-layer) AND the same component is reused as the right-click ContextMenu content over the video. Conditionally renders action rows (Option = icon + label Button): Copy stream link, Copy magnet link (torrent), Download video (external), Keep in cache (torrent only), Download subtitles (when an extra sub track is selected), and one \u0027Play in {device}\u0027 row per external playback device. Rows disable when stream is null. Sets optionsMenuClosePrevented on mousedown; copy actions fire toasts.",
+                           "logicToReuse":  "useCore (PlayOnDevice dispatch), usePlatform (openExternal), useToast, useCacheDownload hook, stream deepLinks parsing, playbackDevices filter. Keep every conditional row and the clipboard/toast flows. Note dual use: as a menu-layer AND as ContextMenu children.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "shadcn Context Menu (for the right-click-over-video usage) and/or a shared Dropdown Menu action list (for the button-triggered .menu-layer usage). Both are Radix and share the same item idiom (icon + label + disabled).",
+                                                  "confidence":  "high",
+                                                  "rationale":  "This is a classic action menu (icon+label rows, disabled states, right-click support) which is precisely what Radix Context Menu / Dropdown Menu provide. It replaces the custom rillio ContextMenu wiring in Player.js cleanly.",
+                                                  "gaps":  "The component is used in TWO ways (floating layer + right-click content); the rewrite should extract a shared item list and mount it in both a ContextMenu and a controlled Dropdown/panel. Preserve the disabled-when-no-stream and closePrevented behavior.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/context-menu",
+                                                  "install":  "pnpm dlx shadcn@latest add context-menu dropdown-menu"
+                                              },
+                           "motionIdeas":  "Framer: menu content scale+fade from anchor/cursor origin; rows stagger; icon nudges on hover. Copy success: quick check-icon morph on the row."
+                       },
+                       {
+                           "name":  "StatisticsMenu",
+                           "currentPath":  "apps/web/src/routes/Player/StatisticsMenu/StatisticsMenu.js",
+                           "visualSpec":  "Floating panel: \u0027PLAYER_STATISTICS\u0027 title. For torrent streams: a 3-up stat cluster (Peers / Speed MB_S / Completed %) + a full-width info-hash row. A \u0027Show more/less\u0027 toggle (shell only) reveals Details: three sections (Video/Audio/Transfer) each a stack of label|value DetailRow pairs, formatted from polled mpv stats (codec, resolution+tier like 4K UHD, fps, bit depth, dynamic range HDR10/DV/HLG, color primaries, HDR mastering MaxCLL/MaxLuma, pixel format, bitrate, hw/sw decoding, audio channels/sample rate, downloaded/uploaded/file size, container). Empty/hint states: \u0027No statistics available\u0027, \u0027Waiting for playback...\u0027. Wrapped in a Transition \u0027fade\u0027 in Player. Sets statisticsMenuClosePrevented on mousedown; polls platform.shell.getMpvStats every 1s while expanded.",
+                           "logicToReuse":  "useStatistics-derived props (peers/speed/completed/infoHash), streamingServer.statistics details, platform.shell.getMpvStats polling, all the formatter helpers (resolutionLabel/bitDepth/hdrLabel/fpsLabel/bitrate/hwdecLabel/bytes/upper). Reuse every formatter and the poll effect verbatim; these encode real HDR/mpv knowledge.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom stats panel using our divide-y label|value row idiom. No registry has a media diagnostics panel. Optionally use shadcn Collapsible for the Show more/less section and shadcn Badge for the resolution/HDR tier chips.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "This is a bespoke technical readout tied to mpv fields; the only reusable premade pieces are a Collapsible (for expand) and Badge (for tier/HDR chips). Everything else is data + tokens.",
+                                                  "gaps":  "Collapsible/Badge only cover the expand affordance and chips; the whole data model and formatters stay custom and reused.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/collapsible",
+                                                  "install":  "pnpm dlx shadcn@latest add collapsible badge"
+                                              },
+                           "motionIdeas":  "Framer: Show more expands with height auto (AnimatePresence + layout); DetailRows stagger-fade; live values (speed/peers) do a subtle number-tick animation on change; HDR badge gets a soft glow when PQ/DV detected."
+                       },
+                       {
+                           "name":  "SideDrawer (+ SideDrawerButton)",
+                           "currentPath":  "apps/web/src/routes/Player/SideDrawer/SideDrawer.tsx",
+                           "visualSpec":  "Right-edge full-height panel (max-w 35rem, modal bg, outer-glow, blur 15px, slides via transform 0.3s, square corners). Top: a close chevron (only shown on phone widths). MetaPreview (compact: name/logo/runtime/releaseInfo/description clamp-4/links). For series: a SeasonsBar (reused from MetaDetails) + a scrollable Video list (reused Video component with watched/progress/thumbnail/mark-watched). Slides in via Transition \u0027slide-left\u0027 (disabled on Safari due to a compositing bug). Responsive: full-width on phone-portrait, 50vw phone-landscape. Companion SideDrawerButton: a fixed tab hanging off the right edge (chevron-back, ~60% opacity icon) that toggles the drawer.",
+                           "logicToReuse":  "useCore (MarkVideoAsWatched/MarkSeasonAsWatched dispatch), CONSTANTS.SHARE_LINK_CATEGORY, MetaPreview + Video + SeasonsBar shared components, season/videos memoization, the transitionEnded-\u003eselectedVideoId focus handoff. Keep the Safari transition guard and the mark-watched dispatches.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "shadcn",
+                                                  "part":  "shadcn Sheet (side=\u0027right\u0027) as the drawer shell - Radix Dialog based, with focus management + edge slide + ARIA - driven as a route/state-controlled layer (open bound to sideDrawerOpen). SideDrawerButton stays a custom edge-tab trigger.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Sheet is purpose-built for exactly this (full-height right edge panel, controllable open state, accessible). It replaces the hand-rolled transform+Transition and gives us focus-trap for free. Themes to modal bg + outer-glow. Works as a controlled component so the router view-stack can drive it.",
+                                                  "gaps":  "Sheet adds a backdrop/scrim + focus trap our current drawer lacks (over the still-playing video - verify that is acceptable, or disable the modal overlay). Must re-add the Safari transition guard if it recurs, the edge-tab trigger (Sheet\u0027s default trigger is inline), and keep the drawer non-media-owning. Content (MetaPreview/SeasonsBar/Video) is reused as-is.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/sheet",
+                                                  "install":  "pnpm dlx shadcn@latest add sheet"
+                                              },
+                           "motionIdeas":  "Framer: Sheet already springs in; tune to a 300ms ease to match today. The edge SideDrawerButton nudges left on hover (x -4px) and its chevron flips when open. Video rows stagger-in as the sheet settles."
+                       },
+                       {
+                           "name":  "Buffering (pre-playback / loading overlay)",
+                           "currentPath":  "apps/web/src/routes/Player/Buffering/Buffering.tsx",
+                           "visualSpec":  "Full-bleed centered overlay. Center: the meta logo rendered twice - a blurred background copy and a foreground copy clipped by clipPath inset(0 {100-progress}% 0 0) so it \u0027fills\u0027 left-to-right with buffering progress (falls back to the brand symbol.svg; if logo missing/broken but a title exists, shows the title text instead). Lower area (only for torrent streams not yet loaded): an \u0027Initializing\u0027 status block with \u0027{completed}% downloaded / {speed} MB/s / {n} peers\u0027, a helper line, and a slow/escalation zone: warning text + action buttons \u0027Try a different source\u0027 (accent pill) and optionally \u0027Switch to Fast mode\u0027 (surface pill) with a VPN caveat. All Tailwind-token classed already (text-fg/fg-muted/fg-subtle/warning/accent/bg, rounded-full pills).",
+                           "logicToReuse":  "statistics (progress/infoHash/peers/speed/completed), useSlowDownload outputs (escalated/connectionSlow/fastModeAvailable + switchToFastMode), onTryDifferentSource. rillio Image with fallbackSrc. Keep the progress clip-fill logo, the torrent-only gating, and the escalation copy logic.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Fully custom - the progress-clip fill-logo loader is a signature brand element with no registry equivalent. Reuse the existing Tailwind implementation; only the pills/buttons could adopt shadcn Button variants.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "A logo that fills by clip-path with download progress plus a torrent-specific escalation panel is entirely bespoke; premade spinners/skeletons don\u0027t apply. It is already on our tokens.",
+                                                  "gaps":  "Only the action buttons map to shadcn Button; everything else stays custom.",
+                                                  "url":  "",
+                                                  "install":  ""
+                                              },
+                           "motionIdeas":  "Framer: animate the clipPath inset with a spring so the fill glides rather than jumps between progress ticks; gentle breathing scale/opacity on the background logo; escalation panel slides up+fades when it appears; shimmer sweep across the fill edge."
+                       },
+                       {
+                           "name":  "Error (error layer)",
+                           "currentPath":  "apps/web/src/routes/Player/Error/Error.js",
+                           "visualSpec":  "Centered overlay: primary error label (title=full message) + an optional sub-hint (external-player hint for code 2). Optional action row: \u0027Try a different source\u0027 (accent rounded-full pill) and/or \u0027Free up space\u0027 (surface pill, href #/cached, shown when disk full). Optional \u0027Open in external\u0027 download Button (icon download + label) when a playlist/fileName deep link exists. Mixes token Tailwind classes with legacy styles[\u0027...\u0027].",
+                           "logicToReuse":  "stream deepLinks (playlist/fileName), onTryDifferentSource, the freeSpace flag from Player.onError disk-full detection, i18next. Keep the code===2 branch and the free-space CTA.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom centered error/empty-state overlay using shadcn Button for the CTAs. Optionally shadcn Alert for the message block, but a full-screen player error is more of an empty-state than an inline alert.",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "It is a small bespoke error state; the only premade value is Button (and maybe Alert) for consistency. Our token pills already match the design language.",
+                                                  "gaps":  "Alert would need heavy restyling to read as a full-bleed overlay; Button covers the CTAs. Keep layout custom.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/button",
+                                                  "install":  "pnpm dlx shadcn@latest add button alert"
+                                              },
+                           "motionIdeas":  "Framer: fade+scale in the message, then stagger the action buttons; a subtle shake on first appearance to signal failure; CTA pills whileHover brightness/scale."
+                       },
+                       {
+                           "name":  "NextVideoPopup (next-episode toast)",
+                           "currentPath":  "apps/web/src/routes/Player/NextVideoPopup/NextVideoPopup.js",
+                           "visualSpec":  "Bottom-right card in a .menu-layer: left poster (next episode thumbnail, blurred when hideSpoilers+series, icon fallback by type) + info block (\u0027Up next\u0027 short label + show name, then \u0027{title} (S#E#)\u0027) + two buttons: Dismiss (close icon + label) and Watch now (play icon + label, autofocused after the entrance animation ends). Appears when remaining time \u003c= nextVideoNotificationDuration and not dismissed; blocks the immersion/keyboard while open.",
+                           "logicToReuse":  "useProfile (hideSpoilers), rillio Image (fallbackSrc + renderFallback), CONSTANTS.ICON_FOR_TYPE, onDismiss/onNextVideoRequested, the animationEnded-\u003efocus handoff, videoName memo. Keep the countdown trigger in Player and the focus-on-watch behavior.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom \u0027up next\u0027 card (poster + actions). Not Sonner - it needs a poster thumbnail, two distinct actions, autofocus, and it is countdown-driven, which is richer than a text toast. Reuse the existing card, compose buttons from shadcn Button.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Streaming \u0027up next\u0027 cards are a bespoke pattern (poster + dual CTA + autofocus). Toast libraries model transient text notifications, not a persistent poster card awaiting an answer.",
+                                                  "gaps":  "Only the two buttons map to shadcn Button; poster/layout/focus logic stays custom.",
+                                                  "url":  "",
+                                                  "install":  ""
+                                              },
+                           "motionIdeas":  "Framer: slide+fade up from bottom-right; poster does a subtle Ken-Burns; a thin circular/linear countdown ring on the \u0027Watch now\u0027 button draining toward auto-advance; whileTap on the buttons. AnimatePresence exit on dismiss."
+                       },
+                       {
+                           "name":  "NextEpisodePreloadPrompt",
+                           "currentPath":  "apps/web/src/routes/Player/NextEpisodePreloadPrompt/NextEpisodePreloadPrompt.js",
+                           "visualSpec":  "Small bottom-right prompt styled to match app toasts (modal bg, rounded-card, border-line, outer-glow, blur, positioned bottom-28 right-6). Title \u0027Preload the next episode too?\u0027 + two pills (Preload = accent, Cancel = overlay) + a subtle \u0027turn this off in Settings\u0027 caption. Kept above immersion so it never fades while awaiting an answer; forwards mouse handlers to keep the overlay awake. Already fully Tailwind-token classed.",
+                           "logicToReuse":  "useNextEpisodePreload (promptVisible/accept/dismiss), onMouseMove/onMouseOver immersion forwarding. Keep the toast-matching styling and the immersion-awake contract.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom toast-styled prompt (reuse as-is), buttons via shadcn Button. Sonner is close in spirit but this is a persistent confirm-prompt that must ignore immersion and forward hover, which Sonner\u0027s managed lifecycle doesn\u0027t cleanly allow.",
+                                                  "confidence":  "medium",
+                                                  "rationale":  "It intentionally mimics the app toast but is an interactive confirm that must stay awake against the immersion timer - a managed toast lib would fight both the positioning contract and the hover-forwarding. Keep custom.",
+                                                  "gaps":  "If a Sonner-based toast system is adopted app-wide, this specific prompt should remain a bespoke element for the immersion/hover contract.",
+                                                  "url":  "https://ui.shadcn.com/docs/components/sonner",
+                                                  "install":  "pnpm dlx shadcn@latest add sonner button"
+                                              },
+                           "motionIdeas":  "Framer: slide+fade in from bottom-right (offset from real toasts which stack top-right); pills whileHover brightness; exit slide-down on answer."
+                       },
+                       {
+                           "name":  "Indicator (transient HUD)",
+                           "currentPath":  "apps/web/src/routes/Player/Indicator/Indicator.tsx",
+                           "visualSpec":  "Small centered transient HUD that flashes a property change (subtitle delay \u0027{x}s\u0027 or video scale Fit/Crop/Stretch) for ~1s then fades. Diff-driven: watches videoState for known PROPERTIES, ignores the first (init) value, shows label+value on subsequent changes. Wrapped in a Transition \u0027fade\u0027 300ms; disabled while the subtitles menu is open.",
+                           "logicToReuse":  "useBinaryState, the Transition primitive, PROPERTIES map + formatters, the prev-value diff refs. Keep the ignore-first-value and 1s auto-hide.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom ephemeral HUD pill. No registry equivalent (it is a transient on-screen-display, not a toast queue). Reuse as-is; a Framer AnimatePresence can replace the Transition wrapper.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "A change-driven OSD flash is bespoke player chrome; toast systems are the wrong model (no stacking, no dismissal, sub-second lifetime tied to state diffs).",
+                                                  "gaps":  "None premade; only the fade wrapper could be modernized to Framer.",
+                                                  "url":  "",
+                                                  "install":  ""
+                                              },
+                           "motionIdeas":  "Framer: AnimatePresence pop (scale .9-\u003e1 + fade) in, hold, fade out; value swap does a quick number/label roll."
+                       },
+                       {
+                           "name":  "VolumeChangeIndicator (transient volume HUD)",
+                           "currentPath":  "apps/web/src/routes/Player/VolumeChangeIndicator/VolumeChangeIndicator.js",
+                           "visualSpec":  "Transient HUD shown only while overlay is hidden: a volume icon (tiered mute/off/low/medium/high by volume) + a read-only VolumeSlider, appearing for 1.5s whenever volume changes (e.g. via wheel/keys while immersed). Positioned as its own .layer.",
+                           "logicToReuse":  "useBinaryState, reuses the VolumeSlider component, the icon-tiering logic, the 1.5s timeout on volume change. Keep the overlayHidden gating from Player.",
+                           "visualSpec_notes":  "",
+                           "recommendation":  {
+                                                  "source":  "custom",
+                                                  "part":  "Custom transient volume OSD reusing the VolumeSlider. No premade equivalent; keep as-is.",
+                                                  "confidence":  "high",
+                                                  "rationale":  "Same as Indicator - a sub-2s state-driven OSD is bespoke chrome, not a toast. Its value is reusing the themed VolumeSlider.",
+                                                  "gaps":  "None premade.",
+                                                  "url":  "",
+                                                  "install":  ""
+                                              },
+                           "motionIdeas":  "Framer: slide+fade in near the volume control; the slider fill animates to the new level with a spring; auto fade-out after 1.5s via AnimatePresence."
+                       }
+                   ]
+}
