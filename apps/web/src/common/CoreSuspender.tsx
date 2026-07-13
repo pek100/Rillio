@@ -1,15 +1,24 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
-const React = require('react');
-const { useCore } = require('rillio/core');
+import * as React from 'react';
+import { useCore } from 'rillio/core';
 
-const CoreSuspenderContext = React.createContext(null);
+type CoreSuspenderValue = {
+    getState: (model: string) => any;
+    decodeStream: (stream: string) => any;
+};
+
+const CoreSuspenderContext = React.createContext<CoreSuspenderValue | null>(null);
 
 CoreSuspenderContext.displayName = 'CoreSuspenderContext';
 
-function wrapPromise(promise) {
-    let status = 'pending';
-    let result;
+type WrappedPromise<T> = {
+    read: () => T | undefined;
+};
+
+function wrapPromise<T>(promise: Promise<T>): WrappedPromise<T> {
+    let status: 'pending' | 'success' | 'error' = 'pending';
+    let result: T | unknown;
     const suspender = promise.then(
         (resp) => {
             status = 'success';
@@ -27,32 +36,35 @@ function wrapPromise(promise) {
             } else if (status === 'error') {
                 throw result;
             } else if (status === 'success') {
-                return result;
+                return result as T;
             }
         }
     };
 }
 
-const useCoreSuspender = () => {
+const useCoreSuspender = (): CoreSuspenderValue | null => {
     return React.useContext(CoreSuspenderContext);
 };
 
 // eslint-disable-next-line @typescript-eslint/no-empty-function
-const withCoreSuspender = (Component, Fallback = () => { }) => {
-    return function withCoreSuspender(props) {
+const withCoreSuspender = <P extends object>(
+    Component: React.ComponentType<P>,
+    Fallback: React.ComponentType<P> = () => null
+) => {
+    return function withCoreSuspender(props: P) {
         const core = useCore();
         const parentSuspender = useCoreSuspender();
         const [render, setRender] = React.useState(parentSuspender === null);
-        const statesRef = React.useRef({});
-        const streamsRef = React.useRef({});
-        const getState = React.useCallback((model) => {
+        const statesRef = React.useRef<Record<string, WrappedPromise<any>>>({});
+        const streamsRef = React.useRef<Record<string, WrappedPromise<any>>>({});
+        const getState = React.useCallback((model: string) => {
             if (!statesRef.current[model]) {
                 statesRef.current[model] = wrapPromise(core.transport.getState(model));
             }
 
             return statesRef.current[model].read();
         }, []);
-        const decodeStream = React.useCallback((stream) => {
+        const decodeStream = React.useCallback((stream: string) => {
             if (!streamsRef.current[stream]) {
                 streamsRef.current[stream] = wrapPromise(core.transport.decodeStream(stream));
             }
@@ -76,4 +88,4 @@ const withCoreSuspender = (Component, Fallback = () => { }) => {
     };
 };
 
-module.exports = { withCoreSuspender, useCoreSuspender };
+export { withCoreSuspender, useCoreSuspender };

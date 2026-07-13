@@ -1,22 +1,22 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
-const CHROMECAST_RECEIVER_APP_ID = '1634F54B';
-const DEFAULT_STREAMING_SERVER_URL = 'http://127.0.0.1:11470/';
-const DEFAULT_SUBTITLES_LANGUAGE = 'eng';
-const LOCAL_SUBTITLES_LANGUAGE = 'local';
-const SUBTITLES_SIZES = [75, 100, 125, 150, 175, 200, 250];
-const SUBTITLES_FONTS = ['PlusJakartaSans', 'Arial', 'Halvetica', 'Times New Roman', 'Verdana', 'Courier', 'Lucida Console', 'sans-serif', 'serif', 'monospace'];
-const SEEK_TIME_DURATIONS = [3000, 5000, 10000, 15000, 20000, 30000];
-const NEXT_VIDEO_POPUP_DURATIONS = [0, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000, 55000, 60000, 65000, 70000, 75000, 80000, 85000, 90000];
-const CATALOG_PREVIEW_SIZE = 10;
-const CATALOG_PAGE_SIZE = 100;
-const NONE_EXTRA_VALUE = 'None';
-const SKIP_EXTRA_NAME = 'skip';
-const META_LINK_CATEGORY = 'meta';
-const IMDB_LINK_CATEGORY = 'imdb';
-const SHARE_LINK_CATEGORY = 'share';
-const WRITERS_LINK_CATEGORY = 'Writers';
-const TYPE_PRIORITIES = {
+export const CHROMECAST_RECEIVER_APP_ID = '1634F54B';
+export const DEFAULT_STREAMING_SERVER_URL = 'http://127.0.0.1:11470/';
+export const DEFAULT_SUBTITLES_LANGUAGE = 'eng';
+export const LOCAL_SUBTITLES_LANGUAGE = 'local';
+export const SUBTITLES_SIZES = [75, 100, 125, 150, 175, 200, 250];
+export const SUBTITLES_FONTS = ['PlusJakartaSans', 'Arial', 'Halvetica', 'Times New Roman', 'Verdana', 'Courier', 'Lucida Console', 'sans-serif', 'serif', 'monospace'];
+export const SEEK_TIME_DURATIONS = [3000, 5000, 10000, 15000, 20000, 30000];
+export const NEXT_VIDEO_POPUP_DURATIONS = [0, 5000, 10000, 15000, 20000, 25000, 30000, 35000, 40000, 45000, 50000, 55000, 60000, 65000, 70000, 75000, 80000, 85000, 90000];
+export const CATALOG_PREVIEW_SIZE = 10;
+export const CATALOG_PAGE_SIZE = 100;
+export const NONE_EXTRA_VALUE = 'None';
+export const SKIP_EXTRA_NAME = 'skip';
+export const META_LINK_CATEGORY = 'meta';
+export const IMDB_LINK_CATEGORY = 'imdb';
+export const SHARE_LINK_CATEGORY = 'share';
+export const WRITERS_LINK_CATEGORY = 'Writers';
+export const TYPE_PRIORITIES: Record<string, number> = {
     movie: 10,
     series: 9,
     channel: 8,
@@ -29,7 +29,7 @@ const TYPE_PRIORITIES = {
     adult: 1,
     other: -Infinity
 };
-const ICON_FOR_TYPE = new Map([
+export const ICON_FOR_TYPE = new Map<string, string>([
     ['movie', 'movies'],
     ['series', 'series'],
     ['channel', 'channels'],
@@ -43,18 +43,24 @@ const ICON_FOR_TYPE = new Map([
     ['other', 'movies'],
 ]);
 
-const MIME_SIGNATURES = {
+export const MIME_SIGNATURES: Record<string, string[]> = {
     'application/x-subrip': ['310D0A', '310A'],
     'text/vtt': ['574542565454'],
     'application/x-bittorrent': ['64'],
 };
 
-const SUPPORTED_LOCAL_SUBTITLES = [
+export const SUPPORTED_LOCAL_SUBTITLES = [
     'application/x-subrip',
     'text/vtt',
 ];
 
-const EXTERNAL_PLAYERS = [
+type ExternalPlayer = {
+    label: string;
+    value: string | null;
+    platforms: string[];
+};
+
+export const EXTERNAL_PLAYERS: ExternalPlayer[] = [
     {
         label: 'EXTERNAL_PLAYER_DISABLED',
         value: null,
@@ -117,32 +123,6 @@ const EXTERNAL_PLAYERS = [
     },
 ];
 
-const WHITELISTED_HOSTS = ['stremio.com', 'strem.io', 'stremio.zendesk.com', 'google.com', 'youtube.com', 'twitch.tv', 'twitter.com', 'x.com', 'netflix.com', 'amazon.com', 'forms.gle'];
+export const WHITELISTED_HOSTS = ['stremio.com', 'strem.io', 'stremio.zendesk.com', 'google.com', 'youtube.com', 'twitch.tv', 'twitter.com', 'x.com', 'netflix.com', 'amazon.com', 'forms.gle'];
 
-const PROTOCOL = 'stremio:';
-
-module.exports = {
-    CHROMECAST_RECEIVER_APP_ID,
-    DEFAULT_STREAMING_SERVER_URL,
-    DEFAULT_SUBTITLES_LANGUAGE,
-    LOCAL_SUBTITLES_LANGUAGE,
-    SUBTITLES_SIZES,
-    SUBTITLES_FONTS,
-    SEEK_TIME_DURATIONS,
-    NEXT_VIDEO_POPUP_DURATIONS,
-    CATALOG_PREVIEW_SIZE,
-    CATALOG_PAGE_SIZE,
-    NONE_EXTRA_VALUE,
-    SKIP_EXTRA_NAME,
-    META_LINK_CATEGORY,
-    IMDB_LINK_CATEGORY,
-    SHARE_LINK_CATEGORY,
-    WRITERS_LINK_CATEGORY,
-    TYPE_PRIORITIES,
-    ICON_FOR_TYPE,
-    MIME_SIGNATURES,
-    SUPPORTED_LOCAL_SUBTITLES,
-    EXTERNAL_PLAYERS,
-    WHITELISTED_HOSTS,
-    PROTOCOL,
-};
+export const PROTOCOL = 'stremio:';

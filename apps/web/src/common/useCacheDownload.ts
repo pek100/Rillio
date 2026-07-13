@@ -1,8 +1,8 @@
 // Copyright (C) 2017-2024 Smart code 203358507
 
-const React = require('react');
-const useProfile = require('rillio/common/useProfile');
-const useToast = require('rillio/common/Toast/useToast');
+import * as React from 'react';
+import useProfile from 'rillio/common/useProfile';
+import useToast from 'rillio/common/Toast/useToast';
 
 // "Download to cache": ask the local streaming server to fetch a torrent
 // stream in the background and PIN it (the cache sweeper never evicts pinned
@@ -12,12 +12,12 @@ const useToast = require('rillio/common/Toast/useToast');
 const useCacheDownload = () => {
     const profile = useProfile();
     const toast = useToast();
-    return React.useCallback((stream) => {
+    return React.useCallback((stream: any): boolean => {
         const serverUrl = profile.settings.streamingServerUrl;
         if (!stream || typeof stream.infoHash !== 'string' || typeof serverUrl !== 'string') {
             return false;
         }
-        const body = { infoHash: stream.infoHash };
+        const body: { infoHash: string; fileIdx?: number } = { infoHash: stream.infoHash };
         if (typeof stream.fileIdx === 'number') {
             body.fileIdx = stream.fileIdx;
         }
@@ -50,4 +50,4 @@ const useCacheDownload = () => {
     }, [profile.settings.streamingServerUrl]);
 };
 
-module.exports = useCacheDownload;
+export = useCacheDownload;

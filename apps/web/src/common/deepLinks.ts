@@ -11,7 +11,7 @@
 // links are checked against the app's own route allowlist, and anything that
 // does not match a known form returns null (the caller logs and ignores it).
 
-const routesRegexp = require('./routesRegexp');
+import routesRegexp from './routesRegexp';
 
 // The two schemes the desktop installer registers. stremio:// keeps existing
 // ecosystem links (e.g. the stremio-addons.net "Install" buttons) working;
@@ -22,18 +22,22 @@ const ALLOWED_PROTOCOLS = ['stremio:', 'rillio:'];
 // routesRegexp. A route deep link must match one of these or it is refused.
 const ROUTE_REGEXPS = Object.keys(routesRegexp).map((key) => routesRegexp[key].regexp);
 
-const isKnownRoute = (pathname) => ROUTE_REGEXPS.some((regexp) => regexp.test(pathname));
+export const isKnownRoute = (pathname: string): boolean => ROUTE_REGEXPS.some((regexp) => regexp.test(pathname));
+
+type ParsedDeepLink =
+    | { type: 'addon'; transportUrl: string }
+    | { type: 'route'; path: string };
 
 // Translate a deep link into one of:
 //   { type: 'addon', transportUrl }  open the addon-details / install flow
 //   { type: 'route', path }          navigate to an in-app route (path + query)
 //   null                             reject (malformed / disallowed / unknown)
-const parseDeepLink = (raw) => {
+export const parseDeepLink = (raw: unknown): ParsedDeepLink | null => {
     if (typeof raw !== 'string' || raw.length === 0) {
         return null;
     }
 
-    let url;
+    let url: URL;
     try {
         url = new URL(raw);
     } catch (e) {
@@ -72,5 +76,3 @@ const parseDeepLink = (raw) => {
         path: `${url.pathname}${url.search}`,
     };
 };
-
-module.exports = { parseDeepLink, isKnownRoute };

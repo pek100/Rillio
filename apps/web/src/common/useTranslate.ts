@@ -1,11 +1,11 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
-const { useCallback } = require('react');
-const { useTranslation } = require('react-i18next');
+import { useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 
 // Whether `name` already ends with `type` as a whole word, so that appending the
 // type would only repeat it: "Public Domain Movies" + "Movies".
-const endsWithType = (name, type) => {
+const endsWithType = (name: string, type: string): boolean => {
     if (type.length === 0 || name.length < type.length) {
         return false;
     }
@@ -19,12 +19,19 @@ const endsWithType = (name, type) => {
     return !/[\p{L}\p{N}]/u.test(name.charAt(suffixStart - 1));
 };
 
+type CatalogArg = {
+    addon?: { manifest: { id: string } };
+    id?: string;
+    name?: string;
+    type?: string;
+};
+
 const useTranslate = () => {
     const { t } = useTranslation();
 
-    const string = useCallback((key) => t(key), [t]);
+    const string = useCallback((key: string) => t(key), [t]);
 
-    const stringWithPrefix = useCallback((value, prefix, fallback = null) => {
+    const stringWithPrefix = useCallback((value: string, prefix: string, fallback: string | null = null) => {
         const key = `${prefix}${value}`;
         const defaultValue = fallback ?? value.charAt(0).toUpperCase() + value.slice(1);
 
@@ -33,7 +40,7 @@ const useTranslate = () => {
         });
     }, [t]);
 
-    const catalogTitle = useCallback(({ addon, id, name, type } = {}, withType = true) => {
+    const catalogTitle = useCallback(({ addon, id, name, type }: CatalogArg = {}, withType = true) => {
         if (addon && id && name) {
             const partialKey = `${addon.manifest.id.split('.').join('_')}_${id}`;
             const translatedName = stringWithPrefix(partialKey, 'CATALOG_', name);
@@ -62,4 +69,4 @@ const useTranslate = () => {
     };
 };
 
-module.exports = useTranslate;
+export = useTranslate;

@@ -1,8 +1,13 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
-const React = require('react');
+import * as React from 'react';
 
-const useBinaryState = (initialValue) => {
+const useBinaryState = (initialValue?: boolean): [
+    boolean,
+    () => void,
+    () => void,
+    () => void,
+] => {
     const [value, setValue] = React.useState(!!initialValue);
     const on = React.useCallback(() => {
         setValue(true);
@@ -16,4 +21,4 @@ const useBinaryState = (initialValue) => {
     return [value, on, off, toggle];
 };
 
-module.exports = useBinaryState;
+export = useBinaryState;

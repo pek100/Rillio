@@ -1,8 +1,8 @@
 // Copyright (C) 2017-2024 Smart code 203358507
 
-const React = require('react');
-const { deepEqual } = require('fast-equals');
-const { useCore } = require('rillio/core');
+import * as React from 'react';
+import { deepEqual } from 'fast-equals';
+import { useCore } from 'rillio/core';
 
 // The web `ctx` model carries a compact, id-keyed `library` map
 // ({ [metaId]: { removed, watched } }). Rather than every media card opening its
@@ -12,9 +12,30 @@ const { useCore } = require('rillio/core');
 // many cards cheaply.
 
 const MODEL = 'ctx';
-const EMPTY_STATE = Object.freeze({ inLibrary: false, watched: false });
 
-const store = {
+type LibraryItemState = {
+    inLibrary: boolean;
+    watched: boolean;
+};
+
+const EMPTY_STATE: Readonly<LibraryItemState> = Object.freeze({ inLibrary: false, watched: false });
+
+type Core = ReturnType<typeof useCore>;
+
+type Store = {
+    core: Core | null;
+    initialized: boolean;
+    ready: boolean;
+    items: Map<string, Readonly<LibraryItemState>>;
+    listeners: Set<() => void>;
+    subscribe(listener: () => void): () => void;
+    emit(): void;
+    getSnapshot(metaId: string | null | undefined): Readonly<LibraryItemState>;
+    apply(library: Record<string, any> | null): void;
+    ensureInit(core: Core): void;
+};
+
+const store: Store = {
     core: null,
     initialized: false,
     ready: false,
@@ -42,11 +63,11 @@ const store = {
     },
     apply(library) {
         const source = library !== null && typeof library === 'object' ? library : {};
-        const next = new Map();
+        const next = new Map<string, Readonly<LibraryItemState>>();
         let changed = false;
         Object.keys(source).forEach((metaId) => {
             const entry = source[metaId] || {};
-            const state = { inLibrary: entry.removed === false, watched: entry.watched === true };
+            const state: LibraryItemState = { inLibrary: entry.removed === false, watched: entry.watched === true };
             const prev = store.items.get(metaId);
             if (prev !== undefined && deepEqual(prev, state)) {
                 next.set(metaId, prev);
@@ -82,14 +103,14 @@ const store = {
 
         store.initialized = true;
         store.core = core;
-        const onState = async (models) => {
+        const onState = async (models: string[]) => {
             // The core emits the list of changed models; only refetch when `ctx`
             // (or an unknown/initial signal) is involved.
             if (Array.isArray(models) && models.indexOf(MODEL) === -1) {
                 return;
             }
 
-            const ctx = await core.transport.getState(MODEL);
+            const ctx = await core.transport.getState(MODEL) as any;
             store.apply(ctx && ctx.library ? ctx.library : null);
         };
         core.on('state', onState);
@@ -102,12 +123,12 @@ const store = {
 // { inLibrary, watched }) is used only until the shared store has loaded, to
 // avoid a first-paint flash. When `metaId` is absent, state is inert and the
 // toggles are no-ops.
-const useLibraryItemState = (metaId, fallback) => {
+const useLibraryItemState = (metaId: string | null | undefined, fallback?: Partial<LibraryItemState> | null) => {
     const core = useCore();
     store.ensureInit(core);
 
     const hasId = typeof metaId === 'string' && metaId.length > 0;
-    const subscribe = React.useCallback((listener) => store.subscribe(listener), []);
+    const subscribe = React.useCallback((listener: () => void) => store.subscribe(listener), []);
     const getSnapshot = React.useCallback(() => store.getSnapshot(metaId), [metaId]);
     const liveState = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
 
@@ -116,7 +137,7 @@ const useLibraryItemState = (metaId, fallback) => {
     const inLibrary = store.ready ? liveState.inLibrary : fallbackInLibrary;
     const watched = store.ready ? liveState.watched : fallbackWatched;
 
-    const toggleInLibrary = React.useCallback((metaPreview) => {
+    const toggleInLibrary = React.useCallback((metaPreview?: any) => {
         if (!hasId) {
             return;
         }
@@ -140,7 +161,7 @@ const useLibraryItemState = (metaId, fallback) => {
         }
     }, [core, metaId, hasId, inLibrary]);
 
-    const toggleWatched = React.useCallback((metaPreview) => {
+    const toggleWatched = React.useCallback((metaPreview?: any) => {
         if (!hasId || !metaPreview || typeof metaPreview !== 'object') {
             return;
         }
@@ -164,4 +185,4 @@ const useLibraryItemState = (metaId, fallback) => {
     return { inLibrary, watched, toggleInLibrary, toggleWatched, hasId };
 };
 
-module.exports = useLibraryItemState;
+export = useLibraryItemState;
