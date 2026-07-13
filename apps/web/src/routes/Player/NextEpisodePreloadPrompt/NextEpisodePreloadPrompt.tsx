@@ -6,11 +6,10 @@ import { Download, X } from 'lucide-react';
 // Bottom-right prompt offering to preload the next episode into the cache.
 // A small translucent chip (Michael's reference: YouTube's "Includes paid
 // promotion" pill), not a toast card: one line, low-opacity black + blur,
-// the whole chip is the accept action, a tiny x dismisses. Rendered as its
-// own positioned element (not a .layer) so the immersion CSS that fades the
-// control bar never hides a prompt that is waiting for an answer. Mouse
-// handlers are forwarded so hovering it keeps the player overlay awake (same
-// contract as the control bar's immersePrevented).
+// the whole chip is the accept action, a tiny x dismisses. It is PART of the
+// immersion layer (player-immersion-fade): when the controls overlay hides,
+// the chip fades with it; any activity that wakes the chrome brings it back
+// for as long as its prompt window is open.
 
 type Props = {
     onAccept?: React.MouseEventHandler<HTMLButtonElement>;
@@ -22,7 +21,7 @@ type Props = {
 const NextEpisodePreloadPrompt = ({ onAccept, onDismiss, onMouseMove, onMouseOver }: Props) => {
     return (
         <div
-            className={'absolute bottom-28 right-6 z-10 flex items-center gap-1 rounded-full bg-black/50 p-1 backdrop-blur-md'}
+            className={'player-immersion-fade absolute bottom-28 right-6 z-10 flex items-center gap-1 rounded-full bg-black/50 p-1 backdrop-blur-md'}
             onMouseMove={onMouseMove}
             onMouseOver={onMouseOver}
         >

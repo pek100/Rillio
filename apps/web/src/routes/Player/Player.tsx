@@ -104,7 +104,10 @@ const Player = () => {
     const errorRef = React.useRef<HTMLDivElement | null>(null);
 
     const [immersed, setImmersed] = React.useState(true);
-    const setImmersedDebounced = React.useCallback(debounce(setImmersed, 3000), []);
+    // The chrome ALWAYS hides 4s after the last activity (mouse move, click, or
+    // key press) - hovering the bars no longer holds it awake (Michael's call).
+    // The menus-open and slider-drag gates still keep it visible mid-interaction.
+    const setImmersedDebounced = React.useCallback(debounce(setImmersed, 4000), []);
     const [fullscreen, , , toggleFullscreen, , setVideoElement] = useFullscreen();
 
     React.useEffect(() => {
@@ -421,7 +424,7 @@ const Player = () => {
 
         closeSideDrawer();
 
-        // A click is user activity too: reveal the chrome and restart the ~3s idle
+        // A click is user activity too: reveal the chrome and restart the 4s idle
         // countdown, exactly like mouse movement does (onContainerMouseMove). The
         // slider-drag gate still holds: while a thumb is held, body pointer-events
         // are off so this never fires, and the CSS `active-slider-within` guard keeps
@@ -430,19 +433,31 @@ const Player = () => {
         setImmersedDebounced(true);
     }, []);
 
-    const onContainerMouseMove = React.useCallback((event: React.MouseEvent) => {
+    const onContainerMouseMove = React.useCallback(() => {
+        // Unconditional restart: the old immersePrevented hover-keepalive is gone,
+        // the countdown always runs (see the 4s debounce note above).
         setImmersed(false);
-        if (!(event.nativeEvent as any).immersePrevented) {
-            setImmersedDebounced(true);
-        } else {
-            setImmersedDebounced.cancel();
-        }
+        setImmersedDebounced(true);
     }, []);
 
     const onContainerMouseLeave = React.useCallback(() => {
         setImmersedDebounced.cancel();
         setImmersed(true);
     }, []);
+
+    // Keyboard input is user activity too: any key while the route is focused
+    // reveals the chrome and restarts the same 4s countdown.
+    React.useEffect(() => {
+        if (!routeFocused) {
+            return;
+        }
+        const onAnyKey = () => {
+            setImmersed(false);
+            setImmersedDebounced(true);
+        };
+        window.addEventListener('keydown', onAnyKey);
+        return () => window.removeEventListener('keydown', onAnyKey);
+    }, [routeFocused]);
 
     const onBarMouseMove = React.useCallback((event: React.MouseEvent) => {
         (event.nativeEvent as any).immersePrevented = true;

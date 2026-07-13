@@ -9,7 +9,7 @@ import { getPreloadPromptEnabled } from 'rillio/common/nextEpisodePreloadPrefs';
 // Offers to preload the NEXT episode's torrent into the local cache while the
 // current one plays, so the binge transition starts instantly. The prompt shows
 // twice at most: once at episode start (through initial loading plus the first
-// 15s of playback, whichever lasts longer) and once 10 minutes before the end.
+// 30s of playback, whichever lasts longer) and once 10 minutes before the end.
 // Accepting hides the prompt for the rest of the episode, schedules the
 // download behind a short grace timer and shows a toast with a Cancel button
 // (cancelling aborts for this episode only). Cancel on the prompt itself just
@@ -21,7 +21,7 @@ import { getPreloadPromptEnabled } from 'rillio/common/nextEpisodePreloadPrefs';
 
 // The start prompt stays up through initial loading plus this long into
 // playback, whichever lasts longer.
-const START_PROMPT_PLAYBACK_MS = 15000;
+const START_PROMPT_PLAYBACK_MS = 30000;
 // Accepting schedules the download behind this grace delay; cancelling from
 // the toast within it means the download never starts, no cache churn at all.
 const ACCEPT_GRACE_MS = 3000;
@@ -137,8 +137,8 @@ const useNextEpisodePreload = ({ player, video }: UseNextEpisodePreloadArgs) => 
         clearAcceptTimer();
     }, []);
 
-    // The start window closes 15s after playback becomes possible (loaded), so
-    // it spans the whole initial loading phase plus the first 15s of playback.
+    // The start window closes 30s after playback becomes possible (loaded), so
+    // it spans the whole initial loading phase plus the first 30s of playback.
     React.useEffect(() => {
         if (video.state.loaded === true && startWindowOpen && startHideTimer.current === null) {
             startHideTimer.current = setTimeout(() => {
