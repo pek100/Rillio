@@ -63,7 +63,7 @@
      * size-(--icon-size) / size-(--icon-size-player), never a bare size-N. */
     --icon-size: 1rem;
     --icon-size-sm: 0.875rem;
-    --icon-size-player: 1.75rem;
+    --icon-size-player: 1rem; /* same scale as the app chrome (Michael's call) */
 
     /* "Ice" - off-whites subtly tinted toward the blue palette (bg #020407 /
      * surface #0A1017 are blue-blacks). The player chrome paints its icons / text

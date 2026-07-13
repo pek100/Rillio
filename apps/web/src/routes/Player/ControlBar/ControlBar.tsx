@@ -26,7 +26,7 @@ import VolumeSlider from './VolumeSlider';
 // off-white, not flat grey) that lifts to pure white on hover, press-scale, and a
 // dim (not blocked) disabled. Icons use the player icon-size token so every
 // control-bar glyph is identical (and smaller than the old 2.2rem).
-const CB_BUTTON = 'size-16 shrink-0 rounded-full bg-transparent opacity-100 transition-colors duration-150 hover:bg-white/10 hover:opacity-100 active:scale-[0.97] [&_svg]:size-(--icon-size-player) [&_svg]:text-ice [&_svg]:transition-colors [&_svg]:duration-150 [&:hover_svg]:text-white';
+const CB_BUTTON = 'size-10 shrink-0 rounded-full bg-transparent opacity-100 transition-colors duration-150 hover:bg-white/10 hover:opacity-100 active:scale-[0.97] [&_svg]:size-(--icon-size-player) [&_svg]:text-ice [&_svg]:transition-colors [&_svg]:duration-150 [&:hover_svg]:text-white';
 const CB_ICON = 'size-(--icon-size-player)';
 
 // Control-bar "islands": rounded-full translucent containers that group the icon
@@ -221,7 +221,7 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                         // part of the audio cluster, not a floating control).
                         !platform.isMobile ?
                             <VolumeSlider
-                                className={'mr-2 h-16 flex-[0_1_10rem] [--thumb-size:1rem] [--track-size:0.35rem]'}
+                                className={'mr-2 h-10 flex-[0_1_9rem] [--thumb-size:0.9rem] [--track-size:0.3rem]'}
                                 volume={volume ?? null}
                                 muted={muted ?? undefined}
                                 onVolumeChangeRequested={onVolumeChangeRequested}
@@ -237,7 +237,7 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                         type="button"
                         tabIndex={-1}
                         onClick={toggleRemainingTimeMode}
-                        className={cn(CB_ISLAND, 'cursor-pointer select-none self-stretch whitespace-nowrap px-6 text-lg font-semibold tracking-tight tabular-nums text-ice transition-colors duration-150 hover:text-white')}
+                        className={cn(CB_ISLAND, 'cursor-pointer select-none self-stretch whitespace-nowrap px-4 text-base font-semibold tracking-tight tabular-nums text-ice transition-colors duration-150 hover:text-white')}
                     >
                         {
                             // Left side: the position. Remaining-time mode replaces IT
