@@ -229,7 +229,7 @@ const MetaItem = React.memo(({
                 }
                 {
                     isWatched ?
-                        <div className="absolute left-0 top-0 z-[1] m-2 flex size-6 items-center justify-center rounded-full border-2 border-line bg-background shadow-[var(--outer-glow)]">
+                        <div className="absolute left-0 top-0 z-[1] m-2 flex size-6 items-center justify-center rounded-full bg-black/55 backdrop-blur-sm">
                             <Check className="size-3 text-fg" />
                         </div>
                         :
@@ -241,14 +241,14 @@ const MetaItem = React.memo(({
                             <IconButton
                                 title={libraryState.inLibrary ? t('REMOVE_FROM_LIB') : t('ADD_TO_LIB')}
                                 onClick={onToggleInLibraryClick}
-                                className="size-7 bg-surface opacity-100 shadow-[var(--outer-glow)] transition-transform duration-150 hover:scale-110 active:scale-95 [&:hover_svg]:text-primary [&_svg]:size-[0.9rem] [&_svg]:text-fg-muted"
+                                className="size-7 bg-black/55 opacity-100 backdrop-blur-sm transition-transform duration-150 hover:scale-110 active:scale-95 [&:hover_svg]:text-primary [&_svg]:size-[0.9rem] [&_svg]:text-fg-muted"
                             >
                                 {libraryState.inLibrary ? <BookmarkCheck /> : <Bookmark />}
                             </IconButton>
                             <IconButton
                                 title={isWatched ? t('CTX_MARK_UNWATCHED') : t('CTX_MARK_WATCHED')}
                                 onClick={onToggleWatchedClick}
-                                className="size-7 bg-surface opacity-100 shadow-[var(--outer-glow)] transition-transform duration-150 hover:scale-110 active:scale-95 [&:hover_svg]:text-primary [&_svg]:size-[0.9rem] [&_svg]:text-fg-muted"
+                                className="size-7 bg-black/55 opacity-100 backdrop-blur-sm transition-transform duration-150 hover:scale-110 active:scale-95 [&:hover_svg]:text-primary [&_svg]:size-[0.9rem] [&_svg]:text-fg-muted"
                             >
                                 {isWatched ? <EyeOff /> : <Eye />}
                             </IconButton>
