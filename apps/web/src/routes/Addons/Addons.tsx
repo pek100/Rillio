@@ -102,7 +102,20 @@ type Props = {
     onClose: () => void,
 };
 
-const Addons = ({ payload, onClose }: Props) => {
+type BodyProps = {
+    payload?: AddonsPayload,
+    // The shell owns the persistent Dialog and reads this ref in its Escape /
+    // interact-outside / open-change guards. The body mirrors its nested-modal
+    // state into it (the guards must keep the outer dialog open while a nested
+    // filters / add-addon / share / addon-details modal is up). A ref, not state,
+    // because the shell only reads it from event handlers, never renders on it.
+    nestedOpenRef: React.MutableRefObject<boolean>,
+};
+
+// The core-consuming body: the installed / remote addon reads suspend on first open
+// (a fresh withCoreSuspender cache). It renders the filter bar + list as children of
+// the shell's DialogContent, plus the four nested modals (which portal to the body).
+const AddonsBody = ({ payload, nestedOpenRef }: BodyProps) => {
     // The catalog filter (type/transportUrl/catalogId) and the open addon-details
     // pane used to come from the URL; they are now modal-local, seeded from the open
     // payload so a deep link lands pre-expanded.
@@ -207,8 +220,10 @@ const Addons = ({ payload, onClose }: Props) => {
 
     // Closing is a pure bus close (common/modalEvents), never a history navigation.
     // Changing a filter only updates local state, so it never touches the URL either.
-    const closeAddons = onClose;
+    // The shell owns the close wiring now; the body only publishes whether a nested
+    // modal is open so the shell's dialog guards can keep the outer dialog alive.
     const nestedModalOpen = filtersModalOpen || addAddonModalOpen || sharedAddon !== null || typeof addonDetailsTransportUrl === 'string';
+    nestedOpenRef.current = nestedModalOpen;
 
     const renderAddon = (addon: any, index: number) => (
         <Addon
@@ -232,24 +247,7 @@ const Addons = ({ payload, onClose }: Props) => {
 
     return (
         <>
-            <Dialog open modal={false} onOpenChange={(next) => { if (!next && !nestedModalOpen) closeAddons(); }}>
-                {/* modal={false} means Radix renders NO DialogOverlay, so without this
-                    the page behind would show through unblurred. Paint our own scrim
-                    matching the blur the ModalRoute-based modals (Settings/Cached) get
-                    from DialogOverlay. pointer-events-none preserves the deliberate
-                    non-trapping outside-interaction the nested AddonDetails modal needs. */}
-                <DialogPortal>
-                    <div aria-hidden className="pointer-events-none fixed inset-0 z-40 bg-black/60 backdrop-blur-[24px] animate-in fade-in-0" />
-                </DialogPortal>
-                <DialogContent
-                    showClose={false}
-                    aria-label={t('ADDONS')}
-                    className={PANEL_CLASS}
-                    onEscapeKeyDown={(event) => { if (nestedModalOpen) event.preventDefault(); }}
-                    onInteractOutside={(event) => { if (nestedModalOpen) event.preventDefault(); }}
-                >
-                    <DialogTitle className="sr-only">{t('ADDONS')}</DialogTitle>
-                    <div className="flex shrink-0 items-center gap-4 p-6 max-sm:gap-3">
+            <div className="flex shrink-0 items-center gap-4 p-6 max-sm:gap-3">
                         {selectInputs.map((selectInput, index) => (
                             <FilterSelect
                                 key={index}
@@ -309,8 +307,6 @@ const Addons = ({ payload, onClose }: Props) => {
                                     <PlaceholderList />
                         }
                     </div>
-                </DialogContent>
-            </Dialog>
 
             {
                 filtersModalOpen ?
@@ -400,13 +396,52 @@ const Addons = ({ payload, onClose }: Props) => {
     );
 };
 
+// Suspense fallback: the panel geometry lives on the shell's DialogContent, so a
+// placeholder list keeps the same panel size while the addon reads resolve.
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
-const AddonsFallback = (_props: Props) => (
-    <Dialog open modal={false}>
-        <DialogContent showClose={false} aria-label="Addons" className={PANEL_CLASS}>
-            <DialogTitle className="sr-only">Addons</DialogTitle>
-        </DialogContent>
-    </Dialog>
+const AddonsBodySkeleton = (_props: BodyProps) => (
+    <div className="min-h-0 flex-1 overflow-y-auto">
+        <PlaceholderList />
+    </div>
 );
 
-export default withCoreSuspender(Addons, AddonsFallback);
+const AddonsBodySuspended = withCoreSuspender(AddonsBody, AddonsBodySkeleton);
+
+// The shell owns the persistent Dialog frame (modal={false}, its own blur scrim,
+// the Escape / interact-outside / open-change close wiring) and consumes NO core
+// state, so it mounts once and stays mounted while the body suspends. Only
+// <AddonsBodySuspended /> suspends, inside DialogContent, so the dialog and its
+// entrance animation are never torn down (fixes the open flicker / mount churn).
+//
+// modal={false} is deliberate: the outer dialog must NOT trap focus or disable
+// outside pointer events, so the nested AddonDetailsModal (which portals outside
+// this dialog) stays interactive. The nested-modal-open guards keep the old "let a
+// nested dialog eat Escape first" precedence, reading the ref the body publishes.
+const Addons = ({ payload, onClose }: Props) => {
+    const { t } = useTranslation();
+    const nestedOpenRef = React.useRef(false);
+    return (
+        <Dialog open modal={false} onOpenChange={(next) => { if (!next && !nestedOpenRef.current) onClose(); }}>
+            {/* modal={false} means Radix renders NO DialogOverlay, so without this
+                the page behind would show through unblurred. Paint our own scrim
+                matching the blur the ModalRoute-based modals (Settings/Cached) get
+                from DialogOverlay. pointer-events-none preserves the deliberate
+                non-trapping outside-interaction the nested AddonDetails modal needs. */}
+            <DialogPortal>
+                <div aria-hidden className="pointer-events-none fixed inset-0 z-40 bg-black/60 backdrop-blur-[24px] animate-in fade-in-0" />
+            </DialogPortal>
+            <DialogContent
+                showClose={false}
+                aria-label={t('ADDONS')}
+                className={PANEL_CLASS}
+                onEscapeKeyDown={(event) => { if (nestedOpenRef.current) event.preventDefault(); }}
+                onInteractOutside={(event) => { if (nestedOpenRef.current) event.preventDefault(); }}
+            >
+                <DialogTitle className="sr-only">{t('ADDONS')}</DialogTitle>
+                <AddonsBodySuspended payload={payload} nestedOpenRef={nestedOpenRef} />
+            </DialogContent>
+        </Dialog>
+    );
+};
+
+export default Addons;

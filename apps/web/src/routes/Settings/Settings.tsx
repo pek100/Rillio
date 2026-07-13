@@ -1,6 +1,6 @@
 // Copyright (C) 2017-2024 Smart code 203358507
 
-import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import throttle from 'lodash.throttle';
 import { usePlatform, useProfile, useStreamingServer, useRouteFocused, withCoreSuspender } from 'rillio/common';
 import { ModalRoute } from 'rillio/components/ui/dialog';
@@ -20,7 +20,12 @@ type Props = {
     onClose: () => void,
 };
 
-const Settings = ({ onClose }: Props) => {
+// The core-consuming body. Its profile / platform / streaming-server reads suspend
+// on first open (a fresh withCoreSuspender cache), so it lives inside its OWN
+// suspense boundary that sits WITHIN the dialog. When it suspends, only this body
+// swaps to the empty fallback; the Radix Dialog shell below stays mounted, so the
+// entrance animation runs exactly once (no open flicker / mount churn).
+const SettingsBody = () => {
     const routeFocused = useRouteFocused();
     const profile = useProfile();
     const platform = usePlatform();
@@ -86,9 +91,55 @@ const Settings = ({ onClose }: Props) => {
         }
     }, [routeFocused]);
 
-    // Settings floats over the live routes beneath (blurred by the overlay). Radix
-    // Dialog gives Escape, outside-click, focus-trap and aria for free; onClose is a
-    // pure bus close (common/modalEvents), never a history navigation.
+    return (
+        <div className="flex h-[calc(100%-var(--safe-area-inset-bottom,0rem))] w-full flex-row max-[640px]:flex-col-reverse">
+            <Menu
+                selected={selectedSectionId}
+                streamingServer={streamingServer}
+                onSelect={onMenuSelect}
+            />
+            <div
+                ref={sectionsContainerRef}
+                onScroll={onContainerScroll}
+                className="flex-1 self-stretch overflow-y-auto px-12 max-[640px]:px-6"
+            >
+                <General
+                    ref={generalSectionRef}
+                    profile={profile}
+                />
+                <Interface
+                    ref={interfaceSectionRef}
+                    profile={profile}
+                />
+                <Player
+                    ref={playerSectionRef}
+                    profile={profile}
+                />
+                <Streaming
+                    ref={streamingServerSectionRef}
+                    profile={profile}
+                    streamingServer={streamingServer}
+                />
+                {
+                    !platform.isMobile && <Shortcuts ref={shortcutsSectionRef} />
+                }
+                <Info streamingServer={streamingServer} />
+            </div>
+        </div>
+    );
+};
+
+// The fallback is empty: the panel geometry lives on the shell's DialogContent
+// (PANEL_SIZE), so an empty body keeps the exact same panel size while it resolves.
+const SettingsBodySuspended = withCoreSuspender(SettingsBody);
+
+// Settings floats over the live routes beneath (blurred by the overlay). Radix
+// Dialog gives Escape, outside-click, focus-trap and aria for free; onClose is a
+// pure bus close (common/modalEvents), never a history navigation.
+//
+// The shell consumes NO core state, so it mounts once and stays mounted while the
+// body suspends. Only <SettingsBodySuspended /> ever suspends, inside the dialog.
+const Settings = ({ onClose }: Props) => {
     return (
         <ModalRoute
             open
@@ -98,57 +149,9 @@ const Settings = ({ onClose }: Props) => {
             hideHeader
             className={`flex flex-col gap-0 overflow-hidden border border-line p-0 max-w-none ${PANEL_SIZE}`}
         >
-            <div className="flex h-[calc(100%-var(--safe-area-inset-bottom,0rem))] w-full flex-row max-[640px]:flex-col-reverse">
-                <Menu
-                    selected={selectedSectionId}
-                    streamingServer={streamingServer}
-                    onSelect={onMenuSelect}
-                />
-                <div
-                    ref={sectionsContainerRef}
-                    onScroll={onContainerScroll}
-                    className="flex-1 self-stretch overflow-y-auto px-12 max-[640px]:px-6"
-                >
-                    <General
-                        ref={generalSectionRef}
-                        profile={profile}
-                    />
-                    <Interface
-                        ref={interfaceSectionRef}
-                        profile={profile}
-                    />
-                    <Player
-                        ref={playerSectionRef}
-                        profile={profile}
-                    />
-                    <Streaming
-                        ref={streamingServerSectionRef}
-                        profile={profile}
-                        streamingServer={streamingServer}
-                    />
-                    {
-                        !platform.isMobile && <Shortcuts ref={shortcutsSectionRef} />
-                    }
-                    <Info streamingServer={streamingServer} />
-                </div>
-            </div>
+            <SettingsBodySuspended />
         </ModalRoute>
     );
 };
 
-const SettingsFallback = ({ onClose }: Props) => {
-    return (
-        <ModalRoute
-            open
-            onClose={onClose}
-            showClose={false}
-            title="Settings"
-            hideHeader
-            className={`gap-0 overflow-hidden border border-line p-0 max-w-none ${PANEL_SIZE}`}
-        >
-            {null}
-        </ModalRoute>
-    );
-};
-
-export default withCoreSuspender(Settings, SettingsFallback);
+export default Settings;

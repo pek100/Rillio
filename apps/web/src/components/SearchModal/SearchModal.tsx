@@ -5,7 +5,14 @@
  * list machinery) while KEEPING the bespoke createPortal + deliberately-un-animated
  * blur backdrop (documented perf choice). It is a bus-driven modal (common/modalEvents)
  * mounted by ModalHost: it takes an `onClose` (a pure bus close, never a history
- * navigation), and its core-backed hooks only mount while it is open (withCoreSuspender).
+ * navigation).
+ *
+ * Shell / body split (fixes the open flicker): the portal, backdrop, role=dialog frame
+ * and the search INPUT live in the shell, which consumes no core state and so mounts
+ * once and stays mounted (the input keeps focus, the backdrop never re-appears). Only
+ * the suggestion list (SearchBody) reads core models (useSearchHistory / useLocalSearch
+ * / usePlayUrl), so ONLY it sits inside withCoreSuspender; when those reads suspend on
+ * first open, just the list swaps to an empty fallback, never the input or the dialog.
  *
  * Reused verbatim: useSearchHistory / useLocalSearch (LocalSearch model, 250ms
  * debounce) / usePlayUrl (paste-to-play) / deepLinks.search hrefs / submit-to-/search
@@ -30,6 +37,73 @@ const { withCoreSuspender } = require('rillio/common/CoreSuspender');
 
 const EMPTY_ROW = 'flex items-center justify-center gap-2.5 rounded-card px-3 py-2.5 text-sm text-fg-subtle';
 
+type PlayUrlRef = React.MutableRefObject<((text: string) => Promise<boolean>) | null>;
+
+type BodyProps = {
+    query: string,
+    onClose: () => void,
+    // The shell's onPaste handler (registered on the persistent input) reads the
+    // paste-to-play routine through this ref, because usePlayUrl reads the streaming
+    // server model and so can only run inside the suspending body.
+    playUrlRef: PlayUrlRef,
+};
+
+// The core-consuming body: history + local-search suggestions, and the paste-to-play
+// routine it publishes to the shell. Rendered inside the shell's <Command> so cmdk's
+// list context reaches the suggestions.
+const SearchBody = ({ query, onClose, playUrlRef }: BodyProps) => {
+    const { t } = useTranslation();
+    const navigate = useNavigate();
+    const searchHistory = useSearchHistory();
+    const localSearch = useLocalSearch();
+    const { handlePlayUrl } = usePlayUrl();
+
+    // Publish the paste-to-play routine to the shell's persistent input.
+    React.useEffect(() => {
+        playUrlRef.current = handlePlayUrl;
+        return () => { playUrlRef.current = null; };
+    }, [handlePlayUrl, playUrlRef]);
+
+    const runLocalSearch = React.useMemo(() => debounce((value: string) => localSearch.search(value), 250), []);
+    React.useEffect(() => {
+        runLocalSearch(query);
+        return () => runLocalSearch.cancel();
+    }, [query]);
+
+    // History/suggestion rows carry a hash deepLink; navigate via the router (strip
+    // the leading '#') so it matches the submit path, then close the palette.
+    const goTo = React.useCallback((href: string) => {
+        navigate(href.replace(/^#/, ''));
+        onClose();
+    }, [navigate, onClose]);
+
+    const historyItems = searchHistory?.items ?? [];
+    const suggestions = localSearch?.items ?? [];
+    const empty = historyItems.length === 0 && suggestions.length === 0;
+
+    return (
+        <SearchSuggestions
+            historyItems={historyItems}
+            suggestions={suggestions}
+            onClearHistory={searchHistory.clear}
+            onSelect={goTo}
+            listClassName="max-h-[22rem] p-2"
+            empty={empty ?
+                <div className={EMPTY_ROW}>
+                    {t('SEARCH_OR_PASTE_LINK')}
+                </div>
+                :
+                null
+            }
+        />
+    );
+};
+
+// Empty fallback: the input + frame are in the shell, so the list simply stays blank
+// (no size to preserve here - the suggestion area grows from empty anyway) for the
+// sub-frame the core reads take to resolve.
+const SearchBodySuspended = withCoreSuspender(SearchBody, () => null);
+
 type Props = {
     onClose: () => void,
 };
@@ -38,21 +112,14 @@ const SearchModal = ({ onClose }: Props) => {
     const { t } = useTranslation();
     const navigate = useNavigate();
     const close = onClose;
-    const searchHistory = useSearchHistory();
-    const localSearch = useLocalSearch();
-    const { handlePlayUrl } = usePlayUrl();
 
     const [query, setQuery] = React.useState('');
     const inputRef = React.useRef<HTMLInputElement>(null);
-
-    const runLocalSearch = React.useMemo(() => debounce((value: string) => localSearch.search(value), 250), []);
-    React.useEffect(() => {
-        runLocalSearch(query);
-        return () => runLocalSearch.cancel();
-    }, [query]);
+    const playUrlRef: PlayUrlRef = React.useRef(null);
 
     // Focus the field on mount, restore the previously-focused element on close,
-    // and close on Escape (the palette has no close button by design).
+    // and close on Escape (the palette has no close button by design). The shell
+    // mounts once, so this runs once - the input is never re-created mid-open.
     React.useEffect(() => {
         const previouslyFocused = document.activeElement as HTMLElement | null;
         inputRef.current?.focus();
@@ -85,20 +152,11 @@ const SearchModal = ({ onClose }: Props) => {
         const pasted = event.clipboardData.getData('text');
         if (pasted) {
             // Only close if it was a playable URL/magnet (handlePlayUrl navigated).
-            handlePlayUrl(pasted).then((handled: boolean) => { if (handled) close(); });
+            // playUrlRef is set once the body resolves (a frame after open); a paste
+            // in that first frame simply falls through to plain text, as before.
+            playUrlRef.current?.(pasted).then((handled: boolean) => { if (handled) close(); });
         }
-    }, [handlePlayUrl, close]);
-
-    // History/suggestion rows carry a hash deepLink; navigate via the router (strip
-    // the leading '#') so it matches the submit path, then close the palette.
-    const goTo = React.useCallback((href: string) => {
-        navigate(href.replace(/^#/, ''));
-        close();
-    }, [navigate, close]);
-
-    const historyItems = searchHistory?.items ?? [];
-    const suggestions = localSearch?.items ?? [];
-    const empty = historyItems.length === 0 && suggestions.length === 0;
+    }, [close]);
 
     return createPortal((
         <div className="fixed inset-0 z-50">
@@ -133,24 +191,11 @@ const SearchModal = ({ onClose }: Props) => {
                         />
                     </div>
 
-                    <SearchSuggestions
-                        historyItems={historyItems}
-                        suggestions={suggestions}
-                        onClearHistory={searchHistory.clear}
-                        onSelect={goTo}
-                        listClassName="max-h-[22rem] p-2"
-                        empty={empty ?
-                            <div className={EMPTY_ROW}>
-                                {t('SEARCH_OR_PASTE_LINK')}
-                            </div>
-                            :
-                            null
-                        }
-                    />
+                    <SearchBodySuspended query={query} onClose={close} playUrlRef={playUrlRef} />
                 </Command>
             </div>
         </div>
     ), document.body);
 };
 
-export default withCoreSuspender(SearchModal, () => null);
+export default SearchModal;
