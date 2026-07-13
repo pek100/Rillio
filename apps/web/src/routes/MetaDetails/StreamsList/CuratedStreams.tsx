@@ -14,7 +14,7 @@
  */
 
 import React from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronDown, Play, Download } from 'lucide-react';
 import { useCore } from 'rillio/core';
 import { useProfile, languages } from 'rillio/common';
 import { useScreenCapability } from 'rillio/common/useScreenCapability';
@@ -48,7 +48,7 @@ const DownloadToCache = ({ stream, className }: { stream: any; className?: strin
                 onClick={onClick}
                 className={cn('inline-flex size-6 shrink-0 items-center justify-center rounded-full p-0 text-fg-subtle hover:bg-white/10 hover:text-fg', className)}
             >
-                <Icon className={'size-3.5'} name={'download'} />
+                <Download className={'size-3.5'} />
             </Button>
         </Tooltip>
     );
@@ -91,7 +91,7 @@ const LanguagePicker = ({ value, options, onSelect }: { value: string; options: 
                 >
                     <span>{flagFor(value) || '🌐'}</span>
                     {languages.label(value)}
-                    <Icon className={cn('size-3 transition-transform', open && 'rotate-180')} name="caret-down" />
+                    <ChevronDown className={cn('size-3 transition-transform', open && 'rotate-180')} />
                 </Button>
             </PopoverTrigger>
             <PopoverContent align="end" sideOffset={6} className="w-52 p-0">
@@ -138,7 +138,7 @@ const Tile = ({ label, entry, highlighted }: { label: string; entry: any; highli
         >
             <div className="flex items-center gap-1.5">
                 <span className={cn('text-sm font-semibold', highlighted ? 'text-accent' : 'text-fg')}>{label}</span>
-                <Icon className={cn('size-3.5 transition', highlighted ? 'text-accent' : 'text-fg-subtle opacity-0 group-hover:opacity-100')} name="play" />
+                <Play className={cn('size-3.5 transition', highlighted ? 'text-accent' : 'text-fg-subtle opacity-0 group-hover:opacity-100')} />
                 <DownloadToCache stream={stream} className="ml-auto opacity-0 transition group-hover:opacity-100" />
             </div>
             <div className="truncate text-xs text-fg-muted">{providerOf(stream) || 'Stream'}</div>
@@ -252,7 +252,7 @@ const CuratedStreams = ({ streams }: { streams: any[] }) => {
                         onClick={rec.entry.stream.onClick}
                         className="h-9 gap-2 px-4 text-sm font-semibold active:scale-[0.98]"
                     >
-                        <Icon className="size-4" name="play" />
+                        <Play className="size-4" />
                         Watch · {rec.label}
                     </Button>
                 ) : null}
@@ -275,7 +275,7 @@ const CuratedStreams = ({ streams }: { streams: any[] }) => {
                         onClick={() => setShowAll((v) => !v)}
                         className="h-auto self-center gap-1.5 rounded-full bg-white/5 px-3 py-1 text-xs font-medium text-fg-muted hover:bg-white/10 hover:text-fg"
                     >
-                        <Icon className={cn('size-3 transition-transform', showAll && 'rotate-180')} name="caret-down" />
+                        <ChevronDown className={cn('size-3 transition-transform', showAll && 'rotate-180')} />
                         {showAll ? 'Hide' : `All ${rest.length} streams`}
                     </Button>
                     {showAll ? (

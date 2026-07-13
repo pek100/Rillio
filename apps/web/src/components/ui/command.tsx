@@ -11,7 +11,7 @@
 
 import React, { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from 'react';
 import { Command as CommandPrimitive } from 'cmdk';
-import Icon from '@stremio/stremio-icons/react';
+import { Search } from 'lucide-react';
 import { cn } from './cn';
 import { Dialog, DialogContent } from './dialog';
 
@@ -46,7 +46,7 @@ export const CommandInput = forwardRef<
 >(function CommandInput({ className, ...props }, ref) {
     return (
         <div className="flex items-center gap-2 px-3" cmdk-input-wrapper="">
-            <Icon name="search" className="size-4 shrink-0 opacity-50" />
+            <Search className="size-4 shrink-0 opacity-50" />
             <CommandPrimitive.Input
                 ref={ref}
                 className={cn(

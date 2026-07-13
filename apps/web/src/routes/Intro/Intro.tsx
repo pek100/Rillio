@@ -14,7 +14,8 @@
 import React, { useCallback, useEffect, useReducer, useRef, forwardRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams, useNavigate } from 'react-router-dom';
-import Icon from '@stremio/stremio-icons/react';
+import { CircleUser } from 'lucide-react';
+import { Facebook, Apple } from 'rillio/components/ui/brand-icons';
 import Modal from 'rillio/router/Modal';
 import { useCore } from 'rillio/core';
 import { useBinaryState } from 'rillio/common';
@@ -465,14 +466,14 @@ const Intro = () => {
                         className={cn(FORM_BUTTON, 'bg-[var(--color-facebook)] text-fg hover:brightness-110')}
                         onClick={loginWithFacebook}
                     >
-                        <Icon className="size-6" name="facebook" />
+                        <Facebook className="size-6" />
                         <span>{t('FB_LOGIN')}</span>
                     </Button>
                     <Button
                         className={cn(FORM_BUTTON, 'bg-fg text-bg hover:brightness-110')}
                         onClick={loginWithApple}
                     >
-                        <Icon className="size-6" name="macos" />
+                        <Apple className="size-6" />
                         <span>{t('APPLE_LOGIN')}</span>
                     </Button>
                     {
@@ -520,7 +521,7 @@ const Intro = () => {
                 loaderModalOpen ?
                     <Modal className="flex items-center justify-center bg-black/40">
                         <div className="flex-none flex flex-col items-center justify-center gap-4 p-10 rounded-card bg-surface-hover shadow-elevated">
-                            <Icon className="size-20 text-fg animate-pulse" name="person" />
+                            <CircleUser className="size-20 text-fg animate-pulse" />
                             <div className="text-2xl text-fg animate-pulse">{t('AUTHENTICATING')}</div>
                             <Button
                                 className={cn(FORM_BUTTON, 'mt-8 bg-surface text-fg hover:brightness-110')}

@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { X } from 'lucide-react';
 import { useShortcuts } from 'rillio/common';
 import { Button, ShortcutsGroup } from 'rillio/components';
 import styles from './styles.less';
@@ -44,7 +44,7 @@ const ShortcutsModal = ({ onClose }: Props) => {
                     </div>
 
                     <Button className={styles['close-button']} title={t('BUTTON_CLOSE')} onClick={onClose}>
-                        <Icon className={styles['icon']} name={'close'} />
+                        <X className={styles['icon']} />
                     </Button>
                 </div>
 

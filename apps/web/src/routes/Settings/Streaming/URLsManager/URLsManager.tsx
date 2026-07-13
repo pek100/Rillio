@@ -2,7 +2,7 @@
 
 import React, { useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Plus, RotateCcw } from 'lucide-react';
 import { useProfile } from 'rillio/common';
 import { Button } from 'rillio/components/ui/button';
 import { RadioGroup } from 'rillio/components/ui/radio-group';
@@ -60,7 +60,7 @@ const URLsManager = () => {
                     onClick={onAdd}
                     className="flex items-center justify-center gap-2 rounded-full bg-surface-hover px-6 py-2 text-fg hover:brightness-110 active:scale-[0.98]"
                 >
-                    <Icon name={'add'} className="size-4 text-fg" />
+                    <Plus className="size-4 text-fg" />
                     {t('SETTINGS_SERVER_ADD_URL')}
                 </Button>
                 <Button
@@ -69,7 +69,7 @@ const URLsManager = () => {
                     onClick={reloadServer}
                     className="flex items-center justify-center gap-2 rounded-full bg-surface-hover px-6 py-2 text-fg hover:brightness-110 active:scale-[0.98]"
                 >
-                    <Icon name={'reset'} className="size-4 text-fg" />
+                    <RotateCcw className="size-4 text-fg" />
                     <div>{t('RELOAD')}</div>
                 </Button>
             </div>

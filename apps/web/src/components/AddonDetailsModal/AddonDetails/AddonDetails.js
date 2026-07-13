@@ -4,14 +4,14 @@ const React = require('react');
 const { useTranslation } = require('react-i18next');
 const PropTypes = require('prop-types');
 const classnames = require('classnames');
-const { default: Icon } = require('@stremio/stremio-icons/react');
+const { Puzzle } = require('lucide-react');
 const { default: Image } = require('rillio/components/Image');
 const styles = require('./styles');
 
 const AddonDetails = ({ className, id, name, version, logo, description, types, transportUrl, official }) => {
     const { t } = useTranslation();
     const renderLogoFallback = React.useCallback(() => (
-        <Icon className={styles['icon']} name={'addons'} />
+        <Puzzle className={styles['icon']} />
     ), []);
     return (
         <div className={classnames(className, styles['addon-details-container'])}>

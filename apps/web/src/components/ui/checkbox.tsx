@@ -1,7 +1,7 @@
 // Copyright (C) 2017-2024 Smart code 203358507
 
 /**
- * Checkbox (foundation kit) - Radix Checkbox with a stremio checkmark glyph. Flat
+ * Checkbox (foundation kit) - Radix Checkbox with a lucide checkmark glyph. Flat
  * square with a hairline at rest, brand accent fill when checked. Error state via a
  * `data-error` attribute (rendered in --color-danger). Call sites wrap this to keep
  * the app's rich {type,checked,reactEvent,nativeEvent} payload and label+inline-link
@@ -10,7 +10,7 @@
 
 import React, { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from 'react';
 import { Checkbox as CheckboxPrimitive } from 'radix-ui';
-import Icon from '@stremio/stremio-icons/react';
+import { Check } from 'lucide-react';
 import { cn } from './cn';
 
 export const Checkbox = forwardRef<
@@ -32,7 +32,7 @@ export const Checkbox = forwardRef<
             {...props}
         >
             <CheckboxPrimitive.Indicator className="flex items-center justify-center">
-                <Icon name="checkmark" className="size-4" />
+                <Check className="size-4" />
             </CheckboxPrimitive.Indicator>
         </CheckboxPrimitive.Root>
     );

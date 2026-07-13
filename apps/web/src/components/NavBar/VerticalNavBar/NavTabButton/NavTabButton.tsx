@@ -9,9 +9,12 @@
 
 import React, { useCallback } from 'react';
 import { Link } from 'react-router-dom';
-import Icon from '@stremio/stremio-icons/react';
+import { Puzzle, type LucideIcon } from 'lucide-react';
 import { cn } from 'rillio/components/ui/cn';
 import Image from 'rillio/components/Image';
+
+// Meta-extension addon tabs pass a string icon key; map it to a lucide component.
+const NAV_ICON: Record<string, LucideIcon> = { addons: Puzzle };
 
 type Props = {
     className?: string;
@@ -24,12 +27,13 @@ type Props = {
 };
 
 const NavTabButton = ({ className, logo, icon, label, href, selected, onClick }: Props) => {
+    const IconComp = (icon && NAV_ICON[icon]) || Puzzle;
     const renderLogoFallback = useCallback(() => (
         typeof icon === 'string' && icon.length > 0 ?
-            <Icon className="h-[2.2rem] w-[2.2rem] flex-none" name={icon} />
+            <IconComp className="h-[2.2rem] w-[2.2rem] flex-none" />
             :
             null
-    ), [icon]);
+    ), [icon, IconComp]);
     const onDoubleClick = () => {
         const scrollableElements = document.querySelectorAll('div');
 
@@ -61,9 +65,8 @@ const NavTabButton = ({ className, logo, icon, label, href, selected, onClick }:
                     />
                     :
                     typeof icon === 'string' && icon.length > 0 ?
-                        <Icon
+                        <IconComp
                             className={cn('h-[2.2rem] w-[2.2rem] flex-none mb-2', selected ? 'text-accent opacity-100' : 'text-fg opacity-35')}
-                            name={selected ? icon : `${icon}-outline`}
                         />
                         :
                         null

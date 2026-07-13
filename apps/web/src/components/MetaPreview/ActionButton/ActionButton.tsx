@@ -7,14 +7,13 @@
  */
 
 import React from 'react';
-import Icon from '@stremio/stremio-icons/react';
 import { cn } from 'rillio/components/ui/cn';
 import { Button } from 'rillio/components/ui/button';
 import { Tooltip } from 'rillio/components/ui/tooltip';
 
 type Props = {
     className?: string,
-    icon?: string,
+    icon?: React.ComponentType<{ className?: string }>,
     label?: string,
     tooltip?: boolean,
     href?: string,
@@ -24,6 +23,7 @@ type Props = {
 };
 
 const ActionButton = ({ className, icon, label, tooltip, ...props }: Props) => {
+    const IconComp = icon;
     const showInlineLabel = !tooltip && typeof label === 'string' && label.length > 0;
     const button = (
         <Button
@@ -38,8 +38,8 @@ const ActionButton = ({ className, icon, label, tooltip, ...props }: Props) => {
             )}
         >
             {
-                typeof icon === 'string' && icon.length > 0 ?
-                    <Icon name={icon} className="block size-7 text-fg opacity-90 transition-opacity group-hover:opacity-100" />
+                IconComp ?
+                    <IconComp className="block size-7 text-fg opacity-90 transition-opacity group-hover:opacity-100" />
                     :
                     null
             }

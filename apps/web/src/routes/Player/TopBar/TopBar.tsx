@@ -12,7 +12,8 @@
 
 import React, { forwardRef } from 'react';
 import { useNavigate } from 'react-router';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronLeft } from 'lucide-react';
+import { Hdr } from 'rillio/components/ui/brand-icons';
 import { useIsShell } from 'rillio/components/WindowControls/WindowControls';
 import { useHorizontalNavGamepadNavigation } from 'rillio/services/GamepadNavigation';
 import { IconButton } from 'rillio/components/ui';
@@ -61,7 +62,7 @@ const TopBar = forwardRef<HTMLElement, Props>(function TopBar({ className, title
                 onClick={onBack}
                 className="opacity-100 text-fg"
             >
-                <Icon name="chevron-back" className="size-4" />
+                <ChevronLeft className="size-4" />
             </IconButton>
             {
                 typeof title === 'string' && title.length > 0 ?
@@ -80,7 +81,7 @@ const TopBar = forwardRef<HTMLElement, Props>(function TopBar({ className, title
                         className="flex h-10 select-none items-center justify-center px-2 text-fg-muted"
                         title={hdrInfo!.gamma === 'pq' ? 'HDR10' : 'HLG'}
                     >
-                        <Icon name="hdr" className="h-4 w-8" />
+                        <Hdr className="h-4 w-8" />
                     </div>
                     :
                     null

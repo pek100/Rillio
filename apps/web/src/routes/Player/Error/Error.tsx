@@ -9,7 +9,7 @@
 
 import React, { forwardRef, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Download } from 'lucide-react';
 import { Button } from 'rillio/components/ui';
 import { cn } from 'rillio/components/ui';
 
@@ -81,7 +81,7 @@ const Error = forwardRef<HTMLDivElement, Props>(function Error({ className, code
                         target={'_blank'}
                         className={'mt-6 flex h-14 flex-row items-center rounded-full bg-accent px-8 transition hover:brightness-110 active:scale-[0.97]'}
                     >
-                        <Icon className={'mr-4 size-6 flex-none text-fg'} name={'download'} />
+                        <Download className={'mr-4 size-6 flex-none text-fg'} />
                         <div className={'max-h-[2.4em] flex-1 text-center text-[1.1rem] font-medium text-fg'}>{t('PLAYER_OPEN_IN_EXTERNAL')}</div>
                     </Button>
                     :

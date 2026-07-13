@@ -3,7 +3,7 @@
 import React, { useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { X } from 'lucide-react';
 import { Button } from 'rillio/components';
 import { useGamepad } from 'rillio/services';
 import type { ControllerType } from 'rillio/services/GamepadContext';
@@ -85,7 +85,7 @@ const GamepadModal = ({ onClose }: Props) => {
                     </div>
 
                     <Button className={styles['close-button']} title={t('BUTTON_CLOSE')} onClick={onClose}>
-                        <Icon className={styles['icon']} name={'close'} />
+                        <X className={styles['icon']} />
                     </Button>
                 </div>
 

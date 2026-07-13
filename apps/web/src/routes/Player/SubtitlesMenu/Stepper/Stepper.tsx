@@ -11,7 +11,7 @@
 
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Minus, Plus } from 'lucide-react';
 import { useInterval, useTimeout } from 'rillio/common';
 import { IconButton } from 'rillio/components/ui';
 import { cn } from 'rillio/components/ui';
@@ -102,7 +102,7 @@ const Stepper = ({ className, label, value, unit, step, min, max, disabled, onCh
                     onMouseUp={onDecrementMouseUp}
                     onMouseLeave={cancel}
                 >
-                    <Icon name={'remove'} />
+                    <Minus />
                 </IconButton>
                 <div className={'flex-1 text-center font-medium text-fg'}>
                     {valueLabel}
@@ -114,7 +114,7 @@ const Stepper = ({ className, label, value, unit, step, min, max, disabled, onCh
                     onMouseUp={onIncrementMouseUp}
                     onMouseLeave={cancel}
                 >
-                    <Icon name={'add'} />
+                    <Plus />
                 </IconButton>
             </div>
         </div>

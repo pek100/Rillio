@@ -2,7 +2,7 @@
 
 import React, { useCallback, useId, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Trash2 } from 'lucide-react';
 import { useProfile } from 'rillio/common';
 import { DEFAULT_STREAMING_SERVER_URL } from 'rillio/common/CONSTANTS';
 import useStreamingServer from 'rillio/common/useStreamingServer';
@@ -70,7 +70,7 @@ const Item = ({ url }: Props) => {
                             onClick={handleDelete}
                             className="absolute right-6 top-1/2 flex w-12 -translate-y-1/2 items-center justify-center rounded-card bg-transparent p-0 transition-colors hover:bg-surface-hover [&:hover_svg]:!text-danger [&:hover_svg]:!opacity-100 max-[640px]:right-4"
                         >
-                            <Icon name={'bin'} className="size-5 text-fg opacity-0 transition-[opacity,color] group-hover:opacity-60 max-[640px]:opacity-60" />
+                            <Trash2 className="size-5 text-fg opacity-0 transition-[opacity,color] group-hover:opacity-60 max-[640px]:opacity-60" />
                         </Button>
                         : null
                 }

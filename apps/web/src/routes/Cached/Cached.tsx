@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { Play, Info, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toPath, useCloseModalRoute } from 'rillio-router';
 import { useCore } from 'rillio/core';
@@ -195,7 +195,7 @@ const Row = ({ entry, metaLink, onPlay, onMoreInfo, onSetPaused, onDelete }: {
                         title="Play"
                         className="size-9 text-accent opacity-100 hover:brightness-110"
                     >
-                        <Icon name="play" className="size-5" />
+                        <Play className="size-5" />
                     </IconButton>
                     :
                     null
@@ -207,7 +207,7 @@ const Row = ({ entry, metaLink, onPlay, onMoreInfo, onSetPaused, onDelete }: {
                         title="More info"
                         className="size-9 text-fg-muted opacity-0 hover:text-fg group-hover:opacity-100"
                     >
-                        <Icon name="about" className="size-5" />
+                        <Info className="size-5" />
                     </IconButton>
                     :
                     null
@@ -217,7 +217,7 @@ const Row = ({ entry, metaLink, onPlay, onMoreInfo, onSetPaused, onDelete }: {
                 title="Delete from cache (frees disk space; can be re-downloaded)"
                 className="size-9 text-fg-muted opacity-0 hover:text-warning group-hover:opacity-100"
             >
-                <Icon name="bin" className="size-5" />
+                <Trash2 className="size-5" />
             </IconButton>
         </div>
     );
@@ -301,7 +301,7 @@ const Cached = () => {
                     title="Close"
                     className="size-9 text-fg-muted"
                 >
-                    <Icon name="close" className="size-5" />
+                    <X className="size-5" />
                 </IconButton>
             </div>
             <div className="min-h-0 flex-1 overflow-y-auto">

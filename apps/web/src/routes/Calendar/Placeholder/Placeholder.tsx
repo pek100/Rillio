@@ -7,7 +7,7 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Megaphone, Calendar } from 'lucide-react';
 import { Image } from 'rillio/components';
 import { Button } from 'rillio/components/ui/button';
 
@@ -28,13 +28,13 @@ const Placeholder = () => {
             </div>
             <div className={'mb-4 flex flex-row items-center gap-16 max-[640px]:flex-col max-[640px]:gap-4'}>
                 <div className={'flex w-72 flex-row items-center gap-6'}>
-                    <Icon className={'h-[3.25rem] w-[3.25rem] flex-none text-fg-subtle'} name={'megaphone'} />
+                    <Megaphone className={'h-[3.25rem] w-[3.25rem] flex-none text-fg-subtle'} />
                     <div className={'flex-auto text-base font-medium text-fg'}>
                         {t('NOT_LOGGED_IN_NOTIFICATIONS')}
                     </div>
                 </div>
                 <div className={'flex w-72 flex-row items-center gap-6'}>
-                    <Icon className={'h-[3.25rem] w-[3.25rem] flex-none text-fg-subtle'} name={'calendar-thin'} />
+                    <Calendar className={'h-[3.25rem] w-[3.25rem] flex-none text-fg-subtle'} />
                     <div className={'flex-auto text-base font-medium text-fg'}>
                         {t('NOT_LOGGED_IN_CALENDAR')}
                     </div>

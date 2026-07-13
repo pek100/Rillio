@@ -13,7 +13,7 @@
 
 import React, { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react';
 import { Dialog as DialogPrimitive } from 'radix-ui';
-import Icon from '@stremio/stremio-icons/react';
+import { X } from 'lucide-react';
 import { cn } from './cn';
 
 export const Dialog = DialogPrimitive.Root;
@@ -65,7 +65,7 @@ export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
                             className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-full text-fg-muted opacity-70 outline-none transition hover:bg-surface-hover hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-highlight"
                             aria-label="Close"
                         >
-                            <Icon name="close" className="size-4" />
+                            <X className="size-4" />
                         </DialogPrimitive.Close>
                     ) : null}
                 </DialogPrimitive.Content>

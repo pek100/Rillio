@@ -15,7 +15,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronLeft, Puzzle } from 'lucide-react';
 import { Image } from 'rillio/components';
 import { usePlatform, useProfile } from 'rillio/common';
 import { Button } from 'rillio/components/ui/button';
@@ -118,7 +118,7 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Prop
                                 className="inline-flex size-11 flex-none items-center justify-center rounded-full p-0 text-fg-muted hover:text-fg"
                                 title={t('BACK')}
                             >
-                                <Icon className="size-6" name={'chevron-back'} />
+                                <ChevronLeft className="size-6" />
                             </Button>
                             <div className="min-w-[45%] overflow-hidden text-ellipsis whitespace-nowrap text-fg">
                                 {typeof video.season === 'number' && typeof video.episode === 'number'
@@ -178,7 +178,7 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Prop
                                         title={t('ADDON_CATALOGUE_MORE')}
                                         className="mx-auto my-4 h-16 max-w-[50%] gap-4 px-8 text-base font-bold"
                                     >
-                                        <Icon className="size-8" name={'addons'} />
+                                        <Puzzle className="size-8" />
                                         <span className="max-h-[3.6em] text-center">{t('ADDON_CATALOGUE_MORE')}</span>
                                     </Button>
                                     :
@@ -200,7 +200,7 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Prop
                                         // little link, not the yellow call-to-action.
                                         showInstallAddonsButton ?
                                             <Button variant="ghost" className={'mx-auto mt-1 inline-flex h-7 items-center gap-1.5 rounded-full bg-white/5 px-3 text-xs font-medium text-fg-muted transition hover:bg-white/10 hover:text-fg'} title={t('ADDON_CATALOGUE_MORE')} href={'#/addons'}>
-                                                <Icon className={'size-3.5'} name={'addons'} />
+                                                <Puzzle className={'size-3.5'} />
                                                 {t('ADDON_CATALOGUE_MORE')}
                                             </Button>
                                             :

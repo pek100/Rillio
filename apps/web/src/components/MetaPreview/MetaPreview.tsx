@@ -15,7 +15,8 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Bookmark, BookmarkCheck, Eye, EyeOff, Share2, Play } from 'lucide-react';
+import { Imdb } from 'rillio/components/ui/brand-icons';
 import Image from 'rillio/components/Image';
 import ActionsGroup from 'rillio/components/ActionsGroup';
 import { Button } from 'rillio/components/ui/button';
@@ -141,12 +142,12 @@ const MetaPreview = React.forwardRef<HTMLDivElement, Props>(({
     const metaItemActions = React.useMemo(() => {
         const actions = [
             {
-                icon: inLibrary ? 'remove-from-library' : 'add-to-library',
+                icon: inLibrary ? BookmarkCheck : Bookmark,
                 label: inLibrary ? t('REMOVE_FROM_LIB') : t('ADD_TO_LIB'),
                 onClick: typeof toggleInLibrary === 'function' ? toggleInLibrary : undefined,
             },
             {
-                icon: watched ? 'eye-off' : 'eye',
+                icon: watched ? EyeOff : Eye,
                 label: watched ? t('CTX_MARK_UNWATCHED') : t('CTX_MARK_WATCHED'),
                 onClick: typeof toggleWatched === 'function' ? toggleWatched : undefined,
             },
@@ -154,7 +155,7 @@ const MetaPreview = React.forwardRef<HTMLDivElement, Props>(({
         // Share lives in the same group as library/watched so every action reads as
         // one uniform pill, rather than a lone circular button beside them.
         if (linksGroups.has(CONSTANTS.SHARE_LINK_CATEGORY)) {
-            actions.push({ icon: 'share', label: t('CTX_SHARE'), onClick: openShareModal });
+            actions.push({ icon: Share2, label: t('CTX_SHARE'), onClick: openShareModal });
         }
         return actions;
     }, [inLibrary, watched, toggleInLibrary, toggleWatched, linksGroups, openShareModal, t]);
@@ -207,7 +208,7 @@ const MetaPreview = React.forwardRef<HTMLDivElement, Props>(({
                                         tabIndex={0}
                                     >
                                         <div className={styles['label']}>{linksGroups.get(CONSTANTS.IMDB_LINK_CATEGORY).label}</div>
-                                        <Icon className={styles['icon']} name={'imdb'} />
+                                        <Imdb className={styles['icon']} />
                                     </Button>
                                     :
                                     null
@@ -275,7 +276,7 @@ const MetaPreview = React.forwardRef<HTMLDivElement, Props>(({
                             typeof showHref === 'string' ?
                                 <ActionButton
                                     className="mb-4 hover:bg-primary focus:bg-primary focus-visible:outline-none"
-                                    icon={'play'}
+                                    icon={Play}
                                     label={t('SHOW')}
                                     tabIndex={0}
                                     href={showHref}

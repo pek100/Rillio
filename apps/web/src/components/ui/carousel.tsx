@@ -20,7 +20,7 @@ import React, {
     type KeyboardEvent,
 } from 'react';
 import useEmblaCarousel, { type UseEmblaCarouselType } from 'embla-carousel-react';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from './cn';
 import { IconButton } from './button';
 
@@ -160,7 +160,7 @@ export function CarouselPrevious({ className, ...props }: ComponentProps<typeof 
             aria-label="Previous slide"
             {...props}
         >
-            <Icon name="chevron-back" className="size-4" />
+            <ChevronLeft className="size-4" />
         </IconButton>
     );
 }
@@ -180,7 +180,7 @@ export function CarouselNext({ className, ...props }: ComponentProps<typeof Icon
             aria-label="Next slide"
             {...props}
         >
-            <Icon name="chevron-forward" className="size-4" />
+            <ChevronRight className="size-4" />
         </IconButton>
     );
 }

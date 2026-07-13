@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Library, Users } from 'lucide-react';
 import { Button } from 'rillio/components/ui/button';
 import Image from 'rillio/components/Image';
 
@@ -29,13 +29,13 @@ const Placeholder = () => {
             </div>
             <div className="mb-4 flex flex-row items-center gap-16 max-[640px]:flex-col max-[640px]:gap-4">
                 <div className="flex w-72 flex-row items-center gap-6">
-                    <Icon className="size-[3.25rem] flex-none text-fg opacity-30" name={'cloud-library'} />
+                    <Library className="size-[3.25rem] flex-none text-fg opacity-30" />
                     <div className="flex-auto text-[1.1rem] font-medium text-fg opacity-90 max-[640px]:text-base">
                         {t('NOT_LOGGED_IN_CLOUD')}
                     </div>
                 </div>
                 <div className="flex w-72 flex-row items-center gap-6">
-                    <Icon className="size-[3.25rem] flex-none text-fg opacity-30" name={'actors'} />
+                    <Users className="size-[3.25rem] flex-none text-fg opacity-30" />
                     <div className="flex-auto text-[1.1rem] font-medium text-fg opacity-90 max-[640px]:text-base">
                         {t('NOT_LOGGED_IN_RECOMMENDATIONS')}
                     </div>

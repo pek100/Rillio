@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useCore } from 'rillio/core';
 import { usePlatform, useToast, useDiscord } from 'rillio/common';
 import { Button } from 'rillio/components/ui/button';
+import { Trakt, Discord } from 'rillio/components/ui/brand-icons';
 import { Section, Option, Link, SettingsSwitch } from '../components';
 import User from './User';
 import useDataExport from './useDataExport';
@@ -134,7 +135,7 @@ const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
                         href={`https://www.strem.io/reset-password/${profile.auth.user.email}`}
                     />
             }
-            <Option className="mt-8" icon={'trakt'} iconClassName="text-[color:var(--color-trakt)]" label={t('SETTINGS_TRAKT')}>
+            <Option className="mt-8" icon={Trakt} iconClassName="text-[color:var(--color-trakt)]" label={t('SETTINGS_TRAKT')}>
                 <Button
                     variant="ghost"
                     title={isTraktAuthenticated ? t('LOG_OUT') : t('SETTINGS_TRAKT_AUTHENTICATE')}
@@ -148,7 +149,7 @@ const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
             </Option>
             {
                 discord.available &&
-                    <Option icon={'discord'} iconClassName="text-[#5865f2]" label={'SETTINGS_DISCORD'}>
+                    <Option icon={Discord} iconClassName="text-[#5865f2]" label={'SETTINGS_DISCORD'}>
                         <SettingsSwitch
                             {...discordToggle}
                         />

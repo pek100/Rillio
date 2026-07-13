@@ -12,7 +12,7 @@
 
 import React from 'react';
 import { t } from 'i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronLeft, ChevronRight, ChevronDown } from 'lucide-react';
 import { Button } from 'rillio/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from 'rillio/components/ui/select';
 import { cn } from 'rillio/components/ui/cn';
@@ -75,7 +75,7 @@ const SeasonsBar = ({ className, seasons, season, onSelect }: Props) => {
                 onClick={(event) => stepSeason('prev', event)}
                 className="h-12 w-[6.5rem] flex-none gap-2 px-2 font-medium text-fg"
             >
-                <Icon className="size-6 flex-none" name={'chevron-back'} />
+                <ChevronLeft className="size-6 flex-none" />
                 <span className="flex-1 text-center">{t('BUTTON_PREV')}</span>
             </Button>
             <Select value={selectedSeason} onValueChange={seasonOnSelect}>
@@ -96,7 +96,7 @@ const SeasonsBar = ({ className, seasons, season, onSelect }: Props) => {
                 className="h-12 w-[6.5rem] flex-none gap-2 px-2 font-medium text-fg"
             >
                 <span className="flex-1 text-center">{t('BUTTON_NEXT')}</span>
-                <Icon className="size-6 flex-none" name={'chevron-forward'} />
+                <ChevronRight className="size-6 flex-none" />
             </Button>
         </div>
     );
@@ -105,16 +105,16 @@ const SeasonsBar = ({ className, seasons, season, onSelect }: Props) => {
 const SeasonsBarPlaceholder = ({ className }: { className?: string }) => (
     <div className={cn('flex flex-row items-center justify-between p-4', className)}>
         <div className="flex h-12 w-[6.5rem] items-center gap-2 px-2">
-            <Icon className="size-6 flex-none text-fg-subtle" name={'chevron-back'} />
+            <ChevronLeft className="size-6 flex-none text-fg-subtle" />
             <span className="flex-1 text-center font-medium text-fg-subtle">{t('PREV_SEASON')}</span>
         </div>
         <div className="mx-4 flex items-center gap-4">
             <span className="font-medium text-fg-subtle">{t('SEASON_NUMBER', { season: 1 })}</span>
-            <Icon className="size-4 flex-none text-fg-subtle" name={'caret-down'} />
+            <ChevronDown className="size-4 flex-none text-fg-subtle" />
         </div>
         <div className="flex h-12 w-[6.5rem] items-center gap-2 px-2">
             <span className="flex-1 text-center font-medium text-fg-subtle">{t('NEXT_SEASON')}</span>
-            <Icon className="size-6 flex-none text-fg-subtle" name={'chevron-forward'} />
+            <ChevronRight className="size-6 flex-none text-fg-subtle" />
         </div>
     </div>
 );

@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronRight } from 'lucide-react';
 import { Button } from 'rillio/components/ui/button';
 import styles from './styles.less';
 const CONSTANTS = require('rillio/common/CONSTANTS');
@@ -33,7 +33,7 @@ const MetaRowPlaceholder = ({ className, title, deepLinks }: Props) => {
                     deepLinks && typeof deepLinks.discover === 'string' ?
                         <Button variant="ghost" className={cx(styles['see-all-container'], 'gap-0')} title={t('BUTTON_SEE_ALL')} href={deepLinks.discover} tabIndex={-1}>
                             <div className={styles['label']}>{ t('BUTTON_SEE_ALL') }</div>
-                            <Icon className={styles['icon']} name={'chevron-forward'} />
+                            <ChevronRight className={styles['icon']} />
                         </Button>
                         :
                         null

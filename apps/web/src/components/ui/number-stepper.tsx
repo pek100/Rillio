@@ -16,7 +16,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { Minus, Plus } from 'lucide-react';
 import { cn } from './cn';
 import { IconButton } from './button';
 
@@ -145,7 +145,7 @@ export function NumberStepper({
                 onMouseUp={clearHold}
                 onMouseLeave={clearHold}
             >
-                <Icon name="remove" className="size-4" />
+                <Minus className="size-4" />
             </IconButton>
             <span className={cn('min-w-8 text-center text-sm tabular-nums text-fg', valueClassName)}>
                 {value}{unit != null ? <span className="text-fg-muted">{unit}</span> : null}
@@ -160,7 +160,7 @@ export function NumberStepper({
                 onMouseUp={clearHold}
                 onMouseLeave={clearHold}
             >
-                <Icon name="add" className="size-4" />
+                <Plus className="size-4" />
             </IconButton>
         </div>
     );

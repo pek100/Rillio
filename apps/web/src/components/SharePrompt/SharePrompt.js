@@ -4,7 +4,8 @@ const React = require('react');
 const PropTypes = require('prop-types');
 const classnames = require('classnames');
 const { useTranslation } = require('react-i18next');
-const { default: Icon } = require('@stremio/stremio-icons/react');
+const { Link } = require('lucide-react');
+const { Facebook, XSocial, Reddit } = require('rillio/components/ui/brand-icons');
 const { default: useRouteFocused } = require('rillio/common/useRouteFocused');
 const { Button } = require('rillio/components');
 const { default: TextInput } = require('rillio/components/TextInput');
@@ -41,13 +42,13 @@ const SharePrompt = ({ className, url }) => {
         <div className={classnames(className, styles['share-prompt-container'])}>
             <div className={styles['buttons-container']}>
                 <Button className={classnames(styles['button-container'], styles['facebook-button'])} title={'Facebook'} href={`https://www.facebook.com/sharer/sharer.php?u=${url}`} target={'_blank'}>
-                    <Icon className={styles['icon']} name={'facebook'} />
+                    <Facebook className={styles['icon']} />
                 </Button>
                 <Button className={classnames(styles['button-container'], styles['x-button'])} title={'X (Twitter)'} href={`https://twitter.com/intent/tweet?text=${url}`} target={'_blank'}>
-                    <Icon className={styles['icon']} name={'x'} />
+                    <XSocial className={styles['icon']} />
                 </Button>
                 <Button className={classnames(styles['button-container'], styles['reddit-button'])} title={'Reddit'} href={`https://www.reddit.com/submit?url=${url}`} target={'_blank'}>
-                    <Icon className={styles['icon']} name={'reddit'} />
+                    <Reddit className={styles['icon']} />
                 </Button>
             </div>
             <div className={styles['url-container']}>
@@ -61,7 +62,7 @@ const SharePrompt = ({ className, url }) => {
                     tabIndex={-1}
                 />
                 <Button className={styles['copy-button']} title={t('CTX_COPY_TO_CLIPBOARD')} onClick={copyToClipboard}>
-                    <Icon className={styles['icon']} name={'link'} />
+                    <Link className={styles['icon']} />
                     <div className={styles['label']}>{ t('COPY') }</div>
                 </Button>
             </div>

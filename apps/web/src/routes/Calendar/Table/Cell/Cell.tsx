@@ -15,7 +15,7 @@
  */
 
 import React, { useCallback, useMemo, MouseEvent } from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { Play, MoreHorizontal } from 'lucide-react';
 import { useNavigateWithOrigin } from 'rillio-router';
 import { HorizontalScroll, Image } from 'rillio/components';
 import { Button } from 'rillio/components/ui/button';
@@ -82,9 +82,8 @@ const Cell = ({ selected, monthInfo, date, items, onClick }: Props) => {
                             tabIndex={-1}
                             onClick={(event) => onPosterClick(event, deepLinks.metaDetailsStreams)}
                         >
-                            <Icon
+                            <Play
                                 className={'absolute z-[1] h-8 w-8 rounded-full bg-accent p-2 text-bg opacity-0 transition-opacity duration-150 ease-smooth group-hover:opacity-100'}
-                                name={'play'}
                             />
                             <Image
                                 className={'h-auto max-h-full aspect-[2/3] object-cover rounded-[inherit] transition-opacity duration-150 ease-smooth group-hover:opacity-50'}
@@ -97,7 +96,7 @@ const Cell = ({ selected, monthInfo, date, items, onClick }: Props) => {
             </HorizontalScroll>
             {
                 items.length > 0 ?
-                    <Icon className={'hidden h-8 w-8 shrink-0 self-center p-2 text-fg-subtle'} name={'more-horizontal'} />
+                    <MoreHorizontal className={'hidden h-8 w-8 shrink-0 self-center p-2 text-fg-subtle'} />
                     :
                     null
             }

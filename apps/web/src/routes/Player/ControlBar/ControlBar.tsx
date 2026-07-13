@@ -12,7 +12,7 @@
  */
 
 import React, { forwardRef, useCallback, useEffect, useState } from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { Play, Pause, SkipForward, VolumeX, Volume, Volume1, Volume2, MoreVertical, Activity, Gauge, Cast, Captions, AudioLines, ListVideo, Scaling, Minimize, Maximize, MoreHorizontal } from 'lucide-react';
 import { t } from 'i18next';
 import { useServices } from 'rillio/services';
 import { useBinaryState, usePlatform, useFullscreen } from 'rillio/common';
@@ -159,13 +159,13 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
         };
     }, []);
 
-    const volumeIconName =
-        (typeof muted === 'boolean' && muted) ? 'volume-mute' :
-            (volume === null || isNaN(volume as number)) ? 'volume-off' :
-                volume === 0 ? 'volume-mute' :
-                    (volume as number) < 30 ? 'volume-low' :
-                        (volume as number) < 70 ? 'volume-medium' :
-                            'volume-high';
+    const VolumeIcon =
+        (typeof muted === 'boolean' && muted) ? VolumeX :
+            (volume === null || isNaN(volume as number)) ? VolumeX :
+                volume === 0 ? VolumeX :
+                    (volume as number) < 30 ? Volume :
+                        (volume as number) < 70 ? Volume1 :
+                            Volume2;
 
     return (
         <div
@@ -186,18 +186,18 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
             />
             <div className={'flex flex-row items-center gap-1 max-sm:relative max-sm:gap-[0.15rem] max-sm:overflow-visible max-sm:px-2'}>
                 <IconButton className={cn(CB_BUTTON, typeof paused !== 'boolean' && 'opacity-40')} title={paused ? t('PLAYER_PLAY') : t('PLAYER_PAUSE')} tabIndex={-1} onClick={onPlayPauseButtonClick}>
-                    <Icon className={CB_ICON} name={typeof paused !== 'boolean' || paused ? 'play' : 'pause'} />
+                    {typeof paused !== 'boolean' || paused ? <Play className={CB_ICON} /> : <Pause className={CB_ICON} />}
                 </IconButton>
                 {
                     nextVideo !== null ?
                         <IconButton className={CB_BUTTON} title={t('PLAYER_NEXT_VIDEO')} tabIndex={-1} onClick={onNextVideoButtonClick}>
-                            <Icon className={CB_ICON} name={'next'} />
+                            <SkipForward className={CB_ICON} />
                         </IconButton>
                         :
                         null
                 }
                 <IconButton className={cn(CB_BUTTON, typeof muted !== 'boolean' && 'opacity-40')} title={muted ? t('PLAYER_UNMUTE') : t('PLAYER_MUTE')} tabIndex={-1} onClick={onMuteButtonClick}>
-                    <Icon className={CB_ICON} name={volumeIconName} />
+                    <VolumeIcon className={CB_ICON} />
                 </IconButton>
                 {
                     !platform.isMobile ?
@@ -211,7 +211,7 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                 }
                 <div className={'flex-1'} />
                 <IconButton className={cn(CB_BUTTON, 'hidden max-sm:flex')} onClick={toggleButtonsMenu}>
-                    <Icon className={CB_ICON} name={'more-vertical'} />
+                    <MoreVertical className={CB_ICON} />
                 </IconButton>
                 <div className={cn(
                     'flex flex-none flex-row gap-1',
@@ -219,41 +219,41 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                     buttonsMenuOpen ? 'max-sm:flex' : 'max-sm:hidden',
                 )}>
                     <IconButton className={cn(CB_BUTTON, !stream && 'opacity-40')} tabIndex={-1} onMouseDown={onStatisticsButtonMouseDown} onClick={onToggleStatisticsMenu}>
-                        <Icon className={CB_ICON} name={'network'} />
+                        <Activity className={CB_ICON} />
                     </IconButton>
                     <IconButton className={cn(CB_BUTTON, playbackSpeed === null && 'opacity-40')} tabIndex={-1} onMouseDown={onSpeedButtonMouseDown} onClick={onToggleSpeedMenu}>
-                        <Icon className={CB_ICON} name={'speed'} />
+                        <Gauge className={CB_ICON} />
                     </IconButton>
                     <IconButton className={cn(CB_BUTTON, !chromecastServiceActive && 'opacity-40')} tabIndex={-1} onClick={onChromecastButtonClick}>
-                        <Icon className={CB_ICON} name={'cast'} />
+                        <Cast className={CB_ICON} />
                     </IconButton>
                     <IconButton className={cn(CB_BUTTON, (!Array.isArray(subtitlesTracks) || subtitlesTracks.length === 0) && 'opacity-40')} tabIndex={-1} onMouseDown={onSubtitlesButtonMouseDown} onClick={onToggleSubtitlesMenu}>
-                        <Icon className={CB_ICON} name={'subtitles'} />
+                        <Captions className={CB_ICON} />
                     </IconButton>
                     <IconButton className={cn(CB_BUTTON, (!Array.isArray(audioTracks) || audioTracks.length === 0) && 'opacity-40')} tabIndex={-1} onMouseDown={onAudioButtonMouseDown} onClick={onToggleAudioMenu}>
-                        <Icon className={CB_ICON} name={'audio-tracks'} />
+                        <AudioLines className={CB_ICON} />
                     </IconButton>
                     {
                         (metaItem?.content?.videos?.length ?? 0) > 0 ?
                             <IconButton className={CB_BUTTON} tabIndex={-1} onMouseDown={onVideosButtonMouseDown} onClick={onToggleSideDrawer}>
-                                <Icon className={CB_ICON} name={'episodes'} />
+                                <ListVideo className={CB_ICON} />
                             </IconButton>
                             :
                             null
                     }
                     <IconButton className={cn(CB_BUTTON, videoScale === null && 'opacity-40')} title={videoScaleLabel} tabIndex={-1} onClick={onVideoScaleChanged}>
-                        <Icon className={CB_ICON} name={'scale'} />
+                        <Scaling className={CB_ICON} />
                     </IconButton>
                     {
                         fullscreenSupported ?
                             <IconButton className={CB_BUTTON} title={fullscreen ? t('EXIT_FULLSCREEN') : t('ENTER_FULLSCREEN')} tabIndex={-1} onClick={fullscreen ? exitFullscreen : requestFullscreen}>
-                                <Icon className={CB_ICON} name={fullscreen ? 'minimize' : 'maximize'} />
+                                {fullscreen ? <Minimize className={CB_ICON} /> : <Maximize className={CB_ICON} />}
                             </IconButton>
                             :
                             null
                     }
                     <IconButton className={cn(CB_BUTTON, !stream && 'opacity-40')} tabIndex={-1} onMouseDown={onOptionsButtonMouseDown} onClick={onToggleOptionsMenu}>
-                        <Icon className={CB_ICON} name={'more-horizontal'} />
+                        <MoreHorizontal className={CB_ICON} />
                     </IconButton>
                 </div>
             </div>

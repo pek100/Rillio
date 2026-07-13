@@ -9,7 +9,8 @@
 
 import React, { forwardRef, memo, ReactNode, useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Link, Magnet, Download } from 'lucide-react';
+import { Vlc } from 'rillio/components/ui/brand-icons';
 import { useCore } from 'rillio/core';
 import { usePlatform, useToast } from 'rillio/common';
 import useCacheDownload from 'rillio/common/useCacheDownload';
@@ -17,7 +18,7 @@ import { Button } from 'rillio/components/ui';
 import { cn } from 'rillio/components/ui';
 
 type OptionProps = {
-    icon: string;
+    icon: React.ComponentType<{ className?: string }>;
     label: ReactNode;
     deviceId?: string;
     disabled?: boolean;
@@ -25,6 +26,7 @@ type OptionProps = {
 };
 
 const Option = ({ icon, label, deviceId, disabled, onClick }: OptionProps) => {
+    const IconComp = icon;
     const onButtonClick = useCallback(() => {
         if (typeof onClick === 'function') {
             onClick(deviceId);
@@ -37,7 +39,7 @@ const Option = ({ icon, label, deviceId, disabled, onClick }: OptionProps) => {
             onClick={onButtonClick}
             className={'mb-2 flex h-14 w-full flex-row items-center justify-start rounded-card px-4 last:mb-0 hover:bg-surface-hover'}
         >
-            <Icon className={'mr-4 size-[1.4rem] flex-none text-fg'} name={icon} />
+            <IconComp className={'mr-4 size-[1.4rem] flex-none text-fg'} />
             <div className={'max-h-[2.4em] flex-1 text-left font-normal text-fg'}>{label}</div>
         </Button>
     );
@@ -159,7 +161,7 @@ const OptionsMenu = memo(forwardRef<HTMLDivElement, Props>(function OptionsMenu(
             {
                 streamingUrl || downloadUrl ?
                     <Option
-                        icon={'link'}
+                        icon={Link}
                         label={t('CTX_COPY_STREAM_LINK')}
                         disabled={stream === null}
                         onClick={onCopyStreamButtonClick}
@@ -170,7 +172,7 @@ const OptionsMenu = memo(forwardRef<HTMLDivElement, Props>(function OptionsMenu(
             {
                 magnetUrl ?
                     <Option
-                        icon={'magnet-link'}
+                        icon={Magnet}
                         label={t('CTX_COPY_MAGNET_LINK')}
                         disabled={stream === null}
                         onClick={onCopyMagnetButtonClick}
@@ -181,7 +183,7 @@ const OptionsMenu = memo(forwardRef<HTMLDivElement, Props>(function OptionsMenu(
             {
                 downloadUrl ?
                     <Option
-                        icon={'download'}
+                        icon={Download}
                         label={t('CTX_DOWNLOAD_VIDEO')}
                         disabled={stream === null}
                         onClick={onDownloadVideoButtonClick}
@@ -192,7 +194,7 @@ const OptionsMenu = memo(forwardRef<HTMLDivElement, Props>(function OptionsMenu(
             {
                 stream !== null && typeof stream.infoHash === 'string' ?
                     <Option
-                        icon={'download'}
+                        icon={Download}
                         label={'Keep in cache'}
                         disabled={false}
                         onClick={onKeepInCacheClick}
@@ -203,7 +205,7 @@ const OptionsMenu = memo(forwardRef<HTMLDivElement, Props>(function OptionsMenu(
             {
                 subtitlesTrackUrl ?
                     <Option
-                        icon={'download'}
+                        icon={Download}
                         label={t('CTX_DOWNLOAD_SUBS')}
                         disabled={stream === null}
                         onClick={onDownloadSubtitlesClick}
@@ -215,7 +217,7 @@ const OptionsMenu = memo(forwardRef<HTMLDivElement, Props>(function OptionsMenu(
                 streamingUrl && externalDevices.map(({ id, name }) => (
                     <Option
                         key={id}
-                        icon={'vlc'}
+                        icon={Vlc}
                         label={t('PLAYER_PLAY_IN', { device: name })}
                         deviceId={id}
                         disabled={stream === null}

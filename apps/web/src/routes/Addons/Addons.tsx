@@ -22,7 +22,7 @@ import React from 'react';
 import { useParams } from 'react-router';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Puzzle, Plus, SlidersHorizontal, Link } from 'lucide-react';
 import { useCore } from 'rillio/core';
 import { useCloseModalRoute } from 'rillio-router';
 import { cn } from 'rillio/components/ui/cn';
@@ -168,7 +168,7 @@ const Addons = () => {
             );
     }, [search]);
     const renderLogoFallback = React.useCallback(() => (
-        <Icon name="addons" className="block size-full p-2.5 text-fg-muted" />
+        <Puzzle className="block size-full p-2.5 text-fg-muted" />
     ), []);
     React.useLayoutEffect(() => {
         closeAddAddonModal();
@@ -228,7 +228,7 @@ const Addons = () => {
                             onClick={openAddAddonModal}
                             className="h-12 shrink-0 gap-2 bg-accent-soft px-6 text-accent hover:bg-accent-soft hover:brightness-110 active:scale-[0.97] max-sm:fixed max-sm:bottom-[calc(3rem+var(--horizontal-nav-bar-size))] max-sm:right-0 max-sm:z-10"
                         >
-                            <Icon name="add" className="size-4" />
+                            <Plus className="size-4" />
                             <span className="text-base font-semibold">{t('ADD_ADDON')}</span>
                         </Button>
                         <SearchBar
@@ -243,7 +243,7 @@ const Addons = () => {
                             onClick={openFiltersModal}
                             className="hidden shrink-0 bg-surface-hover opacity-100 max-sm:inline-flex"
                         >
-                            <Icon name="filters" className="size-4 text-fg-muted" />
+                            <SlidersHorizontal className="size-4 text-fg-muted" />
                         </IconButton>
                     </div>
                     <div className="min-h-0 flex-1 overflow-y-auto">
@@ -307,7 +307,7 @@ const Addons = () => {
                             title={t('ADD_ADDON_DIRECTORY')}
                             className="h-auto justify-start gap-2 self-start p-0 text-accent hover:bg-transparent hover:brightness-110"
                         >
-                            <Icon name="link" className="size-4" />
+                            <Link className="size-4" />
                             <span className="text-sm font-semibold">{t('ADD_ADDON_DIRECTORY')}</span>
                         </Button>
                         <DialogFooter>

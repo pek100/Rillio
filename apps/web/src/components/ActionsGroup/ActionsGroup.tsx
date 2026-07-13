@@ -10,12 +10,12 @@
  */
 
 import React from 'react';
-import Icon from '@stremio/stremio-icons/react';
 import { cn } from 'rillio/components/ui/cn';
 import { Tooltip } from 'rillio/components/ui/tooltip';
 
 type Item = {
-    icon: string;
+    icon: React.ComponentType<{ className?: string }>;
+    iconClassName?: string;
     label?: string;
     filled?: string;
     disabled?: boolean;
@@ -55,30 +55,33 @@ const ActionsGroup = ({ items, className, size = 'default' }: Props) => {
             )}
         >
             {
-                items.map((item, index) => (
-                    <Tooltip key={index} label={item.label} side="top">
-                        <div
-                            className={cn(
-                                'group flex cursor-pointer items-center justify-center rounded-full outline-none',
-                                'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-highlight',
-                                cellSize[size],
-                                item.disabled && 'pointer-events-none',
-                                item.className,
-                            )}
-                            tabIndex={0}
-                            onClick={item.disabled ? undefined : item.onClick}
-                        >
-                            <Icon
-                                name={item.icon}
+                items.map((item, index) => {
+                    const ItemIcon = item.icon;
+                    return (
+                        <Tooltip key={index} label={item.label} side="top">
+                            <div
                                 className={cn(
-                                    'text-fg opacity-70 transition-opacity duration-150',
-                                    'group-hover:opacity-100 group-focus:opacity-100',
-                                    iconSize[size],
+                                    'group flex cursor-pointer items-center justify-center rounded-full outline-none',
+                                    'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-highlight',
+                                    cellSize[size],
+                                    item.disabled && 'pointer-events-none',
+                                    item.className,
                                 )}
-                            />
-                        </div>
-                    </Tooltip>
-                ))
+                                tabIndex={0}
+                                onClick={item.disabled ? undefined : item.onClick}
+                            >
+                                <ItemIcon
+                                    className={cn(
+                                        'text-fg opacity-70 transition-opacity duration-150',
+                                        'group-hover:opacity-100 group-focus:opacity-100',
+                                        iconSize[size],
+                                        item.iconClassName,
+                                    )}
+                                />
+                            </div>
+                        </Tooltip>
+                    );
+                })
             }
         </div>
     );

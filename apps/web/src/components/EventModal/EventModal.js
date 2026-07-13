@@ -6,7 +6,7 @@ const { default: Button } = require('rillio/components/Button');
 const ModalDialog = require('rillio/components/ModalDialog');
 const useEvents = require('./useEvents');
 const styles = require('./styles');
-const { default: Icon } = require('@stremio/stremio-icons/react');
+const { Puzzle } = require('lucide-react');
 
 const EventModal = () => {
     const { t } = useTranslation();
@@ -55,7 +55,7 @@ const EventModal = () => {
                     {
                         modal?.addon?.name ?
                             <div className={styles['addon-container']}>
-                                <Icon className={styles['icon']} name={'addons'} />
+                                <Puzzle className={styles['icon']} />
                                 <div className={styles['name']}>
                                     { modal.addon.name }
                                 </div>

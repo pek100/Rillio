@@ -13,7 +13,7 @@
 
 import React, { useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Puzzle, Settings, Share2 } from 'lucide-react';
 import { Button, IconButton } from 'rillio/components/ui/button';
 import { cn } from 'rillio/components/ui/cn';
 import { Image } from 'rillio/components';
@@ -84,7 +84,7 @@ const Addon = ({
     }, [onShare, dataset]);
 
     const renderLogoFallback = useCallback(() => (
-        <Icon name="addons" className="block size-full p-2.5 text-fg-muted" />
+        <Puzzle className="block size-full p-2.5 text-fg-muted" />
     ), []);
 
     const displayName = typeof name === 'string' && name.length > 0 ? name : id;
@@ -148,7 +148,7 @@ const Addon = ({
                 {
                     showConfigure ?
                         <IconButton title={t('ADDON_CONFIGURE')} tabIndex={-1} onClick={onConfigureClick}>
-                            <Icon name="settings" className="size-4" />
+                            <Settings className="size-4" />
                         </IconButton>
                         :
                         null
@@ -163,7 +163,7 @@ const Addon = ({
                     {primaryLabel}
                 </Button>
                 <IconButton title={t('SHARE_ADDON')} tabIndex={-1} onClick={onShareClick}>
-                    <Icon name="share" className="size-4" />
+                    <Share2 className="size-4" />
                 </IconButton>
             </div>
         </Button>

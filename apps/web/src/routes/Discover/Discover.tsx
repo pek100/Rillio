@@ -16,7 +16,7 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next';
 import { useParams } from 'react-router';
 import { useSearchParams } from 'react-router-dom';
-import Icon from '@stremio/stremio-icons/react';
+import { SlidersHorizontal } from 'lucide-react';
 import { cn } from 'rillio/components/ui/cn';
 import { Button, IconButton } from 'rillio/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from 'rillio/components/ui/dialog';
@@ -159,7 +159,7 @@ const Discover = () => {
                                     collapseOnNarrow && 'max-[640px]:flex',
                                 )}
                             >
-                                <Icon name={'filters'} />
+                                <SlidersHorizontal />
                             </IconButton>
                         </div>
                     </div>

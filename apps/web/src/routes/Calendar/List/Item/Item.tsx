@@ -8,7 +8,7 @@
  */
 
 import React, { useEffect, useMemo, useRef } from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { Play } from 'lucide-react';
 import { useNavigateWithOrigin } from 'rillio-router';
 import { Button } from 'rillio/components/ui/button';
 import { cn } from 'rillio/components/ui/cn';
@@ -82,7 +82,7 @@ const Item = ({ selected, monthInfo, date, items, profile, onClick }: Props) => 
                             <div className={'block flex-none text-fg-muted group-hover:hidden'}>
                                 S{season}E{episode}
                             </div>
-                            <Icon className={'hidden h-8 w-8 flex-none rounded-full bg-accent p-2 text-bg group-hover:block'} name={'play'} />
+                            <Play className={'hidden h-8 w-8 flex-none rounded-full bg-accent p-2 text-bg group-hover:block'} />
                         </Button>
                     ))
                 }

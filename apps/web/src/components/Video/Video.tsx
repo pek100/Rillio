@@ -17,7 +17,7 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router';
-import Icon from '@stremio/stremio-icons/react';
+import { Film, Eye } from 'lucide-react';
 import { cn } from 'rillio/components/ui/cn';
 import { Button } from 'rillio/components/ui/button';
 import Image from 'rillio/components/Image';
@@ -111,7 +111,7 @@ const Video: VideoType = ({
     }, [selected]);
 
     const renderThumbnailFallback = useMemo(() => () => (
-        <Icon className="block h-20 w-32 bg-[var(--overlay-color)] p-4 text-fg opacity-25" name="symbol" />
+        <Film className="block h-20 w-32 bg-[var(--overlay-color)] p-4 text-fg opacity-25" />
     ), []);
 
     return (
@@ -184,7 +184,7 @@ const Video: VideoType = ({
                                 {
                                     watched ?
                                         <div className="flex h-full max-w-40 flex-none items-center rounded-[0.3rem] bg-[var(--overlay-color)] px-2 [&:not(:only-child)]:max-w-20">
-                                            <Icon className="mr-1 h-[1.15rem] w-[1.15rem] text-fg-muted" name="eye" />
+                                            <Eye className="mr-1 h-[1.15rem] w-[1.15rem] text-fg-muted" />
                                             <div className="overflow-hidden text-[0.8rem] font-extrabold uppercase whitespace-nowrap text-ellipsis text-fg-muted">{t('CTX_WATCHED')}</div>
                                         </div>
                                         :

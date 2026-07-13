@@ -7,7 +7,7 @@
  */
 
 import React, { memo, useEffect, useMemo, useRef } from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { VolumeX, Volume, Volume1, Volume2 } from 'lucide-react';
 import { useBinaryState } from 'rillio/common';
 import VolumeSlider from '../ControlBar/VolumeSlider';
 
@@ -22,13 +22,14 @@ const VolumeChangeIndicator = memo(function VolumeChangeIndicator({ muted, volum
     const prevVolume = useRef(volume);
 
     const iconName = useMemo(() => {
-        return (typeof muted === 'boolean' && muted) ? 'volume-mute' :
-            volume === null || isNaN(volume) ? 'volume-off' :
-                volume === 0 ? 'volume-mute' :
-                    volume < 30 ? 'volume-low' :
-                        volume < 70 ? 'volume-medium' :
-                            'volume-high';
+        return (typeof muted === 'boolean' && muted) ? VolumeX :
+            volume === null || isNaN(volume) ? VolumeX :
+                volume === 0 ? VolumeX :
+                    volume < 30 ? Volume :
+                        volume < 70 ? Volume1 :
+                            Volume2;
     }, [muted, volume]);
+    const VolumeIcon = iconName;
 
     useEffect(() => {
         if (prevVolume.current !== volume) {
@@ -51,7 +52,7 @@ const VolumeChangeIndicator = memo(function VolumeChangeIndicator({ muted, volum
             {
                 volumeIndicatorOpen ?
                     <div className={'absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 flex-col items-center justify-center gap-4 rounded-card bg-(--modal-background-color) px-10 py-8 shadow-(--outer-glow) max-sm:px-6 max-sm:py-4'}>
-                        <Icon name={iconName} className={'size-[6.5rem] text-fg max-sm:size-16'} />
+                        <VolumeIcon className={'size-[6.5rem] text-fg max-sm:size-16'} />
                         <VolumeSlider volume={volume} className={'mx-4 max-h-4 w-[6.5rem] [--thumb-size:1rem] [--track-size:0.35rem] max-sm:w-16'} />
                     </div>
                     :

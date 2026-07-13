@@ -13,7 +13,7 @@
 import React, { forwardRef, type ComponentPropsWithoutRef, type ElementRef } from 'react';
 import { Dialog as SheetPrimitive } from 'radix-ui';
 import { cva, type VariantProps } from 'class-variance-authority';
-import Icon from '@stremio/stremio-icons/react';
+import { X } from 'lucide-react';
 import { cn } from './cn';
 
 export const Sheet = SheetPrimitive.Root;
@@ -73,7 +73,7 @@ export const SheetContent = forwardRef<ElementRef<typeof SheetPrimitive.Content>
                             className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-full text-fg-muted opacity-70 outline-none transition hover:bg-surface-hover hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-highlight"
                             aria-label="Close"
                         >
-                            <Icon name="close" className="size-4" />
+                            <X className="size-4" />
                         </SheetPrimitive.Close>
                     ) : null}
                 </SheetPrimitive.Content>

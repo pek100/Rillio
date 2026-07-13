@@ -12,7 +12,7 @@
  */
 
 import React from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { Play } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Button } from 'rillio/components/ui/button';
 import { cn } from 'rillio/components/ui/cn';
@@ -117,7 +117,7 @@ const HeroCarousel = ({ className, items }: Props) => {
                                 href={watchHref}
                                 title={t('WATCH_NOW')}
                             >
-                                <Icon className="h-[1.1rem] w-[1.1rem]" name={'play'} />
+                                <Play className="h-[1.1rem] w-[1.1rem]" />
                                 <div className="whitespace-nowrap">{t('WATCH_NOW')}</div>
                             </Button>
                             :

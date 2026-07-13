@@ -8,7 +8,7 @@
 
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Play } from 'lucide-react';
 import { Button } from 'rillio/components/ui/button';
 
 type Props = {
@@ -38,9 +38,8 @@ const Details = ({ selected, items }: Props) => {
                         <div className={'block flex-none text-fg-muted'}>
                             S{season}E{episode}
                         </div>
-                        <Icon
+                        <Play
                             className={'h-8 w-8 flex-none rounded-full p-2 text-fg transition-[background-color,color] duration-150 ease-smooth group-hover:bg-accent group-hover:text-bg group-active:bg-accent group-active:text-bg'}
-                            name={'play'}
                         />
                     </Button>
                 ))

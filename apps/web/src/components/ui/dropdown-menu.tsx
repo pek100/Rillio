@@ -3,14 +3,14 @@
 /**
  * DropdownMenu (foundation kit) - Radix DropdownMenu adapted to our flat, borderless
  * look: divide-free action list, neutral (accent = surface-hover) item hover, brand
- * accent dot / checkmark indicators, stremio-icons for chevrons and checks. Portals
+ * accent dot / checkmark indicators, lucide-react for chevrons and checks. Portals
  * to body with collision handling, so every hand-rolled getBoundingClientRect flip
  * retires. Use for action lists; use Popover for arbitrary anchored content.
  */
 
 import React, { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type HTMLAttributes } from 'react';
 import { DropdownMenu as DropdownMenuPrimitive } from 'radix-ui';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronRight, Check } from 'lucide-react';
 import { cn } from './cn';
 
 export const DropdownMenu = DropdownMenuPrimitive.Root;
@@ -39,7 +39,7 @@ export const DropdownMenuSubTrigger = forwardRef<
             {...props}
         >
             {children}
-            <Icon name="chevron-forward" className="ml-auto size-4" />
+            <ChevronRight className="ml-auto size-4" />
         </DropdownMenuPrimitive.SubTrigger>
     );
 });
@@ -87,7 +87,7 @@ export const DropdownMenuCheckboxItem = forwardRef<
         >
             <span className="absolute left-2 flex size-4 items-center justify-center">
                 <DropdownMenuPrimitive.ItemIndicator>
-                    <Icon name="checkmark" className="size-4 text-primary" />
+                    <Check className="size-4 text-primary" />
                 </DropdownMenuPrimitive.ItemIndicator>
             </span>
             {children}

@@ -1,6 +1,6 @@
 import React, { forwardRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Link } from 'lucide-react';
 import { useToast } from 'rillio/common';
 import { Button } from 'rillio/components/ui/button';
 import { Section, Option, SettingsSelect, SettingsSwitch } from '../components';
@@ -55,7 +55,7 @@ const Streaming = forwardRef<HTMLDivElement, Props>(({ profile, streamingServer 
                                 onClick={onCopyRemoteUrl}
                                 className="size-10 flex-none rounded-full bg-surface-hover p-0 text-fg opacity-100 hover:bg-surface-hover hover:brightness-110 active:scale-95"
                             >
-                                <Icon className="size-4 text-fg" name={'link'} />
+                                <Link className="size-4 text-fg" />
                             </Button>
                         </div>
                     </Option>

@@ -10,7 +10,7 @@
 
 import React, { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type HTMLAttributes } from 'react';
 import { ContextMenu as ContextMenuPrimitive } from 'radix-ui';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronRight, Check } from 'lucide-react';
 import { cn } from './cn';
 
 export const ContextMenu = ContextMenuPrimitive.Root;
@@ -39,7 +39,7 @@ export const ContextMenuSubTrigger = forwardRef<
             {...props}
         >
             {children}
-            <Icon name="chevron-forward" className="ml-auto size-4" />
+            <ChevronRight className="ml-auto size-4" />
         </ContextMenuPrimitive.SubTrigger>
     );
 });
@@ -77,7 +77,7 @@ export const ContextMenuCheckboxItem = forwardRef<
         <ContextMenuPrimitive.CheckboxItem ref={ref} className={cn(itemClasses, 'pl-8', className)} checked={checked} {...props}>
             <span className="absolute left-2 flex size-4 items-center justify-center">
                 <ContextMenuPrimitive.ItemIndicator>
-                    <Icon name="checkmark" className="size-4 text-primary" />
+                    <Check className="size-4 text-primary" />
                 </ContextMenuPrimitive.ItemIndicator>
             </span>
             {children}

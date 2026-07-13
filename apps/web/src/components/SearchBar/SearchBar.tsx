@@ -9,7 +9,7 @@
  */
 
 import React, { forwardRef, type ChangeEvent } from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { Search } from 'lucide-react';
 import { cn } from 'rillio/components/ui/cn';
 import { Input } from 'rillio/components/ui/input';
 
@@ -28,7 +28,7 @@ type PlaceholderProps = {
 const SearchBarPlaceholder = ({ className, title }: PlaceholderProps) => (
     <div className={cn('flex h-14 items-center rounded-full bg-surface px-4 select-none', className)}>
         <div className="flex-1 truncate text-[1.1rem] text-fg-subtle">{title}</div>
-        <Icon className="ml-4 size-6 shrink-0 text-surface" name="search" />
+        <Search className="ml-4 size-6 shrink-0 text-surface" />
     </div>
 );
 
@@ -49,7 +49,7 @@ const SearchBar = forwardRef<HTMLInputElement, Props>(function SearchBar({ class
                 onChange={onChange}
                 className="h-auto flex-1 rounded-none bg-transparent p-0 text-base text-fg focus-visible:outline-none"
             />
-            <Icon className="ml-4 size-6 shrink-0 text-fg-muted opacity-60" name="search" />
+            <Search className="ml-4 size-6 shrink-0 text-fg-muted opacity-60" />
         </label>
     );
 }) as React.ForwardRefExoticComponent<Props & React.RefAttributes<HTMLInputElement>> & { Placeholder: typeof SearchBarPlaceholder };

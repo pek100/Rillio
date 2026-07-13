@@ -16,7 +16,11 @@
 
 import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import {
+    X, Check, Bookmark, BookmarkCheck, Eye, EyeOff, Play, Plus, MoreVertical,
+    Film, Tv, RadioTower, MonitorPlay, BookOpen, Gamepad2, Music, VenetianMask, Radio, Podcast,
+    type LucideIcon,
+} from 'lucide-react';
 import { useNavigateWithOrigin } from 'rillio-router';
 import { cn } from 'rillio/components/ui/cn';
 import { Button, IconButton } from 'rillio/components/ui/button';
@@ -37,6 +41,20 @@ const REVEAL_OPACITY =
     'group-hover:opacity-100 group-focus-within:opacity-100 group-[.active]:opacity-100 group-[.selected]:opacity-100';
 const REVEAL_FLEX =
     'group-hover:flex group-focus-within:flex group-[.active]:flex group-[.selected]:flex';
+
+// Content-type poster fallback glyphs, keyed by the ICON_FOR_TYPE map values.
+const TYPE_ICON: Record<string, LucideIcon> = {
+    movies: Film,
+    series: Tv,
+    channels: RadioTower,
+    tv: MonitorPlay,
+    ic_book: BookOpen,
+    ic_games: Gamepad2,
+    ic_music: Music,
+    ic_adult: VenetianMask,
+    ic_radio: Radio,
+    ic_podcast: Podcast,
+};
 
 type Option = { value: string; label: string };
 
@@ -154,12 +172,12 @@ const MetaItem = React.memo(({
         }
     }, [dataset, optionOnSelect]);
 
-    const renderPosterFallback = useCallback(() => (
-        <Icon
-            className="w-4/5 h-1/2 flex-none text-fg opacity-20"
-            name={ICON_FOR_TYPE.has(type) ? ICON_FOR_TYPE.get(type) : ICON_FOR_TYPE.get('other')}
-        />
-    ), [type]);
+    const renderPosterFallback = useCallback(() => {
+        const TypeIcon = TYPE_ICON[(ICON_FOR_TYPE.has(type) ? ICON_FOR_TYPE.get(type) : ICON_FOR_TYPE.get('other')) as string] ?? Film;
+        return (
+            <TypeIcon className="w-4/5 h-1/2 flex-none text-fg opacity-20" />
+        );
+    }, [type]);
 
     const posterPad = posterShape === 'square' ?
         'pt-[100%]'
@@ -200,7 +218,7 @@ const MetaItem = React.memo(({
                             className={cn('absolute left-2 top-2 z-[-2] flex size-6 items-center justify-center rounded-full opacity-0 transition-opacity duration-150', REVEAL_OPACITY)}
                             onClick={onDismissLayerClick}
                         >
-                            <Icon className="relative z-[1] size-5 text-fg opacity-80" name="close" />
+                            <X className="relative z-[1] size-5 text-fg opacity-80" />
                             <div className="absolute inset-0 z-0 rounded-full bg-background opacity-60" />
                         </div>
                         :
@@ -209,7 +227,7 @@ const MetaItem = React.memo(({
                 {
                     isWatched ?
                         <div className="absolute left-0 top-0 z-[1] m-2 flex size-6 items-center justify-center rounded-full border-2 border-line bg-background shadow-[var(--outer-glow)]">
-                            <Icon className="size-3 text-fg" name="checkmark" />
+                            <Check className="size-3 text-fg" />
                         </div>
                         :
                         null
@@ -222,14 +240,14 @@ const MetaItem = React.memo(({
                                 onClick={onToggleInLibraryClick}
                                 className="size-7 bg-surface opacity-100 shadow-[var(--outer-glow)] transition-transform duration-150 hover:scale-110 hover:bg-surface-hover hover:opacity-100 active:scale-95 [&:hover_svg]:text-primary [&_svg]:size-[0.9rem] [&_svg]:text-fg-muted"
                             >
-                                <Icon name={libraryState.inLibrary ? 'remove-from-library' : 'add-to-library'} />
+                                {libraryState.inLibrary ? <BookmarkCheck /> : <Bookmark />}
                             </IconButton>
                             <IconButton
                                 title={isWatched ? t('CTX_MARK_UNWATCHED') : t('CTX_MARK_WATCHED')}
                                 onClick={onToggleWatchedClick}
                                 className="size-7 bg-surface opacity-100 shadow-[var(--outer-glow)] transition-transform duration-150 hover:scale-110 hover:bg-surface-hover hover:opacity-100 active:scale-95 [&:hover_svg]:text-primary [&_svg]:size-[0.9rem] [&_svg]:text-fg-muted"
                             >
-                                <Icon name={isWatched ? 'eye-off' : 'eye'} />
+                                {isWatched ? <EyeOff /> : <Eye />}
                             </IconButton>
                         </div>
                         :
@@ -254,7 +272,7 @@ const MetaItem = React.memo(({
                             className="absolute left-1/2 top-1/2 z-[-2] -ml-8 -mt-8 flex size-16 items-center justify-center transition-transform duration-150 hover:scale-110"
                             onClick={onPlayLayerClick}
                         >
-                            <Icon className="relative z-[2] size-9 text-fg" name="play" />
+                            <Play className="relative z-[2] size-9 text-fg" />
                             <div className={cn(
                                 'absolute inset-0 z-[1] rounded-full text-fg shadow-[0_0_0_0.15rem_currentColor_inset] transition-colors duration-150',
                                 'group-hover:text-transparent group-focus-within:text-transparent group-[.active]:text-transparent group-[.selected]:text-transparent',
@@ -282,7 +300,7 @@ const MetaItem = React.memo(({
                             <div className="absolute right-2 top-2 flex h-5 w-9 items-center justify-center rounded-[0.25rem] bg-fg opacity-40" />
                             <div className="absolute right-3 top-3 flex h-5 w-9 items-center justify-center rounded-[0.25rem] bg-fg opacity-60" />
                             <div className="absolute right-4 top-4 flex h-5 w-9 items-center justify-center gap-0.5 rounded-[0.25rem] bg-fg">
-                                <Icon className="size-[0.8rem] text-primary" name="add" />
+                                <Plus className="size-[0.8rem] text-primary" />
                                 <div className="text-[0.8rem] font-semibold text-primary">{newVideos}</div>
                             </div>
                         </div>
@@ -308,7 +326,7 @@ const MetaItem = React.memo(({
                                             onClick={menuTriggerOnClick}
                                             className={cn('z-[1] h-16 w-6 flex-none translate-x-4 bg-transparent py-4 opacity-0 outline-none transition-opacity duration-150', REVEAL_OPACITY)}
                                         >
-                                            <Icon className="block h-full w-full text-fg opacity-60" name="more-vertical" />
+                                            <MoreVertical className="block h-full w-full text-fg opacity-60" />
                                         </div>
                                     </DropdownMenuTrigger>
                                     <DropdownMenuContent align="end" side="bottom" className="min-w-36 max-w-56">

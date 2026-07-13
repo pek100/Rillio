@@ -2,6 +2,7 @@
 
 import React, { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
+import { ThumbsUp, Heart } from 'lucide-react';
 import useRating from './useRating';
 import { ActionsGroup } from 'rillio/components';
 
@@ -19,13 +20,15 @@ const Ratings = ({ ratingInfo, className, size = 'sm' }: Props) => {
 
     const items = useMemo(() => [
         {
-            icon: liked ? 'thumbs-up' : 'thumbs-up-outline',
+            icon: ThumbsUp,
+            iconClassName: liked ? 'fill-current' : undefined,
             label: liked ? t('RATING_UNLIKE') : t('RATING_LIKE'),
             disabled,
             onClick: onLiked,
         },
         {
-            icon: loved ? 'heart' : 'heart-outline',
+            icon: Heart,
+            iconClassName: loved ? 'fill-current' : undefined,
             label: loved ? t('RATING_UNLOVE') : t('RATING_LOVE'),
             disabled,
             onClick: onLoved,

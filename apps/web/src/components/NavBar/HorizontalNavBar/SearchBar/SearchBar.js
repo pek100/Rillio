@@ -7,7 +7,7 @@ const PropTypes = require('prop-types');
 const classnames = require('classnames');
 const debounce = require('lodash.debounce');
 const { useTranslation } = require('react-i18next');
-const { default: Icon } = require('@stremio/stremio-icons/react');
+const { X, Search } = require('lucide-react');
 const { default: useRouteFocused } = require('rillio/common/useRouteFocused');
 const Button = require('rillio/components/Button').default;
 const TextInput = require('rillio/components/TextInput').default;
@@ -136,11 +136,11 @@ const SearchBar = React.memo(({ className, query, active }) => {
             {
                 currentQuery.length > 0 ?
                     <Button className={styles['submit-button-container']} onClick={queryInputClear}>
-                        <Icon className={styles['icon']} name={'close'} />
+                        <X className={styles['icon']} />
                     </Button>
                     :
                     <Button className={styles['submit-button-container']}>
-                        <Icon className={styles['icon']} name={'search'} />
+                        <Search className={styles['icon']} />
                     </Button>
             }
             {
@@ -207,7 +207,7 @@ const SearchBarFallback = ({ className }) => {
                 <div className={styles['placeholder-label']}>{ t('SEARCH_OR_PASTE_LINK') }</div>
             </div>
             <Button className={styles['submit-button-container']} tabIndex={-1}>
-                <Icon className={styles['icon']} name={'search'} />
+                <Search className={styles['icon']} />
             </Button>
         </label>
     );

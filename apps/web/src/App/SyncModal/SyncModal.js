@@ -9,7 +9,8 @@
 //     library + add-ons to the Stremio account (common/stremioUpload talks to the
 //     Stremio API directly with a temporary session; local data stays untouched).
 const React = require('react');
-const { default: Icon } = require('@stremio/stremio-icons/react');
+const { X, Check, Link } = require('lucide-react');
+const { Facebook } = require('rillio/components/ui/brand-icons');
 const { useCore } = require('rillio/core');
 const { Button } = require('rillio/components');
 const { cn } = require('rillio/common/cn');
@@ -324,7 +325,7 @@ const SyncModal = () => {
                         {tabBtn('upload', 'Upload')}
                     </div>
                     <Button className="flex size-8 shrink-0 items-center justify-center rounded-full text-fg-muted transition hover:bg-white/10 hover:text-fg" title="Close" onClick={close}>
-                        <Icon className="size-4" name="close" />
+                        <X className="size-4" />
                     </Button>
                 </div>
 
@@ -347,7 +348,7 @@ const SyncModal = () => {
                             }
                             <input className={cn(FIELD, 'mb-2.5 font-mono text-xs text-fg-muted')} readOnly value={code} onFocus={(e) => e.target.select()} />
                             <Button className={PRIMARY} onClick={copyCode}>
-                                <Icon className="size-4" name={copied ? 'checkmark' : 'link'} />
+                                {copied ? <Check className="size-4" /> : <Link className="size-4" />}
                                 {copied ? 'Copied' : 'Copy code'}
                             </Button>
 
@@ -375,7 +376,7 @@ const SyncModal = () => {
 
                             <div className="flex flex-col gap-2.5">
                                 <Button className={cn(GHOST, busy && 'pointer-events-none opacity-50')} onClick={importWithFacebook}>
-                                    <Icon className="size-4" name="facebook" />
+                                    <Facebook className="size-4" />
                                     Continue with Facebook
                                 </Button>
                                 <Button className={cn(GHOST, busy && 'pointer-events-none opacity-50')} onClick={importWithApple}>
@@ -402,7 +403,7 @@ const SyncModal = () => {
 
                             <div className="flex flex-col gap-2.5">
                                 <Button className={cn(GHOST, uploadStage !== null && 'pointer-events-none opacity-50')} onClick={uploadWithFacebook}>
-                                    <Icon className="size-4" name="facebook" />
+                                    <Facebook className="size-4" />
                                     Continue with Facebook
                                 </Button>
                                 <Button className={cn(GHOST, uploadStage !== null && 'pointer-events-none opacity-50')} onClick={uploadWithApple}>

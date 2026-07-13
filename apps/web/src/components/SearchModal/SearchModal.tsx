@@ -20,7 +20,7 @@ import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useCloseModalRoute } from 'rillio-router';
-import Icon from '@stremio/stremio-icons/react';
+import { Search } from 'lucide-react';
 import { cn } from 'rillio/components/ui/cn';
 import { Command, CommandInput, CommandList, CommandGroup, CommandItem } from 'rillio/components/ui/command';
 
@@ -156,7 +156,7 @@ const SearchModal = () => {
                                 >
                                     {historyItems.slice(0, 8).map(({ query: itemQuery, deepLinks }: any, index: number) => (
                                         <CommandItem key={`history-${index}`} value={`history-${index}`} onSelect={() => goTo(deepLinks.search)} className={ITEM}>
-                                            <Icon className="size-4 shrink-0 text-fg-subtle" name="search" />
+                                            <Search className="size-4 shrink-0 text-fg-subtle" />
                                             <span className="truncate">{itemQuery}</span>
                                         </CommandItem>
                                     ))}
@@ -173,7 +173,7 @@ const SearchModal = () => {
                                 >
                                     {suggestions.map(({ query: itemQuery, deepLinks }: any, index: number) => (
                                         <CommandItem key={`suggestion-${index}`} value={`suggestion-${index}`} onSelect={() => goTo(deepLinks.search)} className={ITEM}>
-                                            <Icon className="size-4 shrink-0 text-fg-subtle" name="search" />
+                                            <Search className="size-4 shrink-0 text-fg-subtle" />
                                             <span className="truncate">{itemQuery}</span>
                                         </CommandItem>
                                     ))}

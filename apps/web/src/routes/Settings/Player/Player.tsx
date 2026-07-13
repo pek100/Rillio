@@ -1,4 +1,5 @@
 import React, { forwardRef } from 'react';
+import { Captions, Volume2, Keyboard, Play, Glasses } from 'lucide-react';
 import { usePlatform } from 'rillio/common';
 import { Category, Option, Section, SettingsSelect, SettingsSwitch } from '../components';
 import ColorInput from './ColorInput';
@@ -38,7 +39,7 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
             {/* Subtitles language deliberately lives on the movie page (the streams
                 language picker), not here, one language control drives stream
                 priority AND default subtitles. */}
-            <Category icon={'subtitles'} label={'SETTINGS_SECTION_SUBTITLES'}>
+            <Category icon={Captions} label={'SETTINGS_SECTION_SUBTITLES'}>
                 <Option label={'SETTINGS_SUBTITLES_SIZE'}>
                     <SettingsSelect
                         {...subtitlesSizeSelect}
@@ -60,7 +61,7 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
                     />
                 </Option>
             </Category>
-            <Category icon={'volume-medium'} label={'SETTINGS_SECTION_AUDIO'}>
+            <Category icon={Volume2} label={'SETTINGS_SECTION_AUDIO'}>
                 <Option label={'SETTINGS_DEFAULT_AUDIO_TRACK'}>
                     <SettingsSelect
                         {...audioLanguageSelect}
@@ -72,7 +73,7 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
                     />
                 </Option>
             </Category>
-            <Category icon={'remote'} label={'SETTINGS_SECTION_CONTROLS'}>
+            <Category icon={Keyboard} label={'SETTINGS_SECTION_CONTROLS'}>
                 <Option label={'SETTINGS_SEEK_KEY'}>
                     <SettingsSelect
                         {...seekTimeDurationSelect}
@@ -90,7 +91,7 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
                     />
                 </Option>
             </Category>
-            <Category icon={'play'} label={'SETTINGS_SECTION_AUTO_PLAY'}>
+            <Category icon={Play} label={'SETTINGS_SECTION_AUTO_PLAY'}>
                 <Option label={'AUTO_PLAY'}>
                     <SettingsSwitch
                         {...bingeWatchingToggle}
@@ -107,7 +108,7 @@ const Player = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
                     />
                 </Option>
             </Category>
-            <Category icon={'glasses'} label={'SETTINGS_SECTION_ADVANCED'}>
+            <Category icon={Glasses} label={'SETTINGS_SECTION_ADVANCED'}>
                 <Option label={'SETTINGS_PLAY_IN_EXTERNAL_PLAYER'}>
                     <SettingsSelect
                         {...playInExternalPlayerSelect}

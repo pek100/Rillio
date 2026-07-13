@@ -15,7 +15,7 @@
  */
 
 import React, { forwardRef, memo, useCallback, useMemo, useRef, useState } from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronRight } from 'lucide-react';
 import { useCore } from 'rillio/core';
 import { CONSTANTS } from 'rillio/common';
 import { MetaPreview, Video } from 'rillio/components';
@@ -120,7 +120,7 @@ const SideDrawer = memo(forwardRef<HTMLDivElement, Props>(function SideDrawer({ 
                     className={'absolute right-[1.3rem] top-[calc(1.3rem+var(--safe-area-inset-top))] z-[2] hidden cursor-pointer rounded-card p-2 hover:bg-(--overlay-color) max-sm:block'}
                     onClick={onClose}
                 >
-                    <Icon className={'size-8 text-fg opacity-60 transition-opacity hover:opacity-100'} name={'chevron-forward'} />
+                    <ChevronRight className={'size-8 text-fg opacity-60 transition-opacity hover:opacity-100'} />
                 </div>
                 <div className={'min-h-0 overflow-y-auto p-4'}>
                     <MetaPreview

@@ -8,8 +8,10 @@ const { useModalsContainer } = require('rillio/router/ModalsContainerContext');
 const Modal = require('rillio/router/Modal');
 const { default: useRouteFocused } = require('rillio/common/useRouteFocused');
 const { default: Button } = require('rillio/components/Button');
-const { default: Icon } = require('@stremio/stremio-icons/react');
+const { X, Check, Plus } = require('lucide-react');
 const styles = require('./styles');
+
+const ICON_MAP = { close: X, checkmark: Check, add: Plus };
 
 const ModalDialog = ({ className, title, buttons, children, dataset, onCloseRequest, background, ...props }) => {
     const { t } = useTranslation();
@@ -64,7 +66,7 @@ const ModalDialog = ({ className, title, buttons, children, dataset, onCloseRequ
             <div className={styles['modal-dialog-container']} onMouseDown={onModalDialogContainerMouseDown}>
                 <div className={styles['modal-dialog-background']} style={{backgroundImage: `url('${background}')`}} />
                 <Button className={styles['close-button-container']} title={t('BUTTON_CLOSE')} onClick={closeButtonOnClick}>
-                    <Icon className={styles['icon']} name={'close'} />
+                    <X className={styles['icon']} />
                 </Button>
                 <div className={styles['modal-dialog-content']}>
                     {
@@ -81,12 +83,7 @@ const ModalDialog = ({ className, title, buttons, children, dataset, onCloseRequ
                             <div className={styles['buttons-container']}>
                                 {buttons.map(({ className, label, icon, props }, index) => (
                                     <Button title={label} {...props} key={index} className={classnames(className, styles['action-button'])}>
-                                        {
-                                            typeof icon === 'string' && icon.length > 0 ?
-                                                <Icon className={styles['icon']} name={icon} />
-                                                :
-                                                null
-                                        }
+                                        {icon && ICON_MAP[icon] ? React.createElement(ICON_MAP[icon], { className: styles['icon'] }) : null}
                                         {
                                             typeof label === 'string' && label.length > 0 ?
                                                 <div className={styles['label']}>{label}</div>

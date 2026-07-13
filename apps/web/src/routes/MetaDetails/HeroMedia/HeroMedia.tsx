@@ -15,7 +15,7 @@
  */
 
 import React from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from 'rillio/components/ui/cn';
 import { IconButton } from 'rillio/components/ui/button';
 
@@ -106,14 +106,14 @@ const HeroMedia = ({ className, ytIds, background, poster, name }: Props) => {
                             onClick={() => go(-1)}
                             className="absolute left-2.5 top-1/2 z-[2] size-9 -translate-y-1/2 bg-[color-mix(in_srgb,var(--color-bg)_55%,transparent)] opacity-0 backdrop-blur-[4px] transition group-hover:opacity-100 hover:bg-[color-mix(in_srgb,var(--color-bg)_75%,transparent)]"
                         >
-                            <Icon className="size-4 text-fg" name={'chevron-back'} />
+                            <ChevronLeft className="size-4 text-fg" />
                         </IconButton>
                         <IconButton
                             aria-label={'Next'}
                             onClick={() => go(1)}
                             className="absolute right-2.5 top-1/2 z-[2] size-9 -translate-y-1/2 bg-[color-mix(in_srgb,var(--color-bg)_55%,transparent)] opacity-0 backdrop-blur-[4px] transition group-hover:opacity-100 hover:bg-[color-mix(in_srgb,var(--color-bg)_75%,transparent)]"
                         >
-                            <Icon className="size-4 text-fg" name={'chevron-forward'} />
+                            <ChevronRight className="size-4 text-fg" />
                         </IconButton>
                         <div className="absolute bottom-2.5 left-1/2 z-[2] flex -translate-x-1/2 gap-1.5 rounded-full bg-[color-mix(in_srgb,var(--color-bg)_45%,transparent)] px-2.5 py-1.5 backdrop-blur-[4px]">
                             {slides.map((slide, index) => (

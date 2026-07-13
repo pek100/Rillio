@@ -9,7 +9,7 @@
 
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { X, Play, Film, Tv, RadioTower, MonitorPlay, BookOpen, Gamepad2, Music, VenetianMask, Radio, Podcast, type LucideIcon } from 'lucide-react';
 import { CONSTANTS, useProfile } from 'rillio/common';
 import { Image } from 'rillio/components';
 import { Button } from 'rillio/components/ui';
@@ -21,6 +21,19 @@ type Props = {
     nextVideo?: any;
     onDismiss?: () => void;
     onNextVideoRequested?: () => void;
+};
+
+const TYPE_ICON: Record<string, LucideIcon> = {
+    movies: Film,
+    series: Tv,
+    channels: RadioTower,
+    tv: MonitorPlay,
+    ic_book: BookOpen,
+    ic_games: Gamepad2,
+    ic_music: Music,
+    ic_adult: VenetianMask,
+    ic_radio: Radio,
+    ic_podcast: Podcast,
 };
 
 const NextVideoPopup = ({ className, metaItem, nextVideo, onDismiss, onNextVideoRequested }: Props) => {
@@ -42,13 +55,13 @@ const NextVideoPopup = ({ className, metaItem, nextVideo, onDismiss, onNextVideo
         setAnimationEnded(true);
     }, []);
     const renderPosterFallback = useCallback(() => {
-        return metaItem !== null && typeof metaItem.type === 'string' ?
-            <Icon
-                className={'h-1/2 w-4/5 flex-none text-fg'}
-                name={CONSTANTS.ICON_FOR_TYPE.has(metaItem.type) ? CONSTANTS.ICON_FOR_TYPE.get(metaItem.type) : CONSTANTS.ICON_FOR_TYPE.get('other')}
-            />
-            :
-            null;
+        if (metaItem === null || typeof metaItem.type !== 'string') {
+            return null;
+        }
+        const TypeIcon = TYPE_ICON[CONSTANTS.ICON_FOR_TYPE.get(metaItem.type) as string] ?? Film;
+        return (
+            <TypeIcon className={'h-1/2 w-4/5 flex-none text-fg'} />
+        );
     }, [metaItem]);
     const onDismissButtonClick = useCallback(() => {
         if (typeof onDismiss === 'function') {
@@ -104,7 +117,7 @@ const NextVideoPopup = ({ className, metaItem, nextVideo, onDismiss, onNextVideo
                         onClick={onDismissButtonClick}
                         className={'flex h-14 flex-[0_1_50%] flex-row items-center justify-center gap-4 rounded-full px-4 opacity-60 hover:bg-(--overlay-color) hover:opacity-100'}
                     >
-                        <Icon className={'size-[1.4rem] flex-none text-fg'} name={'close'} />
+                        <X className={'size-[1.4rem] flex-none text-fg'} />
                         <div className={'max-h-[2.4em] flex-none text-[1.1rem] font-medium text-fg'}>{t('PLAYER_NEXT_VIDEO_BUTTON_DISMISS')}</div>
                     </Button>
                     <Button
@@ -112,7 +125,7 @@ const NextVideoPopup = ({ className, metaItem, nextVideo, onDismiss, onNextVideo
                         onClick={onWatchNowButtonClick}
                         className={'flex h-14 flex-[0_1_50%] flex-row items-center justify-center gap-4 rounded-full bg-accent px-4 hover:brightness-110 active:scale-[0.97]'}
                     >
-                        <Icon className={'size-[1.4rem] flex-none text-fg'} name={'play'} />
+                        <Play className={'size-[1.4rem] flex-none text-fg'} />
                         <div className={'max-h-[2.4em] flex-none text-[1.1rem] font-medium text-fg'}>{t('PLAYER_NEXT_VIDEO_BUTTON_WATCH')}</div>
                     </Button>
                 </div>

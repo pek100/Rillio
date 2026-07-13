@@ -14,7 +14,7 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { CircleUser, Search, Puzzle, Download, Settings } from 'lucide-react';
 import LogoMark from 'rillio/common/LogoMark/LogoMark';
 import useActiveDownloads from 'rillio/common/useActiveDownloads';
 import { cn } from 'rillio/components/ui/cn';
@@ -63,7 +63,7 @@ const TopNav = ({ className, route }: Props) => {
             title={t('Account')}
             className={cn(ICON_BUTTON, active ? 'bg-surface-hover text-fg' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
         >
-            <Icon className="size-4" name="person-outline" />
+            <CircleUser className="size-4" />
         </Button>
     ), [t]);
 
@@ -104,7 +104,7 @@ const TopNav = ({ className, route }: Props) => {
                     tabIndex={-1}
                     className={cn(ICON_BUTTON_BARE, 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
                 >
-                    <Icon className="size-4" name="search" />
+                    <Search className="size-4" />
                 </Link>
                 <Link
                     to="/addons"
@@ -112,7 +112,7 @@ const TopNav = ({ className, route }: Props) => {
                     tabIndex={-1}
                     className={cn(ICON_BUTTON_BARE, route === 'addons' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
                 >
-                    <Icon className="size-4" name="addons-outline" />
+                    <Puzzle className="size-4" />
                 </Link>
                 <Link
                     to="/cached"
@@ -123,7 +123,7 @@ const TopNav = ({ className, route }: Props) => {
                     {/* The dot anchors to the glyph and is intentionally NOT inside
                         any overflow-hidden box, so it is never clipped. */}
                     <span className="relative overflow-visible">
-                        <Icon className="size-4" name="download" />
+                        <Download className="size-4" />
                         {
                             downloading ?
                                 <span className="absolute -right-1 -top-1 size-2 animate-pulse rounded-full bg-accent" />
@@ -138,7 +138,7 @@ const TopNav = ({ className, route }: Props) => {
                     tabIndex={-1}
                     className={cn(ICON_BUTTON_BARE, route === 'settings' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
                 >
-                    <Icon className="size-4" name="settings" />
+                    <Settings className="size-4" />
                 </Link>
                 <NavMenu renderLabel={renderAccountLabel} />
             </div>

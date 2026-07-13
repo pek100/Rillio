@@ -15,7 +15,7 @@
 
 import React, { forwardRef, useMemo, useState, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react';
 import { Select as SelectPrimitive } from 'radix-ui';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from './cn';
 import { Popover, PopoverContent, PopoverTrigger } from './popover';
 
@@ -40,7 +40,7 @@ export const SelectTrigger = forwardRef<
         >
             {children}
             <SelectPrimitive.Icon asChild>
-                <Icon name="chevron-down" className="size-4 opacity-60" />
+                <ChevronDown className="size-4 opacity-60" />
             </SelectPrimitive.Icon>
         </SelectPrimitive.Trigger>
     );
@@ -64,7 +64,7 @@ export const SelectContent = forwardRef<
                 {...props}
             >
                 <SelectPrimitive.ScrollUpButton className="flex h-6 items-center justify-center">
-                    <Icon name="chevron-up" className="size-4" />
+                    <ChevronUp className="size-4" />
                 </SelectPrimitive.ScrollUpButton>
                 <SelectPrimitive.Viewport
                     className={cn('p-1', position === 'popper' && 'h-[var(--radix-select-trigger-height)] w-full min-w-[var(--radix-select-trigger-width)]')}
@@ -72,7 +72,7 @@ export const SelectContent = forwardRef<
                     {children}
                 </SelectPrimitive.Viewport>
                 <SelectPrimitive.ScrollDownButton className="flex h-6 items-center justify-center">
-                    <Icon name="chevron-down" className="size-4" />
+                    <ChevronDown className="size-4" />
                 </SelectPrimitive.ScrollDownButton>
             </SelectPrimitive.Content>
         </SelectPrimitive.Portal>
@@ -175,7 +175,7 @@ export function SelectCascade({ options, value, onValueChange, placeholder, clas
                 )}
             >
                 <span className={cn(selectedLabel == null && 'text-fg-subtle')}>{selectedLabel ?? placeholder}</span>
-                <Icon name="chevron-down" className="size-4 shrink-0 opacity-60" />
+                <ChevronDown className="size-4 shrink-0 opacity-60" />
             </PopoverTrigger>
             <PopoverContent align="start" className={cn('w-56 p-1', contentClassName)}>
                 {stack.length > 0 ? (
@@ -184,7 +184,7 @@ export function SelectCascade({ options, value, onValueChange, placeholder, clas
                         className="flex w-full items-center gap-2 rounded-[calc(var(--radius-card)-0.25rem)] px-2 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-hover"
                         onClick={() => setStack((s) => s.slice(0, -1))}
                     >
-                        <Icon name="chevron-back" className="size-4" />
+                        <ChevronLeft className="size-4" />
                         {current.title}
                     </button>
                 ) : null}
@@ -207,7 +207,7 @@ export function SelectCascade({ options, value, onValueChange, placeholder, clas
                         }}
                     >
                         <span>{opt.label}</span>
-                        {opt.options && opt.options.length > 0 ? <Icon name="chevron-forward" className="size-4 opacity-60" /> : null}
+                        {opt.options && opt.options.length > 0 ? <ChevronRight className="size-4 opacity-60" /> : null}
                     </button>
                 ))}
             </PopoverContent>

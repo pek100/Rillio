@@ -13,7 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { ContextMenu } from 'rillio/components';
 import { Button } from 'rillio/components/ui';
 import { languages, useToast } from 'rillio/common';
-import Icon from '@stremio/stremio-icons/react';
+import { Download, Link, Share2 } from 'lucide-react';
 import { cn } from 'rillio/components/ui';
 
 type SubtitlesTrack = {
@@ -106,7 +106,7 @@ const SubtitleVariant = ({ track, selected, onSelect }: Props) => {
                             target={'_blank'}
                             download={downloadFileName}
                         >
-                            <Icon className={'size-[1.4rem] flex-none text-fg-muted'} name={'download'} />
+                            <Download className={'size-[1.4rem] flex-none text-fg-muted'} />
                             <div className={'min-w-0 flex-1 truncate text-left font-normal text-fg'}>
                                 {t('CTX_DOWNLOAD_SUBTITLE')}
                             </div>
@@ -121,7 +121,7 @@ const SubtitleVariant = ({ track, selected, onSelect }: Props) => {
                             title={t('CTX_COPY_SUBTITLE_URL')}
                             onClick={onCopyUrlClick}
                         >
-                            <Icon className={'size-[1.4rem] flex-none text-fg-muted'} name={'link'} />
+                            <Link className={'size-[1.4rem] flex-none text-fg-muted'} />
                             <div className={'min-w-0 flex-1 truncate text-left font-normal text-fg'}>
                                 {t('CTX_COPY_SUBTITLE_URL')}
                             </div>
@@ -136,7 +136,7 @@ const SubtitleVariant = ({ track, selected, onSelect }: Props) => {
                             title={t('CTX_COPY_SUBTITLE_ID')}
                             onClick={onCopyIdClick}
                         >
-                            <Icon className={'size-[1.4rem] flex-none text-fg-muted'} name={'share'} />
+                            <Share2 className={'size-[1.4rem] flex-none text-fg-muted'} />
                             <div className={'min-w-0 flex-1 truncate text-left font-normal text-fg'}>
                                 {t('CTX_COPY_SUBTITLE_ID')}
                             </div>

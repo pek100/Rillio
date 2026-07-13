@@ -9,7 +9,7 @@
 import React, { useCallback, useMemo } from 'react';
 import { useNavigate } from 'react-router';
 import { toPath } from 'rillio-router';
-import Icon from '@stremio/stremio-icons/react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Button } from 'rillio/components/ui/button';
 import useCalendarDate from '../useCalendarDate';
 
@@ -40,7 +40,7 @@ const Selector = ({ selected, selectable, profile }: Props) => {
     return (
         <div className={'relative flex flex-none items-center justify-center gap-4 px-4 max-[1300px]:justify-between'}>
             <Button variant={'ghost'} className={`${NAV_BUTTON} pl-2 pr-5`} onClick={onPrev}>
-                <Icon className={'h-4 w-4'} name={'chevron-back'} />
+                <ChevronLeft className={'h-4 w-4'} />
                 <div className={'overflow-hidden text-ellipsis whitespace-nowrap'}>
                     {toMonth(prev, 'short')}
                 </div>
@@ -57,7 +57,7 @@ const Selector = ({ selected, selectable, profile }: Props) => {
                 <div className={'overflow-hidden text-ellipsis whitespace-nowrap'}>
                     {toMonth(next, 'short')}
                 </div>
-                <Icon className={'h-4 w-4'} name={'chevron-forward'} />
+                <ChevronRight className={'h-4 w-4'} />
             </Button>
         </div>
     );

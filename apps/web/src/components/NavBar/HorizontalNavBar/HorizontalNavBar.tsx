@@ -14,7 +14,8 @@
 
 import React, { memo, useCallback } from 'react';
 import { useNavigate } from 'react-router';
-import Icon from '@stremio/stremio-icons/react';
+import { CircleUser, ChevronLeft } from 'lucide-react';
+import { Hdr } from 'rillio/components/ui/brand-icons';
 import Logo from 'rillio/common/Logo/Logo';
 import { cn } from 'rillio/components/ui/cn';
 import { Button } from 'rillio/components/ui/button';
@@ -64,7 +65,7 @@ const HorizontalNavBar = memo(({ className, route, query, title, backButton, sea
     // open-state `active` highlight.
     const renderNavMenuLabel = useCallback(({ active }: { active: boolean }) => (
         <Button variant="ghost" className={cn(NAV_BUTTON, active && 'bg-[var(--overlay-color)] text-fg')} tabIndex={-1}>
-            <Icon className="size-4" name="person-outline" />
+            <CircleUser className="size-4" />
         </Button>
     ), []);
 
@@ -87,7 +88,7 @@ const HorizontalNavBar = memo(({ className, route, query, title, backButton, sea
                         tabIndex={-1}
                         onClick={backButtonOnClick}
                     >
-                        <Icon className="size-4" name="chevron-back" />
+                        <ChevronLeft className="size-4" />
                     </Button>
                     :
                     <div className="flex flex-none items-center justify-center w-[var(--vertical-nav-bar-size)] h-[var(--horizontal-nav-bar-size)] max-sm:w-[var(--horizontal-nav-bar-size)]">
@@ -110,7 +111,7 @@ const HorizontalNavBar = memo(({ className, route, query, title, backButton, sea
                 {
                     hdrInfo && (hdrInfo.gamma === 'pq' || hdrInfo.gamma === 'hlg') ?
                         <div className="flex flex-none select-none items-center justify-center h-10 px-2" title={hdrInfo.gamma === 'pq' ? 'HDR10' : 'HLG'}>
-                            <Icon className="h-4 w-8 text-fg-muted" name="hdr" />
+                            <Hdr className="h-4 w-8 text-fg-muted" />
                         </div>
                         :
                         null

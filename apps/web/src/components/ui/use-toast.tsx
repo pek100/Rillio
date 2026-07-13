@@ -21,7 +21,7 @@
 
 import React, { createElement, type ReactNode } from 'react';
 import { toast as sonnerToast } from 'sonner';
-import Icon from '@stremio/stremio-icons/react';
+import { Check, X, Info, TriangleAlert, Download, type LucideIcon } from 'lucide-react';
 import { Toaster } from './sonner';
 
 const DEFAULT_TIMEOUT = 3000;
@@ -49,6 +49,14 @@ const DEFAULT_ICON: Record<ToastType, string> = {
     alert: 'warning',
 };
 
+const TOAST_ICON: Record<string, LucideIcon> = {
+    checkmark: Check,
+    close: X,
+    about: Info,
+    warning: TriangleAlert,
+    download: Download,
+};
+
 // Module-level filters, mirroring the closure array in the legacy provider.
 const filters: ToastFilter[] = [];
 
@@ -56,8 +64,8 @@ function iconFor(item: ToastItem): ReactNode {
     const name = typeof item.icon === 'string' && item.icon.length > 0
         ? item.icon
         : DEFAULT_ICON[item.type ?? 'success'];
-    if (!name) return undefined;
-    return createElement(Icon, { name, className: 'size-5' });
+    const Cmp = TOAST_ICON[name] ?? Info;
+    return createElement(Cmp, { className: 'size-5' });
 }
 
 function invoke(type: string, item: ToastItem, cb?: ToastItem['onSelect'] | ToastItem['onClose']) {

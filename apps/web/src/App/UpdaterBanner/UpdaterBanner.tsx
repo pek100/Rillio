@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import Icon from '@stremio/stremio-icons/react';
+import { X } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useMatch } from 'react-router';
 import { useBinaryState, usePlatform } from 'rillio/common';
@@ -39,7 +39,7 @@ const UpdaterBanner = ({ className }: Props) => {
                         { t('UPDATER_INSTALL_BUTTON') }
                     </Button>
                     <Button className={styles['close']} onClick={hide}>
-                        <Icon className={styles['icon']} name={'close'} />
+                        <X className={styles['icon']} />
                     </Button>
                 </div>
             </Transition>

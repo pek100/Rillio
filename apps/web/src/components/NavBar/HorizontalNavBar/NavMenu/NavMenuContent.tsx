@@ -11,7 +11,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Settings, RefreshCw, Download, Library, Magnet, CircleHelp, Minimize, Maximize } from 'lucide-react';
 import { useCore } from 'rillio/core';
 import { useFullscreen } from 'rillio/common/Fullscreen';
 import { withCoreSuspender } from 'rillio/common/CoreSuspender';
@@ -111,7 +111,7 @@ const NavMenuContent = ({ onSelect }: Props) => {
                 supported && !isAndroidPWA && !inShell ?
                     <div className="border-t border-line py-1">
                         <Button variant="ghost" className={ROW} title={fullscreen ? t('EXIT_FULLSCREEN') : t('ENTER_FULLSCREEN')} onClick={fullscreen ? exitFullscreen : requestFullscreen}>
-                            <Icon name={fullscreen ? 'minimize' : 'maximize'} />
+                            {fullscreen ? <Minimize /> : <Maximize />}
                             <span className="flex-1 text-left">{fullscreen ? t('EXIT_FULLSCREEN') : t('ENTER_FULLSCREEN')}</span>
                         </Button>
                     </div>
@@ -121,27 +121,27 @@ const NavMenuContent = ({ onSelect }: Props) => {
 
             <div className="border-t border-line py-1">
                 <Button variant="ghost" className={ROW} title={t('SETTINGS')} href="#/settings">
-                    <Icon name="settings" />
+                    <Settings />
                     <span className="flex-1 text-left">{t('SETTINGS')}</span>
                 </Button>
                 <Button variant="ghost" className={ROW} title="Sync & backup" onClick={() => openSync('backup')}>
-                    <Icon name="cloud-sync" />
+                    <RefreshCw />
                     <span className="flex-1 text-left">Sync & backup</span>
                 </Button>
                 <Button variant="ghost" className={ROW} title="Import from Stremio" onClick={() => openSync('stremio')}>
-                    <Icon name="download" />
+                    <Download />
                     <span className="flex-1 text-left">Import from Stremio</span>
                 </Button>
                 <Button variant="ghost" className={ROW} title="Upload to Stremio" onClick={() => openSync('upload')}>
-                    <Icon name="cloud-library" />
+                    <Library />
                     <span className="flex-1 text-left">Upload to Stremio</span>
                 </Button>
                 <Button variant="ghost" className={ROW} title={t('PLAY_URL_MAGNET_LINK')} onClick={onPlayMagnetLinkClick}>
-                    <Icon name="magnet-link" />
+                    <Magnet />
                     <span className="flex-1 text-left">{t('PLAY_URL_MAGNET_LINK')}</span>
                 </Button>
                 <Button variant="ghost" className={ROW} title={t('HELP_FEEDBACK')} href="https://github.com/pek100/rillio/issues" target="_blank">
-                    <Icon name="help" />
+                    <CircleHelp />
                     <span className="flex-1 text-left">{t('HELP_FEEDBACK')}</span>
                 </Button>
             </div>

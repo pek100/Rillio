@@ -16,7 +16,7 @@
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Pencil } from 'lucide-react';
 import { cn } from 'rillio/components/ui/cn';
 import { Button } from 'rillio/components/ui/button';
 import { Input } from 'rillio/components/ui/input';
@@ -87,8 +87,7 @@ const DisplayNameEdit = ({ className, value, maxLength = 40, onCommit }: Props) 
                             title={t('EDIT') || 'Edit name'}
                             onClick={startEdit}
                         >
-                            <Icon
-                                name="edit"
+                            <Pencil
                                 className="block size-[var(--display-name-icon-size,0.85rem)] text-fg-subtle transition-colors"
                             />
                         </Button>

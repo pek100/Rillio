@@ -2,7 +2,7 @@
 
 import React, { ChangeEvent, useCallback, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import Icon from '@stremio/stremio-icons/react';
+import { Check, X } from 'lucide-react';
 import { Button } from 'rillio/components/ui/button';
 import { Input } from 'rillio/components/ui/input';
 
@@ -38,14 +38,14 @@ const AddItem = ({ onCancel, handleAddUrl }: Props) => {
                     onClick={onSubmit}
                     className="flex w-12 items-center justify-center rounded-card bg-transparent p-1 opacity-60 hover:bg-surface-hover hover:opacity-100 [&:hover_svg]:text-success"
                 >
-                    <Icon name={'checkmark'} className="size-5 text-fg" />
+                    <Check className="size-5 text-fg" />
                 </Button>
                 <Button
                     variant="ghost"
                     onClick={onCancel}
                     className="flex w-12 items-center justify-center rounded-card bg-transparent p-1 opacity-60 hover:bg-surface-hover hover:opacity-100 [&:hover_svg]:text-danger"
                 >
-                    <Icon name={'close'} className="size-5 text-fg" />
+                    <X className="size-5 text-fg" />
                 </Button>
             </div>
         </div>
