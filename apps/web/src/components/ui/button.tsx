@@ -33,9 +33,9 @@ export const buttonVariants = cva(
                 // Brand accent fill.
                 default: 'bg-primary text-primary-foreground hover:brightness-110',
                 // Bare glyph / text with neutral hover tint (accent = surface-hover).
-                ghost: 'bg-transparent text-foreground hover:bg-accent',
+                ghost: 'bg-transparent text-foreground hover:bg-surface-hover',
                 // Hairline outline, neutral hover tint.
-                outline: 'border border-border bg-transparent text-foreground hover:bg-accent',
+                outline: 'border border-border bg-transparent text-foreground hover:bg-surface-hover',
                 // Inline text link, brand colored.
                 link: 'bg-transparent text-primary p-0 h-auto underline-offset-4 hover:underline',
             },
@@ -157,7 +157,7 @@ export const IconButton = forwardRef<HTMLElement, IconButtonProps>(function Icon
             className={cn(
                 'inline-flex items-center justify-center rounded-full p-0',
                 iconButtonSize[size],
-                variant === 'ghost' && 'opacity-60 hover:opacity-100 hover:bg-accent',
+                variant === 'ghost' && 'opacity-60 hover:opacity-100 hover:bg-surface-hover',
                 className,
             )}
             {...props}

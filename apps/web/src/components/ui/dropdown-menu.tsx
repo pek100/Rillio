@@ -26,7 +26,7 @@ const contentClasses =
 
 const itemClasses =
     'relative flex cursor-pointer select-none items-center gap-2 rounded-[calc(var(--radius-card)-0.25rem)] px-2 py-1.5 text-sm outline-none transition-colors ' +
-    'focus:bg-accent focus:text-accent-foreground data-[highlighted]:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0';
+    'focus:bg-surface-hover focus:text-fg data-[highlighted]:bg-surface-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0';
 
 export const DropdownMenuSubTrigger = forwardRef<
     ElementRef<typeof DropdownMenuPrimitive.SubTrigger>,
@@ -35,7 +35,7 @@ export const DropdownMenuSubTrigger = forwardRef<
     return (
         <DropdownMenuPrimitive.SubTrigger
             ref={ref}
-            className={cn(itemClasses, 'data-[state=open]:bg-accent', inset && 'pl-8', className)}
+            className={cn(itemClasses, 'data-[state=open]:bg-surface-hover', inset && 'pl-8', className)}
             {...props}
         >
             {children}

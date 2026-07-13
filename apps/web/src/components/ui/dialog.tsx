@@ -62,7 +62,7 @@ export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
                     {children}
                     {showClose ? (
                         <DialogPrimitive.Close
-                            className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-full text-fg-muted opacity-70 outline-none transition hover:bg-accent hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-highlight"
+                            className="absolute right-4 top-4 inline-flex size-8 items-center justify-center rounded-full text-fg-muted opacity-70 outline-none transition hover:bg-surface-hover hover:opacity-100 focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-highlight"
                             aria-label="Close"
                         >
                             <Icon name="close" className="size-4" />

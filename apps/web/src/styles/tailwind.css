@@ -77,8 +77,10 @@
     --color-secondary-foreground: var(--color-fg);
     --color-muted: var(--color-surface);
     --color-muted-foreground: var(--color-fg-muted);
-    --color-accent: var(--color-surface-hover);     /* neutral hover bg, NOT brand */
-    --color-accent-foreground: var(--color-fg);
+    /* NO --color-accent alias here: shadcn's "accent" (neutral hover bg) would
+     * override our pre-existing BRAND --color-accent (#FFA033, line 28) because
+     * later definitions win. Kit parts use bg-surface-hover directly instead;
+     * the bare-name :root shim below still provides --accent for raw var() reads. */
     --color-destructive: var(--color-danger);       /* #DF524C */
     --color-destructive-foreground: var(--color-fg);
     --color-border: var(--color-line);

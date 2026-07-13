@@ -95,7 +95,7 @@ export const SelectItem = forwardRef<
             ref={ref}
             className={cn(
                 'relative flex w-full cursor-pointer select-none items-center rounded-[calc(var(--radius-card)-0.25rem)] py-1.5 pl-8 pr-2 text-sm outline-none',
-                'focus:bg-accent focus:text-accent-foreground data-[highlighted]:bg-accent data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
+                'focus:bg-surface-hover focus:text-fg data-[highlighted]:bg-surface-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-50',
                 className,
             )}
             {...props}
@@ -181,7 +181,7 @@ export function SelectCascade({ options, value, onValueChange, placeholder, clas
                 {stack.length > 0 ? (
                     <button
                         type="button"
-                        className="flex w-full items-center gap-2 rounded-[calc(var(--radius-card)-0.25rem)] px-2 py-1.5 text-sm text-fg-muted outline-none hover:bg-accent"
+                        className="flex w-full items-center gap-2 rounded-[calc(var(--radius-card)-0.25rem)] px-2 py-1.5 text-sm text-fg-muted outline-none hover:bg-surface-hover"
                         onClick={() => setStack((s) => s.slice(0, -1))}
                     >
                         <Icon name="chevron-back" className="size-4" />
@@ -193,7 +193,7 @@ export function SelectCascade({ options, value, onValueChange, placeholder, clas
                         key={opt.value}
                         type="button"
                         className={cn(
-                            'flex w-full items-center justify-between gap-2 rounded-[calc(var(--radius-card)-0.25rem)] px-2 py-1.5 text-sm outline-none hover:bg-accent',
+                            'flex w-full items-center justify-between gap-2 rounded-[calc(var(--radius-card)-0.25rem)] px-2 py-1.5 text-sm outline-none hover:bg-surface-hover',
                             opt.value === value && 'text-primary',
                         )}
                         onClick={() => {
