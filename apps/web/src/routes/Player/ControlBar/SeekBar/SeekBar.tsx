@@ -18,9 +18,7 @@ import { cn } from 'rillio/components/ui/cn';
 const TRACK = 'bg-ice/10 opacity-100';
 const BUFFERED = 'bg-ice/30';
 const FILLED = 'bg-(--color-accent)';
-const THUMB = 'bg-(--color-accent) transition-transform duration-150 group-hover:scale-[1.2] ' +
-    "after:absolute after:inset-0 after:rounded-full after:content-[''] " +
-    'after:shadow-[0_0_0_0.25rem_var(--color-accent)_inset] after:[filter:brightness(130%)]';
+const THUMB = 'bg-(--color-accent) transition-transform duration-150 group-hover:scale-[1.2]';
 
 type Props = {
     className?: string;

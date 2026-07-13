@@ -32,7 +32,9 @@ const CB_ICON = 'size-(--icon-size-player)';
 // Control-bar "islands": rounded-full translucent containers that group the icon
 // clusters (transport left, menus right) over the video. A deliberate grouping
 // surface (very low opacity black + backdrop blur), unlike decorative wrappers.
-const CB_ISLAND = 'flex flex-row items-center gap-1 rounded-full bg-black/25 px-2.5 py-1 backdrop-blur-md';
+// Uniform padding all around (px == py) keeps the pill's endcap radius concentric
+// with the circular button hover shapes; gap-2 gives each button breathing room.
+const CB_ISLAND = 'flex flex-row items-center gap-2 rounded-full bg-black/25 p-1.5 backdrop-blur-md';
 
 type Props = {
     className?: string;
@@ -217,7 +219,7 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                         // part of the audio cluster, not a floating control).
                         !platform.isMobile ?
                             <VolumeSlider
-                                className={'ml-1 mr-2 h-16 flex-[0_1_10rem] [--thumb-size:1rem] [--track-size:0.35rem]'}
+                                className={'mr-2 h-16 flex-[0_1_10rem] [--thumb-size:1rem] [--track-size:0.35rem]'}
                                 volume={volume ?? null}
                                 muted={muted ?? undefined}
                                 onVolumeChangeRequested={onVolumeChangeRequested}
@@ -252,7 +254,7 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                 <div className={cn(
                     // Desktop: the right menus island (min-width sm only, so it never
                     // clashes with the mobile overflow-popover styling below).
-                    'flex flex-none flex-row gap-1 sm:rounded-full sm:bg-black/25 sm:px-2.5 sm:py-1 sm:backdrop-blur-md',
+                    'flex flex-none flex-row gap-2 sm:rounded-full sm:bg-black/25 sm:p-1.5 sm:backdrop-blur-md',
                     'max-sm:absolute max-sm:bottom-[4.5rem] max-sm:right-0 max-sm:m-2 max-sm:max-w-[calc(100dvw-1rem)] max-sm:gap-[0.15rem] max-sm:overflow-x-auto max-sm:rounded-card max-sm:bg-(--modal-background-color) max-sm:p-2 max-sm:shadow-(--outer-glow)',
                     buttonsMenuOpen ? 'max-sm:flex' : 'max-sm:hidden',
                 )}>
