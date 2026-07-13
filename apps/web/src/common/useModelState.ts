@@ -1,24 +1,35 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
-const React = require('react');
-const throttle = require('lodash.throttle');
-const { deepEqual } = require('fast-equals');
-const intersection = require('lodash.intersection');
-const { useCore } = require('rillio/core');
-const { useCoreSuspender } = require('rillio/common/CoreSuspender');
-const { default: useRouteFocused } = require('rillio/common/useRouteFocused');
+import * as React from 'react';
+import { deepEqual } from 'fast-equals';
+import { useCore } from 'rillio/core';
+import { useCoreSuspender } from 'rillio/common/CoreSuspender';
+import useRouteFocused from 'rillio/common/useRouteFocused';
 
-const useModelState = ({ action, ...args }) => {
+// lodash.throttle / lodash.intersection ship no type declarations, so they are
+// kept as untyped `require` (typed `any`) rather than introducing a broken import.
+const throttle = require('lodash.throttle');
+const intersection = require('lodash.intersection');
+
+type ModelStateOptions = {
+    action?: DispatchAction;
+    model: string;
+    timeout?: number;
+    map?: (state: any) => any;
+    deps?: string[];
+};
+
+const useModelState = ({ action, ...args }: ModelStateOptions): any => {
     const core = useCore();
     const routeFocused = useRouteFocused();
     const mountedRef = React.useRef(false);
     const [model, timeout, map, deps] = React.useMemo(() => {
-        return [args.model, args.timeout, args.map, args.deps];
+        return [args.model, args.timeout, args.map, args.deps] as const;
     }, []);
-    const { getState } = useCoreSuspender();
+    const { getState } = useCoreSuspender()!;
     const [state, setState] = React.useReducer(
-        (prevState, nextState) => {
-            return Object.keys(prevState).reduce((result, key) => {
+        (prevState: any, nextState: any) => {
+            return Object.keys(prevState).reduce((result: any, key) => {
                 result[key] = deepEqual(prevState[key], nextState[key]) ? prevState[key] : nextState[key];
                 return result;
             }, {});
@@ -40,7 +51,7 @@ const useModelState = ({ action, ...args }) => {
         };
     }, []);
     React.useEffect(() => {
-        const onNewState = async (models) => {
+        const onNewState = async (models: string[]) => {
             if (models.indexOf(model) === -1 && (!Array.isArray(deps) || intersection(deps, models).length === 0)) {
                 return;
             }
@@ -70,4 +81,4 @@ const useModelState = ({ action, ...args }) => {
     return state;
 };
 
-module.exports = useModelState;
+export = useModelState;

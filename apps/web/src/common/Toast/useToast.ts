@@ -5,6 +5,6 @@
 // adapter so every existing `require('rillio/common/Toast/useToast')` call site
 // keeps working unchanged - the adapter preserves the exact legacy API
 // (show / remove / clear / addFilter / removeFilter).
-const { useToast } = require('rillio/components/ui/use-toast');
+import { useToast } from 'rillio/components/ui/use-toast';
 
-module.exports = useToast;
+export = useToast;

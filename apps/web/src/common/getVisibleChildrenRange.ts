@@ -1,6 +1,11 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
-const isChildVisible = (container, element) => {
+type VisibleChildrenRange = {
+    start: number;
+    end: number;
+};
+
+const isChildVisible = (container: HTMLElement, element: HTMLElement): boolean => {
     const elementTop = element.offsetTop;
     const elementBottom = element.offsetTop + element.clientHeight;
     const containerTop = container.scrollTop;
@@ -10,8 +15,8 @@ const isChildVisible = (container, element) => {
         (elementTop < containerBottom && containerBottom < elementBottom);
 };
 
-const getVisibleChildrenRange = (container) => {
-    return Array.from(container.children).reduce((result, child, index) => {
+const getVisibleChildrenRange = (container: HTMLElement): VisibleChildrenRange | null => {
+    return Array.from(container.children as HTMLCollectionOf<HTMLElement>).reduce<VisibleChildrenRange | null>((result, child, index) => {
         if (isChildVisible(container, child)) {
             if (result === null) {
                 result = {
@@ -27,4 +32,4 @@ const getVisibleChildrenRange = (container) => {
     }, null);
 };
 
-module.exports = getVisibleChildrenRange;
+export = getVisibleChildrenRange;

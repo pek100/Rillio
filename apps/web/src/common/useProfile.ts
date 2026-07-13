@@ -1,8 +1,8 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
-const useModelState = require('rillio/common/useModelState');
+import useModelState from 'rillio/common/useModelState';
 
-const map = (ctx) => ({
+const map = (ctx: any) => ({
     ...ctx.profile,
     settings: {
         ...ctx.profile.settings,
@@ -15,8 +15,8 @@ const map = (ctx) => ({
     }
 });
 
-const useProfile = () => {
+const useProfile = (): Profile => {
     return useModelState({ model: 'ctx', map });
 };
 
-module.exports = useProfile;
+export = useProfile;

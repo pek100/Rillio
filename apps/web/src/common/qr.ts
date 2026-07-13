@@ -2,12 +2,12 @@
 // full library, so callers render a QR only when the code fits and otherwise fall
 // back to the copyable text. ~2200 chars is a practical scan limit at readable
 // density.
-const qrcode = require('qrcode-generator');
+import qrcode from 'qrcode-generator';
 
-const MAX_QR_CHARS = 2200;
+export const MAX_QR_CHARS = 2200;
 
 // Returns an <svg> string for `text`, or null if it is too large to encode/scan.
-const makeQrSvg = (text) => {
+export const makeQrSvg = (text: string | null | undefined): string | null => {
     if (!text || text.length > MAX_QR_CHARS) return null;
     try {
         const qr = qrcode(0, 'L'); // 0 = auto version, L = most data capacity
@@ -18,5 +18,3 @@ const makeQrSvg = (text) => {
         return null; // exceeded the largest QR version
     }
 };
-
-module.exports = { makeQrSvg, MAX_QR_CHARS };

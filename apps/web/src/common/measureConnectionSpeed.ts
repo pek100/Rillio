@@ -12,13 +12,13 @@
 const SPEED_TEST_URL = 'https://speed.cloudflare.com/__down?bytes=';
 // 25 MB is enough to ride past TCP slow-start for a representative rate without
 // being a heavy download on a metered link.
-const SPEED_TEST_BYTES = 25000000;
+export const SPEED_TEST_BYTES = 25000000;
 const SPEED_TEST_TIMEOUT_MS = 15000;
 
 // Measure download throughput in BYTES per second. Resolves to null on any
 // failure (timeout, network error, abort, missing body) so callers can fall
 // back rather than crash.
-const measureConnectionSpeed = async () => {
+export const measureConnectionSpeed = async (): Promise<number | null> => {
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), SPEED_TEST_TIMEOUT_MS);
     const started = Date.now();
@@ -58,12 +58,10 @@ const measureConnectionSpeed = async () => {
 
 // One probe per session, cached in memory (never persisted). Concurrent callers
 // share the same in-flight promise so the slow screen never fires two probes.
-let cachedProbe = null;
-const measureConnectionSpeedOnce = () => {
+let cachedProbe: Promise<number | null> | null = null;
+export const measureConnectionSpeedOnce = (): Promise<number | null> => {
     if (cachedProbe === null) {
         cachedProbe = measureConnectionSpeed();
     }
     return cachedProbe;
 };
-
-module.exports = { measureConnectionSpeed, measureConnectionSpeedOnce, SPEED_TEST_BYTES };
