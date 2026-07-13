@@ -1,12 +1,12 @@
 // Copyright (C) 2017-2026 Smart code 203358507
 
 import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import classNames from 'classnames';
 import debounce from 'lodash.debounce';
 import useRouteFocused from 'rillio/common/useRouteFocused';
 import { useBinaryState } from 'rillio/common';
 import { Slider } from 'rillio/components';
 import { Button } from 'rillio/components/ui/button';
+import { cn } from 'rillio/components/ui/cn';
 import formatTime from './formatTime';
 
 // The seek bar's filled track + thumb are the accent color, with a hover-grown
@@ -64,7 +64,7 @@ const SeekBar = ({ className, time, duration, buffered, onSeekRequested, playbac
     const labelClass = 'w-[5.5rem] flex-none whitespace-nowrap text-center text-[1.1rem] tabular-nums text-fg/90 [direction:rtl] [text-overflow:ellipsis]';
 
     return (
-        <div className={classNames(className, 'flex flex-row items-center')}>
+        <div className={cn(className, 'flex flex-row items-center')}>
             <div className={labelClass}>{formatTime(seekTime !== null ? seekTime : time)}</div>
             <Slider
                 className={'mx-(--thumb-size) flex-1 self-stretch'}

@@ -22,7 +22,7 @@ import { Button, IconButton } from 'rillio/components/ui/button';
 import { Dialog, DialogContent, DialogTitle } from 'rillio/components/ui/dialog';
 import { Select, SelectTrigger, SelectContent, SelectItem } from 'rillio/components/ui/select';
 const { CONSTANTS, useBinaryState, useOnScrollToBottom, withCoreSuspender } = require('rillio/common');
-const { AddonDetailsModal, DelayedRenderer, Image, MainNavBars, MetaItem } = require('rillio/components');
+const { AddonDetailsModal, DelayedRenderer, EmptyState, MainNavBars, MetaItem } = require('rillio/components');
 const useDiscover = require('./useDiscover');
 const useSelectableInputs = require('./useSelectableInputs');
 
@@ -182,17 +182,21 @@ const Discover = () => {
                     {
                         discover.catalog === null ?
                             <DelayedRenderer delay={500}>
-                                <div className="flex flex-[0_1_auto] flex-col items-center self-stretch overflow-y-auto px-6">
-                                    <Image className="mb-4 size-48 flex-none object-contain object-center opacity-90" src={require('/assets/images/empty.svg')} alt={' '} />
-                                    <div className="flex-none text-center text-[2rem] font-normal text-fg">{t('NO_CATALOG_SELECTED')}</div>
-                                </div>
+                                <EmptyState
+                                    className="flex-[0_1_auto] self-stretch overflow-y-auto px-6"
+                                    imageClassName="mb-4"
+                                    labelClassName="flex-none text-[2rem] font-normal text-fg"
+                                    label={t('NO_CATALOG_SELECTED')}
+                                />
                             </DelayedRenderer>
                             :
                             discover.catalog.content.type === 'Err' ?
-                                <div className="flex flex-[0_1_auto] flex-col items-center self-stretch overflow-y-auto px-6">
-                                    <Image className="mb-4 size-48 flex-none object-contain object-center opacity-90" src={require('/assets/images/empty.svg')} alt={' '} />
-                                    <div className="flex-none text-center text-[2rem] font-normal text-fg">{discover.catalog.content.content}</div>
-                                </div>
+                                <EmptyState
+                                    className="flex-[0_1_auto] self-stretch overflow-y-auto px-6"
+                                    imageClassName="mb-4"
+                                    labelClassName="flex-none text-[2rem] font-normal text-fg"
+                                    label={discover.catalog.content.content}
+                                />
                                 :
                                 discover.catalog.content.type === 'Loading' ?
                                     <div ref={metasContainerRef} className={cn(META_ITEMS_GRID, 'animation-fade-in')}>

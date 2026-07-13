@@ -8,7 +8,7 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
-import { HorizontalNavBar, Image } from 'rillio/components';
+import { EmptyState, HorizontalNavBar } from 'rillio/components';
 
 const NotFound = () => {
     const { t } = useTranslation();
@@ -21,16 +21,12 @@ const NotFound = () => {
                 fullscreenButton={true}
                 navMenu={true}
             />
-            <div className="flex-1 self-stretch flex flex-col items-center justify-center">
-                <Image
-                    className="flex-none w-48 h-48 mb-4 object-contain object-center opacity-90 animate-in fade-in zoom-in-95 duration-500"
-                    src={require('/assets/images/empty.svg')}
-                    alt=" "
-                />
-                <div className="flex-none max-w-[60%] max-h-[3.6em] text-center text-[2.5rem] text-fg-muted">
-                    {t('PAGE_NOT_FOUND')}
-                </div>
-            </div>
+            <EmptyState
+                className="flex-1 self-stretch justify-center"
+                imageClassName="mb-4 animate-in fade-in zoom-in-95 duration-500"
+                labelClassName="flex-none max-w-[60%] max-h-[3.6em] text-[2.5rem] text-fg-muted"
+                label={t('PAGE_NOT_FOUND')}
+            />
         </div>
     );
 };

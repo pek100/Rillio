@@ -1,11 +1,11 @@
 // Copyright (C) 2017-2026 Smart code 203358507
 
 import React, { useCallback, useEffect, useLayoutEffect, useState } from 'react';
-import classNames from 'classnames';
 import debounce from 'lodash.debounce';
 import useRouteFocused from 'rillio/common/useRouteFocused';
 import { usePlatform } from 'rillio/common';
 import { Slider } from 'rillio/components';
+import { cn } from 'rillio/components/ui/cn';
 
 // The volume slider's track is a neutral overlay bar, its filled range + thumb are
 // the foreground color, and the thumb grows (with a white inset glow) on hover or
@@ -62,7 +62,7 @@ const VolumeSlider = ({ className, volume, onVolumeChangeRequested, muted }: Pro
     }, []);
     return (
         <Slider
-            className={classNames(className, { 'active': slidingVolume !== null })}
+            className={cn(className, { 'active': slidingVolume !== null })}
             trackClassName={!disabled ? TRACK : undefined}
             filledClassName={!disabled ? FILLED : undefined}
             thumbClassName={!disabled ? THUMB : undefined}

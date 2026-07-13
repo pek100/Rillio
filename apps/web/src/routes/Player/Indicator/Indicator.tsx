@@ -8,9 +8,9 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import classNames from 'classnames';
 import { t } from 'i18next';
 import { Presence } from 'rillio/components';
+import { cn } from 'rillio/components/ui/cn';
 import { useBinaryState } from 'rillio/common';
 
 type Property = {
@@ -85,7 +85,7 @@ const Indicator = ({ className, videoState, disabled }: Props) => {
 
     return (
         <Presence when={shown && !disabled} duration={300}>
-            <div className={classNames(className, 'absolute flex h-16 select-none items-center justify-center')}>
+            <div className={cn(className, 'absolute flex h-16 select-none items-center justify-center')}>
                 <div className={'flex h-full flex-none items-center justify-center rounded-full bg-(--modal-background-color) px-8 text-center font-bold text-fg'}>
                     {label} {value}
                 </div>

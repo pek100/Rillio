@@ -1,5 +1,5 @@
 import React, { ChangeEvent, createContext, useContext, useEffect, useRef, useState } from 'react';
-import classNames from 'classnames';
+import { cn } from 'rillio/components/ui/cn';
 import { isFileType, isFileTypeSupported } from './utils';
 
 export type FileType = string;
@@ -83,7 +83,7 @@ const FileDropProvider = ({ children }: Props) => {
         <FileDropContext.Provider value={{ on, off }}>
             { children }
             <div
-                className={classNames(
+                className={cn(
                     'pointer-events-none fixed inset-0 rounded-2xl border-[0.5rem] border-dashed border-transparent transition-[border-color] duration-[250ms] ease-out',
                     { 'pointer-events-auto border-accent': active },
                 )}

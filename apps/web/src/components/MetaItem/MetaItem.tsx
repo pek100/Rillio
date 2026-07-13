@@ -18,11 +18,10 @@ import React, { useCallback, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
     X, Check, Bookmark, BookmarkCheck, Eye, EyeOff, Play, Plus, MoreVertical,
-    Film, Tv, RadioTower, MonitorPlay, BookOpen, Gamepad2, Music, VenetianMask, Radio, Podcast,
-    type LucideIcon,
 } from 'lucide-react';
 import { useNavigateWithOrigin } from 'rillio-router';
 import { cn } from 'rillio/components/ui/cn';
+import { iconForType } from 'rillio/components/ui/typeIcon';
 import { Button, IconButton } from 'rillio/components/ui/button';
 import {
     DropdownMenu,
@@ -34,27 +33,12 @@ import Image from 'rillio/components/Image';
 const filterInvalidDOMProps = require('filter-invalid-dom-props').default;
 const useBinaryState = require('rillio/common/useBinaryState');
 const useLibraryItemState = require('rillio/common/useLibraryItemState');
-const { ICON_FOR_TYPE } = require('rillio/common/CONSTANTS');
 
 // Full literal reveal strings (Tailwind's scanner needs the complete class text).
 const REVEAL_OPACITY =
     'group-hover:opacity-100 group-focus-within:opacity-100 group-[.active]:opacity-100 group-[.selected]:opacity-100';
 const REVEAL_FLEX =
     'group-hover:flex group-focus-within:flex group-[.active]:flex group-[.selected]:flex';
-
-// Content-type poster fallback glyphs, keyed by the ICON_FOR_TYPE map values.
-const TYPE_ICON: Record<string, LucideIcon> = {
-    movies: Film,
-    series: Tv,
-    channels: RadioTower,
-    tv: MonitorPlay,
-    ic_book: BookOpen,
-    ic_games: Gamepad2,
-    ic_music: Music,
-    ic_adult: VenetianMask,
-    ic_radio: Radio,
-    ic_podcast: Podcast,
-};
 
 type Option = { value: string; label: string };
 
@@ -173,7 +157,7 @@ const MetaItem = React.memo(({
     }, [dataset, optionOnSelect]);
 
     const renderPosterFallback = useCallback(() => {
-        const TypeIcon = TYPE_ICON[(ICON_FOR_TYPE.has(type) ? ICON_FOR_TYPE.get(type) : ICON_FOR_TYPE.get('other')) as string] ?? Film;
+        const TypeIcon = iconForType(type);
         return (
             <TypeIcon className="w-4/5 h-1/2 flex-none text-fg opacity-20" />
         );

@@ -1,6 +1,6 @@
 import React, { forwardRef, useLayoutEffect, useMemo, useState } from 'react';
-import classNames from 'classnames';
 import { Image } from 'rillio/components';
+import { cn } from 'rillio/components/ui/cn';
 
 // The pre-playback logo: a centered symbol that fills left-to-right by clip-path with
 // download progress (foreground copy) over a dim static copy, both gently breathing.
@@ -81,7 +81,7 @@ const Buffering = forwardRef<HTMLDivElement, Props>(({ className, logo, title, p
             'This source is downloading slowly. Try a different source.';
 
     return (
-        <div ref={ref} className={classNames(className, 'flex items-center justify-center')}>
+        <div ref={ref} className={cn(className, 'flex items-center justify-center')}>
             {
                 showTitle ?
                     <div
@@ -101,7 +101,7 @@ const Buffering = forwardRef<HTMLDivElement, Props>(({ className, logo, title, p
                             onError={() => setLogoBroken(true)}
                         />
                         <Image
-                            className={classNames(LOGO, 'opacity-20!')}
+                            className={cn(LOGO, 'opacity-20!')}
                             src={logo}
                             alt={' '}
                             fallbackSrc={require('/assets/images/symbol.svg')}

@@ -9,11 +9,12 @@
 
 import React, { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { X, Play, Film, Tv, RadioTower, MonitorPlay, BookOpen, Gamepad2, Music, VenetianMask, Radio, Podcast, type LucideIcon } from 'lucide-react';
-import { CONSTANTS, useProfile } from 'rillio/common';
+import { X, Play } from 'lucide-react';
+import { useProfile } from 'rillio/common';
 import { Image } from 'rillio/components';
 import { Button } from 'rillio/components/ui';
 import { cn } from 'rillio/components/ui';
+import { iconForType } from 'rillio/components/ui/typeIcon';
 
 type Props = {
     className?: string;
@@ -21,19 +22,6 @@ type Props = {
     nextVideo?: any;
     onDismiss?: () => void;
     onNextVideoRequested?: () => void;
-};
-
-const TYPE_ICON: Record<string, LucideIcon> = {
-    movies: Film,
-    series: Tv,
-    channels: RadioTower,
-    tv: MonitorPlay,
-    ic_book: BookOpen,
-    ic_games: Gamepad2,
-    ic_music: Music,
-    ic_adult: VenetianMask,
-    ic_radio: Radio,
-    ic_podcast: Podcast,
 };
 
 const NextVideoPopup = ({ className, metaItem, nextVideo, onDismiss, onNextVideoRequested }: Props) => {
@@ -58,7 +46,7 @@ const NextVideoPopup = ({ className, metaItem, nextVideo, onDismiss, onNextVideo
         if (metaItem === null || typeof metaItem.type !== 'string') {
             return null;
         }
-        const TypeIcon = TYPE_ICON[CONSTANTS.ICON_FOR_TYPE.get(metaItem.type) as string] ?? Film;
+        const TypeIcon = iconForType(metaItem.type);
         return (
             <TypeIcon className={'h-1/2 w-4/5 flex-none text-fg'} />
         );

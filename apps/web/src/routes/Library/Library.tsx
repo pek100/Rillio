@@ -37,7 +37,7 @@ import HorizontalScroll from 'rillio/components/HorizontalScroll';
 const NotFound = require('rillio/routes/NotFound');
 const { useProfile, useNotifications, useOnScrollToBottom, withCoreSuspender } = require('rillio/common');
 const toPath = require('rillio-router/toPath').default;
-const { DelayedRenderer, Image, MainNavBars, LibItem } = require('rillio/components');
+const { DelayedRenderer, EmptyState, MainNavBars, LibItem } = require('rillio/components');
 const useLibrary = require('./useLibrary');
 const useSelectableInputs = require('./useSelectableInputs');
 
@@ -56,14 +56,12 @@ type TypeSelect = { options: SelectableOption[]; value?: string; onSelect: (valu
 type SortChips = { options: SelectableOption[]; selected: string[]; onSelect: (value: string) => void };
 
 const MessageState = ({ label }: { label: string }) => (
-    <div className="flex flex-[0_1_auto] flex-col items-center self-stretch overflow-y-auto px-6">
-        <Image
-            className="mb-8 size-48 flex-none object-contain object-center opacity-90"
-            src={require('/assets/images/empty.svg')}
-            alt={' '}
-        />
-        <div className="mb-8 flex-none text-center text-[2rem] font-semibold text-fg">{label}</div>
-    </div>
+    <EmptyState
+        className="flex-[0_1_auto] self-stretch overflow-y-auto px-6"
+        imageClassName="mb-8"
+        labelClassName="mb-8 flex-none text-[2rem] font-semibold text-fg"
+        label={label}
+    />
 );
 
 const Library = ({ model }: { model: LibraryModel }) => {

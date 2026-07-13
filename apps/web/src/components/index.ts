@@ -1,7 +1,9 @@
 import AddonDetailsModal from './AddonDetailsModal';
+import CatalogRows from './CatalogRows';
 import ContextMenu from './ContextMenu';
 import ContinueWatchingItem from './ContinueWatchingItem';
 import DelayedRenderer from './DelayedRenderer';
+import EmptyState from './EmptyState';
 import EventModal from './EventModal';
 import HorizontalScroll from './HorizontalScroll';
 import Image from './Image';
@@ -22,9 +24,11 @@ import ActionsGroup from './ActionsGroup';
 
 export {
     AddonDetailsModal,
+    CatalogRows,
     ContextMenu,
     ContinueWatchingItem,
     DelayedRenderer,
+    EmptyState,
     EventModal,
     HorizontalScroll,
     Image,

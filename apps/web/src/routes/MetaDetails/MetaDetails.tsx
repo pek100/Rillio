@@ -20,7 +20,7 @@ import { useCore } from 'rillio/core';
 import { useContentGamepadNavigation } from 'rillio/services/GamepadNavigation';
 import { withCoreSuspender } from 'rillio/common';
 import { useNavigateWithOrigin } from 'rillio-router';
-import { VerticalNavBar, HorizontalNavBar, DelayedRenderer, Image, MetaPreview, ModalDialog } from 'rillio/components';
+import { VerticalNavBar, HorizontalNavBar, DelayedRenderer, EmptyState, Image, MetaPreview, ModalDialog } from 'rillio/components';
 import { cn } from 'rillio/components/ui/cn';
 import StreamsList from './StreamsList';
 import VideosList from './VideosList';
@@ -31,15 +31,15 @@ import useMetaExtensionTabs from './useMetaExtensionTabs';
 
 const GAMEPAD_HANDLER_ID = 'metadetails';
 
-const emptyImage = require('/assets/images/empty.svg');
-
 // The meta-details message states (no meta selected / no addons / not found) all
-// share this centered empty-illustration block.
+// share this centered empty-illustration block (the shared EmptyState primitive).
 const MetaMessage = ({ label }: { label: string }) => (
-    <div className="flex flex-1 flex-col items-center justify-center self-stretch px-8 py-16">
-        <Image className="mb-4 h-48 w-48 max-w-full flex-none object-contain object-center opacity-90" src={emptyImage} alt={' '} />
-        <div className="flex-none self-stretch text-center text-[2rem] text-fg">{label}</div>
-    </div>
+    <EmptyState
+        className="flex-1 justify-center self-stretch px-8 py-16"
+        imageClassName="mb-4 max-w-full"
+        labelClassName="flex-none self-stretch text-[2rem] text-fg"
+        label={label}
+    />
 );
 
 const MetaDetails = () => {
