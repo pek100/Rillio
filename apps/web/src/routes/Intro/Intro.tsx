@@ -180,10 +180,6 @@ const Intro = () => {
                 dispatch({ type: 'error', error: error.message });
             });
     }, []);
-    const cancelLoginWithFacebook = useCallback(() => {
-        stopFacebookLogin();
-        closeLoaderModal();
-    }, []);
     const loginWithApple = useCallback(() => {
         openLoaderModal();
         startAppleLogin()
@@ -207,7 +203,8 @@ const Intro = () => {
                 dispatch({ type: 'error', error: error.message });
             });
     }, []);
-    const cancelLoginWithApple = useCallback(() => {
+    const cancelLogin = useCallback(() => {
+        stopFacebookLogin();
         stopAppleLogin();
         closeLoaderModal();
     }, []);
@@ -531,7 +528,7 @@ const Intro = () => {
                             <div className="text-2xl text-fg animate-pulse">{t('AUTHENTICATING')}</div>
                             <Button
                                 className={cn(FORM_BUTTON, 'mt-8 bg-surface text-fg hover:brightness-110')}
-                                onClick={cancelLoginWithFacebook && cancelLoginWithApple}
+                                onClick={cancelLogin}
                             >
                                 <span>{t('BUTTON_CANCEL')}</span>
                             </Button>
