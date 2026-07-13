@@ -193,7 +193,7 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
             className={cn('px-8 max-sm:px-0', className)}
         >
             <SeekBar
-                className={'h-10 [--track-size:0.4rem] [--thumb-size:1.2rem] max-sm:mx-6'}
+                className={'h-10 [--track-size:0.3rem] [--thumb-size:1rem] max-sm:mx-6'}
                 time={time ?? null}
                 duration={duration ?? null}
                 buffered={buffered}
