@@ -21,17 +21,17 @@ import { cn } from 'rillio/components/ui';
 import SeekBar from './SeekBar';
 import VolumeSlider from './VolumeSlider';
 
-// 4rem square bare-glyph button in the control-bar idiom: full-opacity ice glyph
-// (blue-tinted off-white, not flat grey), brightness hover (not a bg tint),
-// press-scale, and a dim (not blocked) disabled. Icons use the player icon-size
-// token so every control-bar glyph is identical (and smaller than the old 2.2rem).
-const CB_BUTTON = 'size-16 rounded-full bg-transparent opacity-100 hover:bg-transparent hover:opacity-100 hover:brightness-110 active:scale-[0.97] [&_svg]:size-(--icon-size-player) [&_svg]:text-ice';
+// 4rem square bare-glyph button in the control-bar idiom: ice glyph (blue-tinted
+// off-white, not flat grey) that lifts to pure white on hover, press-scale, and a
+// dim (not blocked) disabled. Icons use the player icon-size token so every
+// control-bar glyph is identical (and smaller than the old 2.2rem).
+const CB_BUTTON = 'size-16 rounded-full bg-transparent opacity-100 hover:bg-transparent hover:opacity-100 active:scale-[0.97] [&_svg]:size-(--icon-size-player) [&_svg]:text-ice [&_svg]:transition-colors [&_svg]:duration-150 [&:hover_svg]:text-white';
 const CB_ICON = 'size-(--icon-size-player)';
 
 // Control-bar "islands": rounded-full translucent containers that group the icon
 // clusters (transport left, menus right) over the video. A deliberate grouping
-// surface (light tint + backdrop blur), unlike the decorative wrappers elsewhere.
-const CB_ISLAND = 'flex flex-row items-center gap-1 rounded-full bg-white/5 backdrop-blur-md';
+// surface (very low opacity black + backdrop blur), unlike decorative wrappers.
+const CB_ISLAND = 'flex flex-row items-center gap-1 rounded-full bg-black/25 backdrop-blur-md';
 
 type Props = {
     className?: string;

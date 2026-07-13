@@ -60,7 +60,7 @@ const TopBar = forwardRef<HTMLElement, Props>(function TopBar({ className, title
                 title="Back"
                 aria-label="Back"
                 onClick={onBack}
-                className="text-ice opacity-100"
+                className="text-ice opacity-100 transition-colors duration-150 hover:text-white"
             >
                 <ChevronLeft className="size-(--icon-size)" />
             </IconButton>
