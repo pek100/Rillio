@@ -196,7 +196,9 @@ const Player = () => {
     });
 
     const overlayHidden = React.useMemo(() => {
-        return immersed && !casting && video.state.paused !== null && !video.state.paused && !menusOpen;
+        // Hides while PAUSED too (paused !== null only guards the not-yet-loaded
+        // state, where the chrome must stay). Same 4s idle countdown either way.
+        return immersed && !casting && video.state.paused !== null && !menusOpen;
     }, [immersed, casting, video.state.paused, menusOpen]);
 
     const nextVideoPopupDismissed = React.useRef(false);
