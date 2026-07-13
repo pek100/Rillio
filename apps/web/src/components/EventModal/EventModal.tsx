@@ -19,7 +19,7 @@ import { Puzzle } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from 'rillio/components/ui/dialog';
 import { Button } from 'rillio/components/ui/button';
 
-const useEvents = require('./useEvents');
+const useEvents = require('./useEvents').default;
 
 const EventModal = () => {
     const { t } = useTranslation();
