@@ -53,22 +53,22 @@ const TopBar = forwardRef<HTMLElement, Props>(function TopBar({ className, title
             {...dragProps}
             onMouseMove={onMouseMove}
             onMouseOver={onMouseOver}
-            className={`flex flex-row items-center gap-2 pl-4 pr-6 pt-[var(--safe-area-inset-top)] ${className ?? ''}`}
+            className={`flex flex-row items-center gap-2 pl-4 pr-6 pt-[calc(0.5rem+var(--safe-area-inset-top))] ${className ?? ''}`}
         >
             <IconButton
                 tabIndex={-1}
                 title="Back"
                 aria-label="Back"
                 onClick={onBack}
-                className="opacity-100 text-fg"
+                className="text-ice opacity-100"
             >
-                <ChevronLeft className="size-4" />
+                <ChevronLeft className="size-(--icon-size)" />
             </IconButton>
             {
                 typeof title === 'string' && title.length > 0 ?
                     <h2
                         {...dragProps}
-                        className="flex-1 truncate px-2 text-lg font-semibold tracking-[0.01em] text-fg"
+                        className="flex-1 truncate px-2 text-lg font-semibold tracking-[0.01em] text-ice"
                     >
                         {title}
                     </h2>
@@ -78,7 +78,7 @@ const TopBar = forwardRef<HTMLElement, Props>(function TopBar({ className, title
             {
                 showHdr ?
                     <div
-                        className="flex h-10 select-none items-center justify-center px-2 text-fg-muted"
+                        className="flex h-10 select-none items-center justify-center px-2 text-ice-muted"
                         title={hdrInfo!.gamma === 'pq' ? 'HDR10' : 'HLG'}
                     >
                         <Hdr className="h-4 w-8" />

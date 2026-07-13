@@ -13,6 +13,11 @@ import formatTime from './formatTime';
 // thumb carrying an inset accent glow. These were the only reasons SeekBar had its
 // own .less (to reach the Slider's hashed part classes); they are now passed straight
 // through the Slider's per-part className props.
+// Track = faint light (blue-tinted ice at low alpha, not the old orange-at-20%);
+// buffered = a slightly stronger ice (reads as "downloaded", still not grey);
+// the filled range up to the scrubber and the thumb stay the accent #FFA033.
+const TRACK = 'bg-ice/10 opacity-100';
+const BUFFERED = 'bg-ice/30';
 const FILLED = 'bg-(--color-accent)';
 const THUMB = 'bg-(--color-accent) transition-transform duration-150 group-hover:scale-[1.2] ' +
     "after:absolute after:inset-0 after:rounded-full after:content-[''] " +
@@ -61,13 +66,15 @@ const SeekBar = ({ className, time, duration, buffered, onSeekRequested, playbac
 
     // Timecode labels: fixed width, tabular figures, rtl-ellipsis so long
     // durations trim from the left. Matches the old --primary-foreground look.
-    const labelClass = 'w-[5.5rem] flex-none whitespace-nowrap text-center text-[1.1rem] tabular-nums text-fg/90 [direction:rtl] [text-overflow:ellipsis]';
+    const labelClass = 'w-[5.5rem] flex-none whitespace-nowrap text-center text-[1.1rem] tabular-nums text-ice/90 [direction:rtl] [text-overflow:ellipsis]';
 
     return (
         <div className={cn('flex flex-row items-center', className)}>
             <div className={labelClass}>{formatTime(seekTime !== null ? seekTime : time)}</div>
             <Slider
                 className={'mx-(--thumb-size) flex-1 self-stretch'}
+                trackClassName={TRACK}
+                bufferedClassName={BUFFERED}
                 filledClassName={FILLED}
                 thumbClassName={THUMB}
                 value={

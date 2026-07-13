@@ -21,12 +21,14 @@ export const ContextMenuSub = ContextMenuPrimitive.Sub;
 export const ContextMenuRadioGroup = ContextMenuPrimitive.RadioGroup;
 
 const contentClasses =
-    'z-50 min-w-[8rem] overflow-hidden rounded-card bg-popover p-1 text-popover-foreground shadow-elevated ' +
+    // transition-none: keep the Radix popper positioning instant (never animate the
+    // transform to place). Entrance/exit are `animation` utilities, not transitions.
+    'z-50 min-w-[8rem] overflow-hidden rounded-card bg-popover p-1 text-popover-foreground shadow-elevated transition-none ' +
     'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95';
 
 const itemClasses =
     'relative flex cursor-pointer select-none items-center gap-2 rounded-[calc(var(--radius-card)-0.25rem)] px-2 py-1.5 text-sm outline-none transition-colors ' +
-    'focus:bg-surface-hover focus:text-fg data-[highlighted]:bg-surface-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0';
+    'focus:bg-surface-hover focus:text-fg data-[highlighted]:bg-surface-hover data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:size-(--icon-size) [&_svg]:shrink-0';
 
 export const ContextMenuSubTrigger = forwardRef<
     ElementRef<typeof ContextMenuPrimitive.SubTrigger>,

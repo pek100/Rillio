@@ -64,11 +64,22 @@ export const Trakt = (props: BrandIconProps) => (
     </svg>
 );
 
-// IMDb wordmark badge, outlined so it adapts to light + dark themes.
+// IMDb badge: a filled gold chip (currentColor, driven by text-[--color-imdb] at
+// the call site) with the dark "IMDb" wordmark, matching the real mark. Wide 2:1
+// viewBox so the wordmark reads cleanly; size it via a 2:1 className (e.g. h-8 w-16).
 export const Imdb = (props: BrandIconProps) => (
-    <svg {...base(props)}>
-        <rect x="1" y="6" width="22" height="12" rx="2.5" fill="none" stroke="currentColor" strokeWidth="1.5" />
-        <text x="12" y="15.4" textAnchor="middle" fontSize="7.5" fontWeight={800} fill="currentColor" fontFamily="Arial, Helvetica, sans-serif" letterSpacing="0.3">IMDb</text>
+    <svg {...base(props)} viewBox="0 0 64 32" fill="none">
+        <rect x="0" y="0" width="64" height="32" rx="6" fill="currentColor" />
+        <text
+            x="32"
+            y="23"
+            textAnchor="middle"
+            fontFamily="Arial, Helvetica, sans-serif"
+            fontSize="19"
+            fontWeight={900}
+            letterSpacing="-0.5"
+            fill="#0A0A0A"
+        >IMDb</text>
     </svg>
 );
 

@@ -18,7 +18,7 @@ const toggleItemVariants = cva(
     'inline-flex items-center justify-center gap-1.5 whitespace-nowrap rounded-full text-sm font-medium outline-none transition-[background-color,color,filter] ' +
         'text-fg-muted hover:text-fg data-[state=on]:bg-primary data-[state=on]:text-primary-foreground ' +
         'focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-highlight ' +
-        'disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-4 [&_svg]:shrink-0',
+        'disabled:pointer-events-none disabled:opacity-50 [&_svg]:size-(--icon-size) [&_svg]:shrink-0',
     {
         variants: {
             size: {

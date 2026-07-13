@@ -420,6 +420,14 @@ const Player = () => {
         }
 
         closeSideDrawer();
+
+        // A click is user activity too: reveal the chrome and restart the ~3s idle
+        // countdown, exactly like mouse movement does (onContainerMouseMove). The
+        // slider-drag gate still holds: while a thumb is held, body pointer-events
+        // are off so this never fires, and the CSS `active-slider-within` guard keeps
+        // the control bar visible regardless of the immersion state.
+        setImmersed(false);
+        setImmersedDebounced(true);
     }, []);
 
     const onContainerMouseMove = React.useCallback((event: React.MouseEvent) => {

@@ -37,8 +37,6 @@ const useLibraryItemState = require('rillio/common/useLibraryItemState');
 // Full literal reveal strings (Tailwind's scanner needs the complete class text).
 const REVEAL_OPACITY =
     'group-hover:opacity-100 group-focus-within:opacity-100 group-[.active]:opacity-100 group-[.selected]:opacity-100';
-const REVEAL_FLEX =
-    'group-hover:flex group-focus-within:flex group-[.active]:flex group-[.selected]:flex';
 
 type Option = { value: string; label: string };
 
@@ -220,30 +218,39 @@ const MetaItem = React.memo(({
                         null
                 }
                 {
+                    // No shared wrapper: each control is positioned independently and
+                    // carries its OWN reveal + scrim, so the global `* { overflow:
+                    // hidden }` reset has no button-tight box to clip the hover:scale.
                     libraryState.hasId ?
-                        <div className={cn('absolute right-2 top-2 z-[2] hidden flex-col gap-2', REVEAL_FLEX)}>
-                            <IconButton
-                                title={libraryState.inLibrary ? t('REMOVE_FROM_LIB') : t('ADD_TO_LIB')}
-                                onClick={onToggleInLibraryClick}
-                                className="size-7 bg-black/55 opacity-100 backdrop-blur-sm transition-transform duration-150 hover:scale-110 active:scale-95 [&:hover_svg]:text-primary [&_svg]:size-[0.9rem] [&_svg]:text-fg-muted"
-                            >
-                                {libraryState.inLibrary ? <BookmarkCheck /> : <Bookmark />}
-                            </IconButton>
-                            <IconButton
-                                title={isWatched ? t('CTX_MARK_UNWATCHED') : t('CTX_MARK_WATCHED')}
-                                onClick={onToggleWatchedClick}
-                                className="size-7 bg-black/55 opacity-100 backdrop-blur-sm transition-transform duration-150 hover:scale-110 active:scale-95 [&:hover_svg]:text-primary [&_svg]:size-[0.9rem] [&_svg]:text-fg-muted"
-                            >
-                                {isWatched ? <EyeOff /> : <Eye />}
-                            </IconButton>
-                        </div>
+                        <IconButton
+                            title={libraryState.inLibrary ? t('REMOVE_FROM_LIB') : t('ADD_TO_LIB')}
+                            onClick={onToggleInLibraryClick}
+                            className={cn('absolute right-2 top-2 z-[2] size-7 bg-black/55 opacity-0 backdrop-blur-sm transition-[transform,opacity] duration-150 hover:scale-110 active:scale-95 [&:hover_svg]:text-primary [&_svg]:size-(--icon-size-sm) [&_svg]:text-fg-muted', REVEAL_OPACITY)}
+                        >
+                            {libraryState.inLibrary ? <BookmarkCheck /> : <Bookmark />}
+                        </IconButton>
+                        :
+                        null
+                }
+                {
+                    libraryState.hasId ?
+                        <IconButton
+                            title={isWatched ? t('CTX_MARK_UNWATCHED') : t('CTX_MARK_WATCHED')}
+                            onClick={onToggleWatchedClick}
+                            className={cn('absolute right-2 top-11 z-[2] size-7 bg-black/55 opacity-0 backdrop-blur-sm transition-[transform,opacity] duration-150 hover:scale-110 active:scale-95 [&:hover_svg]:text-primary [&_svg]:size-(--icon-size-sm) [&_svg]:text-fg-muted', REVEAL_OPACITY)}
+                        >
+                            {isWatched ? <EyeOff /> : <Eye />}
+                        </IconButton>
                         :
                         null
                 }
                 <div className={cn(
                     'absolute inset-0 z-[-3] flex flex-row items-center justify-center transition-[filter] duration-200',
                     'group-hover:brightness-110 group-focus-within:brightness-110 group-[.active]:brightness-110 group-[.selected]:brightness-110',
-                    posterChangeCursor && 'hover:cursor-zoom-in',
+                    // The card is a link, so hovering the poster shows the hand, not a
+                    // zoom glass. posterChangeCursor is kept (a real alternate-action
+                    // flag) but no longer overrides the pointer cursor.
+                    posterChangeCursor && 'hover:cursor-pointer',
                 )}>
                     <Image
                         className="h-full w-full flex-none object-cover object-center opacity-90 [overflow-clip-margin:unset]"

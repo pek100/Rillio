@@ -56,6 +56,22 @@
     --shadow-island: 0 1px 3px rgba(0, 0, 0, 0.4), 0 1px 2px rgba(0, 0, 0, 0.3);
     --shadow-elevated: 0 8px 30px rgba(0, 0, 0, 0.5);
 
+    /* Icon sizing - one standard app glyph (replaces the old size-4 / size-5 mix,
+     * a touch smaller than that mix), a denser small variant, and the larger
+     * player control-bar glyph (down from the old 2.2rem). Same-context icons must
+     * be identical, so consume these via v4 arbitrary size utilities, e.g.
+     * size-(--icon-size) / size-(--icon-size-player), never a bare size-N. */
+    --icon-size: 1rem;
+    --icon-size-sm: 0.875rem;
+    --icon-size-player: 1.75rem;
+
+    /* "Ice" - off-whites subtly tinted toward the blue palette (bg #020407 /
+     * surface #0A1017 are blue-blacks). The player chrome paints its icons / text
+     * and the seek-bar track / buffered fill in ice instead of flat neutral greys.
+     * -muted is the lower-emphasis variant (labels, HDR badge, disabled glyphs). */
+    --color-ice: #E8F1FB;
+    --color-ice-muted: rgba(232, 241, 251, 0.62);
+
     /* shadcn token bridge (Phase 2 foundation kit). The adapted shadcn/Radix
      * primitives in components/ui read these semantic color names as Tailwind
      * utilities (bg-background, text-primary-foreground, border-border, ...) AND

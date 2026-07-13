@@ -69,7 +69,7 @@ const S = {
     runtimeLabel: (compact?: boolean) => cnj('flex-[0_1_auto] text-[1.25rem] font-semibold text-[color:var(--primary-foreground-color)] max-[640px]:m-0', compact ? 'my-4 mx-[0.4rem]' : 'mr-12'),
     imdbButton: 'flex-[0_1_auto] flex flex-row items-center rounded-full px-2 py-0 [border:var(--focus-outline-size)_solid_transparent] [transition:background-color_150ms_var(--ease-smooth,ease)] hover:bg-[var(--overlay-color)] focus:outline-none focus:[border-color:var(--primary-accent-color)]',
     imdbLabel: 'flex-[0_1_auto] mr-4 text-[1.25rem] font-semibold text-[color:var(--primary-foreground-color)]',
-    imdbIcon: 'flex-none w-12 h-12 text-[var(--color-imdb)]',
+    imdbIcon: 'flex-none h-8 w-16 text-[var(--color-imdb)]',
     description: 'mt-4 text-base font-normal leading-[2em] text-[color:var(--primary-foreground-color)]',
     descriptionLabel: 'uppercase text-[0.95rem] font-bold tracking-[0.05em] text-[color:var(--primary-foreground-color)] opacity-40',
     metaLinks: 'mt-6',

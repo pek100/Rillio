@@ -27,7 +27,7 @@ import { useCore } from 'rillio/core';
 import { useCloseModalRoute } from 'rillio-router';
 import { cn } from 'rillio/components/ui/cn';
 import { Button, IconButton } from 'rillio/components/ui/button';
-import { Dialog, DialogContent, DialogTitle, DialogFooter, ModalRoute } from 'rillio/components/ui/dialog';
+import { Dialog, DialogContent, DialogPortal, DialogTitle, DialogFooter, ModalRoute } from 'rillio/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from 'rillio/components/ui/select';
 import { Input } from 'rillio/components/ui/input';
 import { AddonDetailsModal, Image, SearchBar, SharePrompt } from 'rillio/components';
@@ -205,6 +205,14 @@ const Addons = () => {
     return (
         <>
             <Dialog open modal={false} onOpenChange={(next) => { if (!next && !nestedModalOpen) closeAddons(); }}>
+                {/* modal={false} means Radix renders NO DialogOverlay, so without this
+                    the page behind would show through unblurred. Paint our own scrim
+                    matching the blur the ModalRoute-based modals (Settings/Cached) get
+                    from DialogOverlay. pointer-events-none preserves the deliberate
+                    non-trapping outside-interaction the nested AddonDetails modal needs. */}
+                <DialogPortal>
+                    <div aria-hidden className="pointer-events-none fixed inset-0 z-40 bg-black/60 backdrop-blur-[24px] animate-in fade-in-0" />
+                </DialogPortal>
                 <DialogContent
                     showClose={false}
                     aria-label={t('ADDONS')}

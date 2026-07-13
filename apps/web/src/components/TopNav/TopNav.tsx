@@ -63,7 +63,7 @@ const TopNav = ({ className, route }: Props) => {
             title={t('Account')}
             className={cn(ICON_BUTTON, active ? 'bg-surface-hover text-fg' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
         >
-            <CircleUser className="size-4" />
+            <CircleUser className="size-(--icon-size)" />
         </Button>
     ), [t]);
 
@@ -104,7 +104,7 @@ const TopNav = ({ className, route }: Props) => {
                     tabIndex={-1}
                     className={cn(ICON_BUTTON_BARE, 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
                 >
-                    <Search className="size-4" />
+                    <Search className="size-(--icon-size)" />
                 </Link>
                 <Link
                     to="/addons"
@@ -112,7 +112,7 @@ const TopNav = ({ className, route }: Props) => {
                     tabIndex={-1}
                     className={cn(ICON_BUTTON_BARE, route === 'addons' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
                 >
-                    <Puzzle className="size-4" />
+                    <Puzzle className="size-(--icon-size)" />
                 </Link>
                 <Link
                     to="/cached"
@@ -122,8 +122,11 @@ const TopNav = ({ className, route }: Props) => {
                 >
                     {/* The dot anchors to the glyph and is intentionally NOT inside
                         any overflow-hidden box, so it is never clipped. */}
-                    <span className="relative overflow-visible">
-                        <Download className="size-4" />
+                    {/* inline-flex so the glyph is grid-centered in the circle (a bare
+                        inline span left a baseline gap, pushing the icon off-center);
+                        still overflow-visible so the badge dot is never clipped. */}
+                    <span className="relative inline-flex items-center justify-center overflow-visible">
+                        <Download className="size-(--icon-size)" />
                         {
                             downloading ?
                                 <span className="absolute -right-1 -top-1 size-2 animate-pulse rounded-full bg-accent" />
@@ -138,7 +141,7 @@ const TopNav = ({ className, route }: Props) => {
                     tabIndex={-1}
                     className={cn(ICON_BUTTON_BARE, route === 'settings' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
                 >
-                    <Settings className="size-4" />
+                    <Settings className="size-(--icon-size)" />
                 </Link>
                 <NavMenu renderLabel={renderAccountLabel} />
             </div>

@@ -27,6 +27,7 @@ const twMerge = extendTailwindMerge({
                 'bg', 'surface', 'surface-hover', 'line',
                 'accent', 'accent-soft', 'highlight',
                 'fg', 'fg-muted', 'fg-subtle',
+                'ice', 'ice-muted',
                 'success', 'warning', 'danger',
                 // shadcn bridge aliases
                 'background', 'foreground',
