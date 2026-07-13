@@ -86,8 +86,8 @@ const Indicator = ({ className, videoState, disabled }: Props) => {
     return (
         <Transition when={shown && !disabled} name={'fade'} duration={300}>
             <div className={classNames(className, 'absolute flex h-16 select-none items-center justify-center')}>
-                <div className={'relative flex h-full flex-none items-center justify-center rounded-full bg-(--modal-background-color) px-8 text-center font-bold text-fg'}>
-                    <div>{label} {value}</div>
+                <div className={'flex h-full flex-none items-center justify-center rounded-full bg-(--modal-background-color) px-8 text-center font-bold text-fg'}>
+                    {label} {value}
                 </div>
             </div>
         </Transition>

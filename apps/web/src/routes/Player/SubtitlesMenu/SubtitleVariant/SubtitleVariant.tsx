@@ -37,7 +37,7 @@ type Props = {
 
 const hasValidLabel = (label?: string) => label && label.length > 0 && !label.startsWith('http');
 
-const CTX_OPTION = 'flex min-w-64 flex-row items-center justify-start gap-4 rounded-none px-6 py-5 hover:bg-surface-hover';
+const CTX_OPTION = 'flex min-w-64 justify-start gap-4 rounded-none px-6 py-5 hover:bg-surface-hover';
 
 const SubtitleVariant = ({ track, selected, onSelect }: Props) => {
     const { t } = useTranslation();
@@ -82,7 +82,7 @@ const SubtitleVariant = ({ track, selected, onSelect }: Props) => {
             title={hoverTitle}
             onClick={onSelectClick}
             className={cn(
-                'mb-2 flex h-16 w-full flex-row items-center rounded-card px-6 hover:bg-surface-hover',
+                'mb-2 flex h-16 w-full rounded-card px-6 hover:bg-surface-hover',
                 selected && 'bg-accent-soft',
             )}
         >
