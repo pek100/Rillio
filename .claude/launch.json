@@ -6,6 +6,12 @@
       "runtimeExecutable": "pnpm",
       "runtimeArgs": ["--filter", "rillio", "exec", "webpack", "serve", "--mode", "development", "--env", "serverType=http"],
       "port": 8080
+    },
+    {
+      "name": "web-build",
+      "runtimeExecutable": "npx",
+      "runtimeArgs": ["--yes", "http-server", "apps/web/build", "-p", "8123", "-c-1", "--silent"],
+      "port": 8123
     }
   ]
 }
