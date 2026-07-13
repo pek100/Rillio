@@ -26,7 +26,7 @@ import VolumeSlider from './VolumeSlider';
 // off-white, not flat grey) that lifts to pure white on hover, press-scale, and a
 // dim (not blocked) disabled. Icons use the player icon-size token so every
 // control-bar glyph is identical (and smaller than the old 2.2rem).
-const CB_BUTTON = 'size-16 rounded-full bg-transparent opacity-100 transition-colors duration-150 hover:bg-white/10 hover:opacity-100 active:scale-[0.97] [&_svg]:size-(--icon-size-player) [&_svg]:text-ice [&_svg]:transition-colors [&_svg]:duration-150 [&:hover_svg]:text-white';
+const CB_BUTTON = 'size-16 shrink-0 rounded-full bg-transparent opacity-100 transition-colors duration-150 hover:bg-white/10 hover:opacity-100 active:scale-[0.97] [&_svg]:size-(--icon-size-player) [&_svg]:text-ice [&_svg]:transition-colors [&_svg]:duration-150 [&:hover_svg]:text-white';
 const CB_ICON = 'size-(--icon-size-player)';
 
 // Control-bar "islands": rounded-full translucent containers that group the icon
@@ -34,7 +34,9 @@ const CB_ICON = 'size-(--icon-size-player)';
 // surface (very low opacity black + backdrop blur), unlike decorative wrappers.
 // Uniform padding all around (px == py) keeps the pill's endcap radius concentric
 // with the circular button hover shapes; gap-2 gives each button breathing room.
-const CB_ISLAND = 'flex flex-row items-center gap-2 rounded-full bg-black/25 p-1.5 backdrop-blur-md';
+// flex-none is load-bearing: without it a tight row compresses the island and its
+// buttons below their circular size (the right island always had it).
+const CB_ISLAND = 'flex flex-none flex-row items-center gap-2 rounded-full bg-black/25 p-1.5 backdrop-blur-md';
 
 type Props = {
     className?: string;
@@ -237,14 +239,21 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                         onClick={toggleRemainingTimeMode}
                         className={cn(CB_ISLAND, 'cursor-pointer select-none self-stretch whitespace-nowrap px-6 text-lg font-semibold tracking-tight tabular-nums text-ice transition-colors duration-150 hover:text-white')}
                     >
-                        {formatTime(seekPreview !== null ? seekPreview : (time ?? null))}
-                        <span className="mx-1.5 font-normal text-ice-muted">/</span>
                         {
-                            remainingTimeMode && typeof duration === 'number' && !isNaN(duration) && typeof time === 'number' ?
-                                formatTime((duration - time) / ((playbackSpeed as number) || 1), '-')
+                            // Left side: the position. Remaining-time mode replaces IT
+                            // (a countdown is a position, not a length); the scrub
+                            // preview overrides both while dragging.
+                            seekPreview !== null ?
+                                formatTime(seekPreview)
                                 :
-                                formatTime(duration ?? null)
+                                remainingTimeMode && typeof duration === 'number' && !isNaN(duration) && typeof time === 'number' ?
+                                    '-' + formatTime((duration - time) / ((playbackSpeed as number) || 1))
+                                    :
+                                    formatTime(time ?? null)
                         }
+                        <span className="mx-1.5 font-normal text-ice-muted">/</span>
+                        {/* Right side: always the total duration. */}
+                        {formatTime(duration ?? null)}
                     </button>
                 }
                 <div className={'flex-1'} />
