@@ -29,10 +29,17 @@ const ACTIVE_SLIDER_CLASS = 'active-slider-within';
 // fading into the tonal danger red toward 200%. Transparent regions let the
 // consumer's own track/fill color show through, so the normal range keeps its
 // theme color and only the boost half warms up (no warning-yellow step).
+// The FILLED range gets the full-strength band; the resting TRACK gets a softer
+// one with the alpha baked into the gradient itself, so the track's own paint is
+// never dimmed (an element-level opacity used to ghost the whole track).
 const AUDIO_BOOST_GRADIENT = 'linear-gradient(to right, ' +
     'transparent 0%, ' +
     'transparent 50%, ' +
     'var(--color-danger) 100%)';
+const AUDIO_BOOST_BAND = 'linear-gradient(to right, ' +
+    'transparent 0%, ' +
+    'transparent 50%, ' +
+    'color-mix(in srgb, var(--color-danger) 40%, transparent) 100%)';
 
 type Props = {
     className?: string;
@@ -205,7 +212,7 @@ const Slider = ({
                         !audioBoost && 'bg-(--primary-accent-color) opacity-20',
                         trackClassName,
                     )}
-                    style={audioBoost ? { backgroundImage: AUDIO_BOOST_GRADIENT, opacity: 0.3 } : undefined}
+                    style={audioBoost ? { backgroundImage: AUDIO_BOOST_BAND } : undefined}
                 />
             </div>
             <div className={layer}>

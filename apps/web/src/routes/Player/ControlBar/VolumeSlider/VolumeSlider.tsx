@@ -12,12 +12,12 @@ import { cn } from 'rillio/components/ui/cn';
 // while sliding. These were the whole reason VolumeSlider had a .less reaching the
 // Slider's hashed part classes; they are now passed via the Slider's per-part props.
 // (The >100% audio-boost band is owned by the Slider itself via the audioBoost prop.)
-const TRACK = 'bg-(--overlay-color) opacity-100';
-const FILLED = 'bg-(--color-fg)';
-const THUMB = 'bg-(--color-fg) transition-transform duration-150 ' +
-    'group-hover:scale-[1.2] group-[.active]:scale-[1.2] ' +
-    "after:absolute after:inset-0 after:rounded-full after:content-[''] " +
-    'after:shadow-[0_0_0_0.25rem_white_inset]';
+// Ice family over the dark island (the old --overlay-color track was invisible
+// dark-on-dark inside the black/25 pill); plain thumb, matching the seek bar.
+const TRACK = 'bg-ice/15 opacity-100';
+const FILLED = 'bg-ice';
+const THUMB = 'bg-ice transition-transform duration-150 ' +
+    'group-hover:scale-[1.2] group-[.active]:scale-[1.2]';
 
 type Props = {
     className?: string;
