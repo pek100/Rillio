@@ -31,7 +31,7 @@ const CB_ICON = 'size-(--icon-size-player)';
 // Control-bar "islands": rounded-full translucent containers that group the icon
 // clusters (transport left, menus right) over the video. A deliberate grouping
 // surface (very low opacity black + backdrop blur), unlike decorative wrappers.
-const CB_ISLAND = 'flex flex-row items-center gap-1 rounded-full bg-black/25 backdrop-blur-md';
+const CB_ISLAND = 'flex flex-row items-center gap-1 rounded-full bg-black/25 px-2.5 py-1 backdrop-blur-md';
 
 type Props = {
     className?: string;
@@ -191,7 +191,7 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                 onSeekRequested={onSeekRequested}
                 playbackSpeed={playbackSpeed}
             />
-            <div className={'flex flex-row items-center gap-2 max-sm:relative max-sm:gap-[0.15rem] max-sm:overflow-visible max-sm:px-2'}>
+            <div className={'flex flex-row items-center gap-3 px-3 pb-2 max-sm:relative max-sm:gap-[0.15rem] max-sm:overflow-visible max-sm:px-2'}>
                 <div className={CB_ISLAND}>
                     <IconButton className={cn(CB_BUTTON, typeof paused !== 'boolean' && 'opacity-40')} title={paused ? t('PLAYER_PLAY') : t('PLAYER_PAUSE')} tabIndex={-1} onClick={onPlayPauseButtonClick}>
                         {typeof paused !== 'boolean' || paused ? <Play className={CB_ICON} /> : <Pause className={CB_ICON} />}
@@ -207,17 +207,19 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                     <IconButton className={cn(CB_BUTTON, typeof muted !== 'boolean' && 'opacity-40')} title={muted ? t('PLAYER_UNMUTE') : t('PLAYER_MUTE')} tabIndex={-1} onClick={onMuteButtonClick}>
                         <VolumeIcon className={CB_ICON} />
                     </IconButton>
+                    {
+                        // The volume slider belongs to the transport island (it is
+                        // part of the audio cluster, not a floating control).
+                        !platform.isMobile ?
+                            <VolumeSlider
+                                className={'ml-1 mr-2 h-16 flex-[0_1_10rem] [--thumb-size:1rem] [--track-size:0.35rem]'}
+                                volume={volume ?? null}
+                                muted={muted ?? undefined}
+                                onVolumeChangeRequested={onVolumeChangeRequested}
+                            />
+                            : null
+                    }
                 </div>
-                {
-                    !platform.isMobile ?
-                        <VolumeSlider
-                            className={'mx-2 h-16 flex-[0_1_10rem] [--thumb-size:1rem] [--track-size:0.35rem]'}
-                            volume={volume ?? null}
-                            muted={muted ?? undefined}
-                            onVolumeChangeRequested={onVolumeChangeRequested}
-                        />
-                        : null
-                }
                 <div className={'flex-1'} />
                 <IconButton className={cn(CB_BUTTON, 'hidden max-sm:flex')} onClick={toggleButtonsMenu}>
                     <MoreVertical className={CB_ICON} />
@@ -225,7 +227,7 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                 <div className={cn(
                     // Desktop: the right menus island (min-width sm only, so it never
                     // clashes with the mobile overflow-popover styling below).
-                    'flex flex-none flex-row gap-1 sm:rounded-full sm:bg-white/5 sm:backdrop-blur-md',
+                    'flex flex-none flex-row gap-1 sm:rounded-full sm:bg-black/25 sm:px-2.5 sm:py-1 sm:backdrop-blur-md',
                     'max-sm:absolute max-sm:bottom-[4.5rem] max-sm:right-0 max-sm:m-2 max-sm:max-w-[calc(100dvw-1rem)] max-sm:gap-[0.15rem] max-sm:overflow-x-auto max-sm:rounded-card max-sm:bg-(--modal-background-color) max-sm:p-2 max-sm:shadow-(--outer-glow)',
                     buttonsMenuOpen ? 'max-sm:flex' : 'max-sm:hidden',
                 )}>

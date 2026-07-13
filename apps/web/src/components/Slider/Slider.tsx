@@ -25,12 +25,13 @@ import { cn } from 'rillio/components/ui/cn';
 
 const ACTIVE_SLIDER_CLASS = 'active-slider-within';
 
-// The >100% audio-boost band: neutral up to the midpoint (100%), warming into
-// warning then danger toward 200%. Kept identical to the legacy gradient.
+// The >100% audio-boost band: transparent up to the midpoint (100% volume), then
+// fading into the tonal danger red toward 200%. Transparent regions let the
+// consumer's own track/fill color show through, so the normal range keeps its
+// theme color and only the boost half warms up (no warning-yellow step).
 const AUDIO_BOOST_GRADIENT = 'linear-gradient(to right, ' +
-    'var(--primary-foreground-color) 0%, ' +
-    'var(--primary-foreground-color) 50%, ' +
-    'var(--color-warning) 75%, ' +
+    'transparent 0%, ' +
+    'transparent 50%, ' +
     'var(--color-danger) 100%)';
 
 type Props = {
