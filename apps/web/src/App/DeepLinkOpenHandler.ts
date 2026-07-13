@@ -3,6 +3,7 @@
 import React from 'react';
 import { useNavigate } from 'react-router';
 import { usePlatform } from 'rillio/common';
+import { openModal } from 'rillio/common/modalEvents';
 import { parseDeepLink } from 'rillio/common/deepLinks';
 
 // parseDeepLink lives in an untyped .js module; its documented contract is one
@@ -28,10 +29,13 @@ const DeepLinkOpenHandler = () => {
                 return;
             }
             if (action.type === 'addon') {
-                // Same entry point as Addons.js: the `addon` query param opens the
-                // addon-details / install modal for that transport url.
-                navigate(`/addons?addon=${encodeURIComponent(action.transportUrl)}`);
+                // Open the Addons modal pre-expanded on this addon's details / install
+                // pane (bus, not URL - no history entry to overshoot on close).
+                openModal('addons', { addon: action.transportUrl });
             } else {
+                // A validated route deep link (e.g. /settings). Real routes navigate
+                // normally; the old modal paths are caught + normalized by
+                // ModalUrlWatcher, which opens the matching modal via the bus.
                 navigate(action.path);
             }
         };

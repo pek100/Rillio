@@ -3,23 +3,22 @@
 /**
  * Command palette. Clean-room rewrite onto the kit's cmdk Command (roving-highlight
  * list machinery) while KEEPING the bespoke createPortal + deliberately-un-animated
- * blur backdrop (documented perf choice). It is now a URL-driven modal route
- * (registered at SEARCH_MODAL_PATH in routerPaths, per decisions.md #7) instead of
- * TopNav internal state: it closes by navigating back (useCloseModalRoute), and its
- * core-backed hooks only mount while the route is active (withCoreSuspender).
+ * blur backdrop (documented perf choice). It is a bus-driven modal (common/modalEvents)
+ * mounted by ModalHost: it takes an `onClose` (a pure bus close, never a history
+ * navigation), and its core-backed hooks only mount while it is open (withCoreSuspender).
  *
  * Reused verbatim: useSearchHistory / useLocalSearch (LocalSearch model, 250ms
  * debounce) / usePlayUrl (paste-to-play) / deepLinks.search hrefs / submit-to-/search
  * / focus-restore-on-close. cmdk's own filtering is disabled (shouldFilter=false) -
  * the core model already returns the matched set - and Enter submits the free-text
- * search rather than selecting a row, matching the original behaviour.
+ * search rather than selecting a row, matching the original behaviour. Navigating to a
+ * real route (a suggestion, the submit, or paste-to-play) closes the palette via the bus.
  */
 
 import React from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { useCloseModalRoute } from 'rillio-router';
 import { Command, CommandInput } from 'rillio/components/ui/command';
 import SearchSuggestions from 'rillio/components/SearchSuggestions';
 
@@ -29,16 +28,16 @@ const useLocalSearch = require('rillio/components/NavBar/HorizontalNavBar/Search
 const { default: usePlayUrl } = require('rillio/common/usePlayUrl');
 const { withCoreSuspender } = require('rillio/common/CoreSuspender');
 
-// URL-driven modal route path (registered in router/routerPaths). Kept here so
-// TopNav (the search icon Link) and App (the keyboard shortcut) share one source.
-export const SEARCH_MODAL_PATH = '/search-palette';
-
 const EMPTY_ROW = 'flex items-center justify-center gap-2.5 rounded-card px-3 py-2.5 text-sm text-fg-subtle';
 
-const SearchModal = () => {
+type Props = {
+    onClose: () => void,
+};
+
+const SearchModal = ({ onClose }: Props) => {
     const { t } = useTranslation();
     const navigate = useNavigate();
-    const close = useCloseModalRoute();
+    const close = onClose;
     const searchHistory = useSearchHistory();
     const localSearch = useLocalSearch();
     const { handlePlayUrl } = usePlayUrl();
@@ -70,8 +69,8 @@ const SearchModal = () => {
         };
     }, [close]);
 
-    // Enter runs the full-text search (not a cmdk row selection). Navigating away
-    // unmounts this route, so no explicit close is needed.
+    // Enter runs the full-text search (not a cmdk row selection), then closes the
+    // palette (the bus close, since navigating no longer unmounts it).
     const onInputKeyDown = React.useCallback((event: React.KeyboardEvent) => {
         if (event.key !== 'Enter') return;
         const value = query.trim();
@@ -79,20 +78,23 @@ const SearchModal = () => {
         event.preventDefault();
         event.stopPropagation();
         navigate(`/search?search=${encodeURIComponent(value)}`);
-    }, [query, navigate]);
+        close();
+    }, [query, navigate, close]);
 
     const onPaste = React.useCallback((event: React.ClipboardEvent) => {
         const pasted = event.clipboardData.getData('text');
         if (pasted) {
-            handlePlayUrl(pasted);
+            // Only close if it was a playable URL/magnet (handlePlayUrl navigated).
+            handlePlayUrl(pasted).then((handled: boolean) => { if (handled) close(); });
         }
-    }, [handlePlayUrl]);
+    }, [handlePlayUrl, close]);
 
     // History/suggestion rows carry a hash deepLink; navigate via the router (strip
-    // the leading '#') so it matches the submit path and unmounts the palette.
+    // the leading '#') so it matches the submit path, then close the palette.
     const goTo = React.useCallback((href: string) => {
         navigate(href.replace(/^#/, ''));
-    }, [navigate]);
+        close();
+    }, [navigate, close]);
 
     const historyItems = searchHistory?.items ?? [];
     const suggestions = localSearch?.items ?? [];

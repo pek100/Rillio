@@ -429,8 +429,8 @@ html body {
 }
 
 /* Router view-stack structure (ported from router/styles.css). These are the
- * absolute-positioning + stacking + modal-top selectors that own the .routes-
- * container / .route-container / .route-content / .modals-container layout; they
+ * absolute-positioning + stacking selectors that own the .routes-container /
+ * .route-container / .route-content / .modals-container layout; they
  * are structural relationships Tailwind utilities cannot express (child-index and
  * :not(:last-child) targeting), so they stay as plain global rules here. */
 .routes-container {
@@ -451,11 +451,6 @@ html body {
 
 .routes-container .route-container:not(:last-child) {
     display: none;
-}
-
-/* A modal route floats over the page beneath it, which stays visible. */
-.routes-container.modal-top .route-container:nth-last-child(2) {
-    display: block;
 }
 
 .routes-container .route-container .route-content {

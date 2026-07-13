@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { Puzzle } from 'lucide-react';
 import { Dialog, DialogContent, DialogTitle } from 'rillio/components/ui/dialog';
 import { Button } from 'rillio/components/ui/button';
+import { openModal } from 'rillio/common/modalEvents';
 
 const useEvents = require('./useEvents').default;
 
@@ -77,8 +78,7 @@ const EventModal = () => {
                     {modal?.addon?.manifestUrl ? (
                         <Button
                             className="px-8"
-                            href={`#/addons?addon=${encodeURIComponent(modal.addon.manifestUrl)}`}
-                            onClick={onClose}
+                            onClick={() => { openModal('addons', { addon: modal.addon.manifestUrl }); onClose(); }}
                         >
                             {t('INSTALL_ADDON')}
                         </Button>

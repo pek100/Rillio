@@ -2,14 +2,11 @@
 
 import React from 'react';
 import routes from 'rillio/routes';
-import SearchModal, { SEARCH_MODAL_PATH } from 'rillio/components/SearchModal';
 
 type RouterPathDef = {
     path: string,
     view: number,
     element: React.ReactNode,
-    // A modal route floats over the view beneath it, which stays visible.
-    modal?: boolean,
 };
 
 const routerPaths: RouterPathDef[] = [
@@ -54,36 +51,9 @@ const routerPaths: RouterPathDef[] = [
         element: <routes.MetaDetails />,
     },
     {
-        path: '/addons/:type?/:transportUrl?/:catalogId?',
-        view: 3,
-        modal: true,
-        element: <routes.Addons />,
-    },
-    {
-        path: '/settings',
-        view: 3,
-        modal: true,
-        element: <routes.Settings />,
-    },
-    {
-        path: '/cached',
-        view: 3,
-        modal: true,
-        element: <routes.Cached />,
-    },
-    {
         path: '/player/:stream/:streamTransportUrl?/:metaTransportUrl?/:type?/:id?/:videoId?',
         view: 4,
         element: <routes.Player />,
-    },
-    {
-        // The search palette: a modal route floating over the current view, given
-        // the highest view number so it overlays any route (incl. Player) without
-        // clearing it. It renders its own portal + blurred backdrop.
-        path: SEARCH_MODAL_PATH,
-        view: 5,
-        modal: true,
-        element: <SearchModal />,
     },
     {
         path: '/',

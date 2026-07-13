@@ -1,14 +1,14 @@
 // Copyright (C) 2017-2023 Smart code 203358507
 
 import React from 'react';
-import { useNavigate } from 'react-router';
 import { useTranslate } from 'rillio/common';
-import { toPath } from 'rillio-router';
 
 // The installed/remote addon selectable shapes are the dynamic core model state;
 // typing them exhaustively here buys little, so the mapper stays `any`-based and
 // the consumer annotates the returned selectable inputs.
-const mapSelectableInputs = (installedAddons: any, remoteAddons: any, t: any, navigate: (path: string) => void): any[] => {
+// `onSelect` receives the chosen deepLinks.addons value (a #/addons/... path); the
+// consumer parses it into modal-local filter state instead of navigating.
+const mapSelectableInputs = (installedAddons: any, remoteAddons: any, t: any, onSelect: (value: string) => void): any[] => {
     const selectedCatalog = remoteAddons.selectable.catalogs.concat(installedAddons.selectable.catalogs).find(({ selected }: any) => selected);
     const catalogSelect = {
         options: remoteAddons.selectable.catalogs
@@ -28,7 +28,7 @@ const mapSelectableInputs = (installedAddons: any, remoteAddons: any, t: any, na
             :
             null,
         onSelect: (value: string) => {
-            navigate(toPath(value));
+            onSelect(value);
         }
     };
     const selectedType = installedAddons.selected !== null
@@ -59,18 +59,17 @@ const mapSelectableInputs = (installedAddons: any, remoteAddons: any, t: any, na
                     t.string('SELECT_TYPE');
         },
         onSelect: (value: string) => {
-            navigate(toPath(value));
+            onSelect(value);
         }
     };
     return [catalogSelect, typeSelect];
 };
 
-const useSelectableInputs = (installedAddons: InstalledAddons, remoteAddons: RemoteAddons): any[] => {
+const useSelectableInputs = (installedAddons: InstalledAddons, remoteAddons: RemoteAddons, onSelect: (value: string) => void): any[] => {
     const t = useTranslate();
-    const navigate = useNavigate();
     const selectableInputs = React.useMemo(() => {
-        return mapSelectableInputs(installedAddons, remoteAddons, t, navigate);
-    }, [installedAddons, remoteAddons]);
+        return mapSelectableInputs(installedAddons, remoteAddons, t, onSelect);
+    }, [installedAddons, remoteAddons, onSelect]);
     return selectableInputs;
 };
 

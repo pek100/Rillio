@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { Play, Info, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
-import { toPath, useCloseModalRoute } from 'rillio-router';
+import { toPath } from 'rillio-router';
 import { useCore } from 'rillio/core';
 import { Button, IconButton, ModalRoute, cn } from 'rillio/components/ui';
 import useCachedTorrents, { CacheEntry } from './useCachedTorrents';
@@ -227,8 +227,12 @@ const Row = ({ entry, metaLink, onPlay, onMoreInfo, onSetPaused, onDelete }: {
 // download progress, pin (eviction protection) and delete. The user's window
 // into "what is eating my disk" - and the place the disk-full error can send
 // them to free space.
-const Cached = () => {
-    const closeCached = useCloseModalRoute();
+type Props = {
+    onClose: () => void,
+};
+
+const Cached = ({ onClose }: Props) => {
+    const closeCached = onClose;
     const navigate = useNavigate();
     const core = useCore();
     const { entries, failed, setPaused, remove } = useCachedTorrents();
@@ -240,9 +244,12 @@ const Cached = () => {
     // is unknown to the library, fall back to a stream-only link: the core
     // encodes the stream (base64 of zlib JSON) and the /player/:stream route
     // decodes it back, loading the torrent through the local streaming server.
+    // Navigating to a real route (player / metadetails) from inside the modal
+    // closes the modal via the bus first, then navigates.
     const play = useCallback((entry: CacheEntry) => {
         const playerLink = libraryLinks[entry.infoHash]?.playerLink;
         if (typeof playerLink === 'string') {
+            closeCached();
             navigate(toPath(playerLink));
             return;
         }
@@ -254,17 +261,19 @@ const Cached = () => {
         })
             .then((encoded) => {
                 if (typeof encoded === 'string') {
+                    closeCached();
                     navigate(`/player/${encodeURIComponent(encoded)}`);
                 } else {
                     console.error('Cached: the core could not encode a stream for', entry.infoHash);
                 }
             })
             .catch((error) => console.error('Cached: encoding the stream failed', error));
-    }, [navigate, libraryLinks]);
+    }, [navigate, libraryLinks, closeCached]);
 
     const openMetaDetails = useCallback((link: string) => {
+        closeCached();
         navigate(toPath(link));
-    }, [navigate]);
+    }, [navigate, closeCached]);
 
     const totalBytes = useMemo(
         () => (entries ?? []).reduce((sum, entry) => sum + entry.downloaded, 0),

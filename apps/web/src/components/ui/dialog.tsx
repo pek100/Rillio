@@ -4,11 +4,11 @@
  * Dialog primitives + the ModalRoute shell (foundation kit).
  *
  * Radix Dialog gives focus-trap, Escape, scroll-lock, outside-click and aria for
- * free. ModalRoute is the wrapper every route-modal (Addons/Settings/Cached) and
- * every domain modal (AddonDetails/Event/SharePrompt) composes on: fully CONTROLLED
- * open (driven by the URL view-stack, never DialogTrigger), a suspense-friendly
- * body, and a per-route size via className. The overlay is our blur(24px) +
- * rgba(0,0,0,.6) scrim so the view beneath stays visible-but-blurred.
+ * free. ModalRoute is the wrapper the bus-driven modals (Settings/Cached) and every
+ * domain modal (AddonDetails/Event/SharePrompt) compose on: fully CONTROLLED open
+ * (driven by the caller's state, never DialogTrigger), a suspense-friendly body, and
+ * a per-modal size via className. The overlay is our blur(24px) + rgba(0,0,0,.6)
+ * scrim so the view beneath stays visible-but-blurred.
  */
 
 import React, { forwardRef, type ComponentPropsWithoutRef, type ElementRef, type ReactNode } from 'react';
@@ -97,9 +97,9 @@ export const DialogDescription = forwardRef<
 });
 
 /**
- * ModalRoute - the controlled modal shell for URL-driven modal routes.
+ * ModalRoute - the controlled modal shell for the app's modals.
  *
- * `open` and `onClose` come from router state (e.g. useCloseModalRoute); no
+ * `open` and `onClose` come from the caller (the modal bus, or domain state); no
  * DialogTrigger is ever rendered. `size` picks a max-width preset, or pass
  * `className` for a bespoke width. `title`/`description` are announced to screen
  * readers (visually hidden when not shown). Children can suspend - keep the fallback

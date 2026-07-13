@@ -17,6 +17,7 @@ import { useFullscreen } from 'rillio/common/Fullscreen';
 import { withCoreSuspender } from 'rillio/common/CoreSuspender';
 import { useDisplayName } from 'rillio/common/useDisplayName';
 import { openSync } from 'rillio/common/syncEvents';
+import { openModal } from 'rillio/common/modalEvents';
 import { useToast } from 'rillio/components/ui/use-toast';
 import { Button } from 'rillio/components/ui/button';
 import { cn } from 'rillio/components/ui/cn';
@@ -120,7 +121,7 @@ const NavMenuContent = ({ onSelect }: Props) => {
             }
 
             <div className="border-t border-line py-1">
-                <Button variant="ghost" className={ROW} title={t('SETTINGS')} href="#/settings">
+                <Button variant="ghost" className={ROW} title={t('SETTINGS')} onClick={() => openModal('settings')}>
                     <Settings />
                     <span className="flex-1 text-left">{t('SETTINGS')}</span>
                 </Button>

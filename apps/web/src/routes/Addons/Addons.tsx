@@ -1,11 +1,17 @@
 // Copyright (C) 2017-2024 Smart code 203358507
 
 /**
- * Addons - a URL-driven modal ROUTE. Clean-room rewrite onto the foundation kit:
- * the frame is a controlled Radix Dialog (open always true, closed via the router
- * view-stack through useCloseModalRoute), the filter pills are kit Selects, the
- * addon list is a flat divide-y of Addon rows, and the four nested surfaces
+ * Addons - a bus-driven modal (common/modalEvents), mounted by ModalHost. Clean-room
+ * rewrite onto the foundation kit: the frame is a controlled Radix Dialog (open always
+ * true, closed via a pure bus close, never history), the filter pills are kit Selects,
+ * the addon list is a flat divide-y of Addon rows, and the four nested surfaces
  * (all-filters, add-addon, share, addon-details) layer on top.
+ *
+ * State that used to live in the URL is now modal-local, seeded once from the open
+ * payload: the catalog filter (type/transportUrl/catalogId) and the addon-details pane
+ * (addon transport url). A deep link opens the modal pre-expanded to the right sub-view.
+ * The filter Selects update this local state instead of navigating, so opening/closing
+ * the modal never touches the address bar or browser history.
  *
  * The outer Dialog is modal={false} on purpose: it must NOT trap focus or disable
  * outside pointer events, because (a) it matches the old non-trapping shell and
@@ -13,18 +19,17 @@
  * interactive. The old "let a nested dialog eat Escape first" precedence is kept by
  * guarding the Dialog's Escape / outside-interaction while any nested modal is open.
  *
- * Visuals only: every hook, the deep-link filter navigation, the InstallAddon /
- * UninstallAddon dispatch, the addon-url parse, and the search predicate are reused
- * exactly as before.
+ * Visuals only: every hook, the InstallAddon / UninstallAddon dispatch, the addon-url
+ * parse, and the search predicate are reused exactly as before.
  */
 
 import React from 'react';
-import { useParams } from 'react-router';
-import { useSearchParams } from 'react-router-dom';
+import { matchPath } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { Puzzle, Plus, SlidersHorizontal, Link } from 'lucide-react';
 import { useCore } from 'rillio/core';
-import { useCloseModalRoute } from 'rillio-router';
+import { toPath } from 'rillio-router';
+import type { AddonsPayload } from 'rillio/common/modalEvents';
 import { cn } from 'rillio/components/ui/cn';
 import { Button, IconButton } from 'rillio/components/ui/button';
 import { Dialog, DialogContent, DialogPortal, DialogTitle, DialogFooter, ModalRoute } from 'rillio/components/ui/dialog';
@@ -36,7 +41,6 @@ import { AddonPlaceholder } from './AddonPlaceholder';
 
 const useInstalledAddons = require('./useInstalledAddons').default;
 const useRemoteAddons = require('./useRemoteAddons').default;
-const useAddonDetailsTransportUrl = require('./useAddonDetailsTransportUrl').default;
 const useSelectableInputs = require('./useSelectableInputs').default;
 const { usePlatform, useBinaryState, withCoreSuspender } = require('rillio/common');
 const useToast = require('rillio/common/Toast/useToast');
@@ -85,22 +89,47 @@ const PlaceholderList = () => (
     </div>
 );
 
-const Addons = () => {
-    const { type, transportUrl, catalogId } = useParams();
-    const [queryParams] = useSearchParams();
-    const urlParams = React.useMemo(() => ({
-        type,
-        transportUrl,
-        catalogId,
-    }), [type, transportUrl, catalogId]);
+const ADDONS_PATH = '/addons/:type?/:transportUrl?/:catalogId?';
+
+type UrlParams = {
+    type?: string,
+    transportUrl?: string,
+    catalogId?: string,
+};
+
+type Props = {
+    payload?: AddonsPayload,
+    onClose: () => void,
+};
+
+const Addons = ({ payload, onClose }: Props) => {
+    // The catalog filter (type/transportUrl/catalogId) and the open addon-details
+    // pane used to come from the URL; they are now modal-local, seeded from the open
+    // payload so a deep link lands pre-expanded.
+    const [urlParams, setUrlParams] = React.useState<UrlParams>(() => ({
+        type: payload?.type,
+        transportUrl: payload?.transportUrl,
+        catalogId: payload?.catalogId,
+    }));
+    const [addonDetailsTransportUrl, setAddonDetailsTransportUrl] = React.useState<string | null>(payload?.addon ?? null);
     const { t } = useTranslation();
     const platform = usePlatform();
     const core = useCore();
     const toast = useToast();
     const installedAddons = useInstalledAddons(urlParams);
     const remoteAddons = useRemoteAddons(urlParams);
-    const [addonDetailsTransportUrl, setAddonDetailsTransportUrl] = useAddonDetailsTransportUrl(urlParams);
-    const selectInputs: SelectableInput[] = useSelectableInputs(installedAddons, remoteAddons);
+    // A filter Select carries a deepLinks.addons value (a #/addons/... path). Parse it
+    // into the local filter params instead of navigating, so the URL stays clean.
+    const selectFilterPath = React.useCallback((link: string) => {
+        const match = matchPath({ path: ADDONS_PATH, end: true }, toPath(link));
+        const params = (match?.params ?? {}) as UrlParams;
+        setUrlParams({
+            type: params.type ?? undefined,
+            transportUrl: params.transportUrl ?? undefined,
+            catalogId: params.catalogId ?? undefined,
+        });
+    }, []);
+    const selectInputs: SelectableInput[] = useSelectableInputs(installedAddons, remoteAddons, selectFilterPath);
     const [filtersModalOpen, openFiltersModal, closeFiltersModal] = useBinaryState(false);
     const [addAddonModalOpen, openAddAddonModal, closeAddAddonModal] = useBinaryState(false);
     const addAddonUrlInputRef = React.useRef<HTMLInputElement>(null);
@@ -174,12 +203,11 @@ const Addons = () => {
         closeAddAddonModal();
         setSearch('');
         clearSharedAddon();
-    }, [urlParams, queryParams]);
+    }, [urlParams, addonDetailsTransportUrl]);
 
-    // /addons is a modal route: it floats over whatever page you came from, which
-    // stays mounted beneath. Its filters still navigate (deep links keep working)
-    // because that only swaps this same view.
-    const closeAddons = useCloseModalRoute();
+    // Closing is a pure bus close (common/modalEvents), never a history navigation.
+    // Changing a filter only updates local state, so it never touches the URL either.
+    const closeAddons = onClose;
     const nestedModalOpen = filtersModalOpen || addAddonModalOpen || sharedAddon !== null || typeof addonDetailsTransportUrl === 'string';
 
     const renderAddon = (addon: any, index: number) => (
@@ -372,7 +400,8 @@ const Addons = () => {
     );
 };
 
-const AddonsFallback = () => (
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const AddonsFallback = (_props: Props) => (
     <Dialog open modal={false}>
         <DialogContent showClose={false} aria-label="Addons" className={PANEL_CLASS}>
             <DialogTitle className="sr-only">Addons</DialogTitle>

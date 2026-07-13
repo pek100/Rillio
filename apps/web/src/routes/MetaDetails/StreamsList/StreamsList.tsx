@@ -18,6 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { ChevronLeft, Puzzle } from 'lucide-react';
 import { Image } from 'rillio/components';
 import { usePlatform, useProfile } from 'rillio/common';
+import { openModal } from 'rillio/common/modalEvents';
 import { Button } from 'rillio/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from 'rillio/components/ui/select';
 import { cn } from 'rillio/components/ui/cn';
@@ -174,7 +175,7 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Prop
                             {
                                 showInstallAddonsButton ?
                                     <Button
-                                        href={'#/addons'}
+                                        onClick={() => openModal('addons')}
                                         title={t('ADDON_CATALOGUE_MORE')}
                                         className="mx-auto my-4 h-16 max-w-[50%] gap-4 px-8 text-base font-bold"
                                     >
@@ -199,7 +200,7 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Prop
                                         // Streams exist, so addons are already installed: a quiet
                                         // little link, not the yellow call-to-action.
                                         showInstallAddonsButton ?
-                                            <Button variant="ghost" className={'mx-auto mt-1 h-7 gap-1.5 bg-white/5 px-3 text-xs font-medium text-fg-muted hover:bg-white/10 hover:text-fg'} title={t('ADDON_CATALOGUE_MORE')} href={'#/addons'}>
+                                            <Button variant="ghost" className={'mx-auto mt-1 h-7 gap-1.5 bg-white/5 px-3 text-xs font-medium text-fg-muted hover:bg-white/10 hover:text-fg'} title={t('ADDON_CATALOGUE_MORE')} onClick={() => openModal('addons')}>
                                                 <Puzzle className={'size-3.5'} />
                                                 {t('ADDON_CATALOGUE_MORE')}
                                             </Button>

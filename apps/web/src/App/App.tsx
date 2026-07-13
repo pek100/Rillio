@@ -24,15 +24,28 @@ import WindowControls from 'rillio/components/WindowControls/WindowControls';
 import ErrorBoundary from 'rillio/components/ErrorBoundary/ErrorBoundary';
 import UpdatingOverlay from './UpdatingOverlay/UpdatingOverlay';
 import SyncModal from './SyncModal/SyncModal';
+import ModalHost from './ModalHost';
+import ModalUrlWatcher from './ModalUrlWatcher';
 import { ensureDisplayName } from 'rillio/common/useDisplayName';
-import { SEARCH_MODAL_PATH } from 'rillio/components/SearchModal';
+import { openModal, type ModalName } from 'rillio/common/modalEvents';
 
 // The Google Cast SDK injects a global `chrome.cast` object at runtime; no
 // @types package is installed for it, so it is typed as `any` here.
 declare const chrome: any;
 
 const ProtectedRoutes = withCoreSuspender(Routes);
-const NAVIGATE_TABS_ROUTES = ['/', '/discover', '/library', '/calendar', '/addons', '/settings'];
+
+// Number-key tab shortcuts (1..N). The first four are real routes; Addons and
+// Settings are now bus-driven modals, so they open the modal instead of navigating.
+type NavigateTab = { type: 'route', to: string } | { type: 'modal', name: ModalName };
+const NAVIGATE_TABS: NavigateTab[] = [
+    { type: 'route', to: '/' },
+    { type: 'route', to: '/discover' },
+    { type: 'route', to: '/library' },
+    { type: 'route', to: '/calendar' },
+    { type: 'modal', name: 'addons' },
+    { type: 'modal', name: 'settings' },
+];
 
 const App = () => {
     const core = useCore();
@@ -58,13 +71,19 @@ const App = () => {
                 toggleGamepadModal();
                 break;
             case 'navigateSearch':
-                // Search is a URL-driven modal route now (no search landing page).
-                navigate(SEARCH_MODAL_PATH);
+                // Search is a bus-driven modal now (no search landing page).
+                openModal('search');
                 break;
             case 'navigateTabs': {
                 const index = Number(key) - 1;
-                if (index >= 0 && index < NAVIGATE_TABS_ROUTES.length)
-                    navigate(NAVIGATE_TABS_ROUTES[index]);
+                if (index >= 0 && index < NAVIGATE_TABS.length) {
+                    const tab = NAVIGATE_TABS[index];
+                    if (tab.type === 'route') {
+                        navigate(tab.to);
+                    } else {
+                        openModal(tab.name);
+                    }
+                }
                 break;
             }
             case 'navigateHistory':
@@ -124,7 +143,8 @@ const App = () => {
                 if (protocol === CONSTANTS.PROTOCOL) {
                     if (hostname.length) {
                         const transportUrl = `https://${hostname}${pathname}`;
-                        navigate(`/addons?addon=${encodeURIComponent(transportUrl)}`);
+                        // Open the Addons modal pre-expanded on this addon (bus, not URL).
+                        openModal('addons', { addon: transportUrl });
                     } else {
                         navigate(`${pathname}?${searchParams.toString()}`);
                     }
@@ -207,6 +227,7 @@ const App = () => {
                                         in either one cannot white-screen the whole shell. */}
                                     <ErrorBoundary>
                                         <SyncModal />
+                                        <ModalHost />
                                         {
                                             shortcutModalOpen && <ShortcutsModal onClose={closeShortcutsModal}/>
                                         }
@@ -217,6 +238,7 @@ const App = () => {
                                     <ServicesToaster />
                                     <NotificationsToaster />
                                     <SearchParamsHandler />
+                                    <ModalUrlWatcher />
                                     <DeepLinkHandler />
                                     <DeepLinkOpenHandler />
                                     <UpdaterBanner className="absolute inset-x-0 bottom-0 z-[1]" />

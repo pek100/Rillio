@@ -3,8 +3,8 @@
 /**
  * Player error overlay. Restyled onto Tailwind tokens + the kit Button. The code===2
  * external-player hint, the "Try a different source" accent pill, the disk-full
- * "Free up space" (#/cached) CTA and the external-playlist download button are all
- * preserved exactly.
+ * "Free up space" (opens the Cached modal via the bus) CTA and the external-playlist
+ * download button are all preserved exactly.
  */
 
 import React, { forwardRef, useMemo } from 'react';
@@ -12,6 +12,7 @@ import { useTranslation } from 'react-i18next';
 import { Download } from 'lucide-react';
 import { Button } from 'rillio/components/ui';
 import { cn } from 'rillio/components/ui';
+import { openModal } from 'rillio/common/modalEvents';
 
 type Props = {
     className?: string;
@@ -60,7 +61,7 @@ const Error = forwardRef<HTMLDivElement, Props>(function Error({ className, code
                             freeSpace === true ?
                                 <Button
                                     variant="ghost"
-                                    href={'#/cached'}
+                                    onClick={() => openModal('cached')}
                                     className={'rounded-full bg-surface px-5 py-2 text-sm text-fg transition hover:bg-surface-hover'}
                                 >
                                     Free up space

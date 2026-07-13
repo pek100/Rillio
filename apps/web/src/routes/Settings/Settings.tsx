@@ -1,7 +1,6 @@
 // Copyright (C) 2017-2024 Smart code 203358507
 
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
-import { useCloseModalRoute } from 'rillio-router';
 import throttle from 'lodash.throttle';
 import { usePlatform, useProfile, useStreamingServer, useRouteFocused, withCoreSuspender } from 'rillio/common';
 import { ModalRoute } from 'rillio/components/ui/dialog';
@@ -17,7 +16,11 @@ import Info from './Info';
 // Per-route panel size (was Settings.less min() rules on the modal-shell panel).
 const PANEL_SIZE = 'h-[min(46rem,calc(100vh-6rem))] w-[min(64rem,calc(100vw-4rem))]';
 
-const Settings = () => {
+type Props = {
+    onClose: () => void,
+};
+
+const Settings = ({ onClose }: Props) => {
     const routeFocused = useRouteFocused();
     const profile = useProfile();
     const platform = usePlatform();
@@ -83,15 +86,13 @@ const Settings = () => {
         }
     }, [routeFocused]);
 
-    // /settings is a modal route: it floats over whatever page you came from, which the
-    // router keeps mounted and visible (blurred) beneath. Radix Dialog gives Escape,
-    // outside-click, focus-trap and aria for free; onClose drives the URL view-stack.
-    const closeSettings = useCloseModalRoute();
-
+    // Settings floats over the live routes beneath (blurred by the overlay). Radix
+    // Dialog gives Escape, outside-click, focus-trap and aria for free; onClose is a
+    // pure bus close (common/modalEvents), never a history navigation.
     return (
         <ModalRoute
             open
-            onClose={closeSettings}
+            onClose={onClose}
             showClose={false}
             title="Settings"
             hideHeader
@@ -135,12 +136,11 @@ const Settings = () => {
     );
 };
 
-const SettingsFallback = () => {
-    const closeSettings = useCloseModalRoute();
+const SettingsFallback = ({ onClose }: Props) => {
     return (
         <ModalRoute
             open
-            onClose={closeSettings}
+            onClose={onClose}
             showClose={false}
             title="Settings"
             hideHeader

@@ -3,9 +3,10 @@
 /**
  * Primary desktop nav bar for the main routes (Home / Discover / Library /
  * Calendar). Clean-room rewrite onto the foundation kit: the account hub is the
- * kit Popover (via NavMenu), search is a URL-driven modal route (a <Link>, not
- * internal state, per decisions.md #7), and the cached-downloads badge is anchored
- * to the glyph with no overflow-hidden ancestor so it is never clipped.
+ * kit Popover (via NavMenu); search / addons / cached / settings are bare icon
+ * buttons that open bus-driven modals (common/modalEvents), never URLs; and the
+ * cached-downloads badge is anchored to the glyph with no overflow-hidden ancestor
+ * so it is never clipped.
  *
  * Frameless shell: the <nav> and its flex spacer carry data-tauri-drag-region so
  * the bar drags the window; the links/buttons never do, so they stay clickable.
@@ -20,7 +21,7 @@ import useActiveDownloads from 'rillio/common/useActiveDownloads';
 import { cn } from 'rillio/components/ui/cn';
 import { Button } from 'rillio/components/ui/button';
 import { useIsShell } from 'rillio/components/WindowControls/WindowControls';
-import { SEARCH_MODAL_PATH } from 'rillio/components/SearchModal';
+import { openModal } from 'rillio/common/modalEvents';
 import NavMenu from 'rillio/components/NavBar/HorizontalNavBar/NavMenu';
 
 type Tab = { id: string; label: string; href: string };
@@ -35,7 +36,9 @@ const TABS: Tab[] = [
 
 // Account keeps its island chip; search + addons are bare icons.
 const ICON_BUTTON = 'inline-flex size-10 shrink-0 items-center justify-center rounded-full bg-surface/70 backdrop-blur transition-colors duration-150';
-const ICON_BUTTON_BARE = 'inline-flex size-10 shrink-0 items-center justify-center overflow-visible rounded-full transition-colors duration-150';
+// Bare icon <button>: reset the UA button chrome (appearance/border/bg/padding) so
+// only these utilities style it, matching the old <a> exactly.
+const ICON_BUTTON_BARE = 'inline-flex size-10 shrink-0 items-center justify-center overflow-visible rounded-full transition-colors duration-150 appearance-none border-0 bg-transparent p-0 cursor-pointer';
 
 type Props = {
     className?: string;
@@ -98,24 +101,27 @@ const TopNav = ({ className, route }: Props) => {
             <div {...dragProps} className="flex-1" />
 
             <div className="flex shrink-0 items-center gap-2 overflow-visible">
-                <Link
-                    to={SEARCH_MODAL_PATH}
+                <button
+                    type="button"
+                    onClick={() => openModal('search')}
                     title={t('SEARCH')}
                     tabIndex={-1}
                     className={cn(ICON_BUTTON_BARE, 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
                 >
                     <Search className="size-(--icon-size)" />
-                </Link>
-                <Link
-                    to="/addons"
+                </button>
+                <button
+                    type="button"
+                    onClick={() => openModal('addons')}
                     title={t('ADDONS')}
                     tabIndex={-1}
                     className={cn(ICON_BUTTON_BARE, route === 'addons' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
                 >
                     <Puzzle className="size-(--icon-size)" />
-                </Link>
-                <Link
-                    to="/cached"
+                </button>
+                <button
+                    type="button"
+                    onClick={() => openModal('cached')}
                     title={'Cached'}
                     tabIndex={-1}
                     className={cn(ICON_BUTTON_BARE, route === 'cached' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
@@ -134,15 +140,16 @@ const TopNav = ({ className, route }: Props) => {
                                 null
                         }
                     </span>
-                </Link>
-                <Link
-                    to="/settings"
+                </button>
+                <button
+                    type="button"
+                    onClick={() => openModal('settings')}
                     title={t('SETTINGS')}
                     tabIndex={-1}
                     className={cn(ICON_BUTTON_BARE, route === 'settings' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
                 >
                     <Settings className="size-(--icon-size)" />
-                </Link>
+                </button>
                 <NavMenu renderLabel={renderAccountLabel} />
             </div>
         </nav>
