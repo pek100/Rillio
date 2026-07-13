@@ -17,11 +17,11 @@ type Props = {
 const SideDrawerButton = ({ className, onClick }: Props) => {
     return (
         <div
-            className={`group flex h-50 w-30 cursor-pointer items-center justify-start pl-2 [-webkit-tap-highlight-color:transparent] max-[1000px]:h-32 max-[1000px]:w-[4.5rem] ${className ?? ''}`}
+            className={`group flex h-50 w-30 cursor-pointer items-center pl-2 [-webkit-tap-highlight-color:transparent] max-[1000px]:h-32 max-[1000px]:w-[4.5rem] ${className ?? ''}`}
             onClick={onClick}
         >
             <ChevronLeft
-                className={'relative size-10 text-fg opacity-60 transition-opacity [filter:drop-shadow(0_0.125rem_0.375rem_rgba(0,0,0,0.7))] group-hover:opacity-100 max-[1000px]:size-8'}
+                className={'size-10 text-fg opacity-60 transition-opacity [filter:drop-shadow(0_0.125rem_0.375rem_rgba(0,0,0,0.7))] group-hover:opacity-100 max-[1000px]:size-8'}
             />
         </div>
     );

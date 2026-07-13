@@ -34,7 +34,7 @@ type Props = {
     onChange: (value: number) => void;
 };
 
-const STEP_BUTTON = 'size-14 rounded-full bg-(--overlay-color) p-4 opacity-100 hover:bg-(--overlay-color) hover:opacity-100 hover:brightness-110 [&_svg]:size-6 [&_svg]:text-fg';
+const STEP_BUTTON = 'size-14 bg-(--overlay-color) opacity-100 hover:bg-(--overlay-color) hover:brightness-110 [&_svg]:size-6 [&_svg]:text-fg';
 
 const Stepper = ({ className, label, value, unit, step, min, max, disabled, onChange }: Props) => {
     const { t } = useTranslation();
@@ -94,7 +94,7 @@ const Stepper = ({ className, label, value, unit, step, min, max, disabled, onCh
             <div className={cn('mb-2 text-fg', disabled ? 'opacity-100' : 'opacity-60')}>
                 {t(label)}
             </div>
-            <div className={cn('flex flex-row items-center rounded-full bg-(--overlay-color)', disabled && 'opacity-40')}>
+            <div className={cn('flex items-center rounded-full bg-(--overlay-color)', disabled && 'opacity-40')}>
                 <IconButton
                     disabled={decreaseDisabled}
                     className={STEP_BUTTON}

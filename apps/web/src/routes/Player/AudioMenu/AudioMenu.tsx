@@ -33,10 +33,10 @@ const AudioMenu = memo(forwardRef<HTMLDivElement, Props>(function AudioMenu({ cl
     return (
         <div ref={ref} className={cn('flex flex-row', className)} onMouseDown={onMouseDown}>
             <div className={'flex max-h-[25rem] w-64 flex-none flex-col self-stretch'}>
-                <div className={'flex-none self-stretch px-8 py-6 font-bold text-fg'}>
+                <div className={'flex-none px-8 py-6 font-bold text-fg'}>
                     {t('AUDIO_TRACKS')}
                 </div>
-                <div className={'flex flex-1 flex-col gap-2 self-stretch overflow-y-auto px-4 pb-4'}>
+                <div className={'flex flex-1 flex-col gap-2 overflow-y-auto px-4 pb-4'}>
                     {
                         audioTracks.map(({ id, label, lang }, index) => {
                             const selected = selectedAudioTrackId === id;
@@ -48,7 +48,7 @@ const AudioMenu = memo(forwardRef<HTMLDivElement, Props>(function AudioMenu({ cl
                                     data-id={id}
                                     onClick={onAudioTrackClick}
                                     className={cn(
-                                        'flex h-16 w-full flex-none flex-row items-center gap-4 rounded-card px-6 hover:bg-surface-hover',
+                                        'flex h-16 w-full flex-none gap-4 rounded-card px-6 hover:bg-surface-hover',
                                         selected && 'bg-accent-soft',
                                     )}
                                 >
