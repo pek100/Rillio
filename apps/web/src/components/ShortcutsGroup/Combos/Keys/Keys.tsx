@@ -1,10 +1,22 @@
+// Copyright (C) 2017-2025 Smart code 203358507
+
+/**
+ * Keys - renders a run of <kbd> chips for one key combo. Clean-room Tailwind; the
+ * symbol/localization map, the pure-numeric range collapse (first TO last), and the
+ * `+` / `TO` separators are the load-bearing logic and are kept verbatim.
+ */
+
 import React, { Fragment, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import styles from './Keys.less';
 
 type Props = {
     keys: string[],
 };
+
+const kbdClass =
+    'flex-none relative inline-flex h-10 min-w-10 items-center justify-center px-4 ' +
+    'text-base font-medium text-fg rounded-[0.25em] bg-[var(--overlay-color)] ' +
+    'shadow-[0_4px_0_1px_rgba(255,255,255,0.1)]';
 
 const Keys = ({ keys }: Props) => {
     const { t } = useTranslation();
@@ -30,22 +42,26 @@ const Keys = ({ keys }: Props) => {
     }, [keys, isRange]);
 
     return (
-        filteredKeys.map((key, index) => (
-            <Fragment key={key}>
-                <kbd>
-                    {keyLabelMap[key] ?? key.toUpperCase()}
-                </kbd>
-                {
-                    index < (filteredKeys.length - 1) && (
-                        <div className={styles['separator']}>
-                            {
-                                isRange ? t('SETTINGS_SHORTCUT_TO') : '+'
-                            }
-                        </div>
-                    )
-                }
-            </Fragment>
-        ))
+        <>
+            {
+                filteredKeys.map((key, index) => (
+                    <Fragment key={key}>
+                        <kbd className={kbdClass}>
+                            {keyLabelMap[key] ?? key.toUpperCase()}
+                        </kbd>
+                        {
+                            index < (filteredKeys.length - 1) && (
+                                <div className="relative flex w-10 items-center justify-center text-base text-fg">
+                                    {
+                                        isRange ? t('SETTINGS_SHORTCUT_TO') : '+'
+                                    }
+                                </div>
+                            )
+                        }
+                    </Fragment>
+                ))
+            }
+        </>
     );
 };
 

@@ -9,9 +9,10 @@ type Props = {
     metaId?: string;
     ratingInfo?: Loadable<RatingInfo>;
     className?: string;
+    size?: 'default' | 'sm';
 };
 
-const Ratings = ({ ratingInfo, className }: Props) => {
+const Ratings = ({ ratingInfo, className, size = 'sm' }: Props) => {
     const { t } = useTranslation();
     const { onLiked, onLoved, liked, loved } = useRating(ratingInfo);
     const disabled = useMemo(() => ratingInfo?.type !== 'Ready', [ratingInfo]);
@@ -32,7 +33,7 @@ const Ratings = ({ ratingInfo, className }: Props) => {
     ], [liked, loved, disabled]);
 
     return (
-        <ActionsGroup items={items} className={className} />
+        <ActionsGroup items={items} className={className} size={size} />
     );
 };
 
