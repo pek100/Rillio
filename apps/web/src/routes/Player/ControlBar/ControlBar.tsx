@@ -26,7 +26,7 @@ import VolumeSlider from './VolumeSlider';
 // off-white, not flat grey) that lifts to pure white on hover, press-scale, and a
 // dim (not blocked) disabled. Icons use the player icon-size token so every
 // control-bar glyph is identical (and smaller than the old 2.2rem).
-const CB_BUTTON = 'size-16 rounded-full bg-transparent opacity-100 hover:bg-transparent hover:opacity-100 active:scale-[0.97] [&_svg]:size-(--icon-size-player) [&_svg]:text-ice [&_svg]:transition-colors [&_svg]:duration-150 [&:hover_svg]:text-white';
+const CB_BUTTON = 'size-16 rounded-full bg-transparent opacity-100 transition-colors duration-150 hover:bg-white/10 hover:opacity-100 active:scale-[0.97] [&_svg]:size-(--icon-size-player) [&_svg]:text-ice [&_svg]:transition-colors [&_svg]:duration-150 [&:hover_svg]:text-white';
 const CB_ICON = 'size-(--icon-size-player)';
 
 // Control-bar "islands": rounded-full translucent containers that group the icon

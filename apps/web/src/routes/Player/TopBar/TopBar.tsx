@@ -47,20 +47,23 @@ const TopBar = forwardRef<HTMLElement, Props>(function TopBar({ className, title
 
     const showHdr = hdrInfo != null && (hdrInfo.gamma === 'pq' || hdrInfo.gamma === 'hlg');
 
+    // Same vertical placement as the main navbar: a 0.5rem top gap plus the shared
+    // nav-bar height with content vertically centered inside it (MainNavBars does
+    // exactly this for TopNav).
     return (
         <nav
             ref={ref}
             {...dragProps}
             onMouseMove={onMouseMove}
             onMouseOver={onMouseOver}
-            className={`flex flex-row items-center gap-2 pl-4 pr-6 pt-[calc(0.5rem+var(--safe-area-inset-top))] ${className ?? ''}`}
+            className={`flex h-(--horizontal-nav-bar-size) flex-row items-center gap-2 pl-4 pr-6 mt-[calc(0.5rem+var(--safe-area-inset-top))] ${className ?? ''}`}
         >
             <IconButton
                 tabIndex={-1}
                 title="Back"
                 aria-label="Back"
                 onClick={onBack}
-                className="text-ice opacity-100 transition-colors duration-150 hover:text-white"
+                className="text-ice opacity-100 transition-colors duration-150 hover:bg-white/10 hover:text-white"
             >
                 <ChevronLeft className="size-(--icon-size)" />
             </IconButton>
