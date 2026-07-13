@@ -46,7 +46,7 @@ const DownloadToCache = ({ stream, className }: { stream: any; className?: strin
                 variant="ghost"
                 tabIndex={-1}
                 onClick={onClick}
-                className={cn('inline-flex size-6 shrink-0 items-center justify-center rounded-full p-0 text-fg-subtle hover:bg-white/10 hover:text-fg', className)}
+                className={cn('size-6 shrink-0 p-0 text-fg-subtle hover:bg-white/10 hover:text-fg', className)}
             >
                 <Download className={'size-3.5'} />
             </Button>
@@ -87,7 +87,7 @@ const LanguagePicker = ({ value, options, onSelect }: { value: string; options: 
                 <Button
                     variant="ghost"
                     title="Preferred language"
-                    className="inline-flex h-7 items-center gap-1.5 rounded-full bg-white/5 px-2.5 text-xs font-medium text-fg-muted hover:bg-white/10 hover:text-fg"
+                    className="h-7 gap-1.5 bg-white/5 px-2.5 text-xs font-medium text-fg-muted hover:bg-white/10 hover:text-fg"
                 >
                     <span>{flagFor(value) || '🌐'}</span>
                     {languages.label(value)}
@@ -161,7 +161,7 @@ const Row = ({ entry }: { entry: any }) => {
             href={playHref(stream)}
             onClick={stream.onClick}
             title={stream.description}
-            className="group flex h-auto items-center justify-start gap-2.5 whitespace-normal rounded-lg px-2.5 py-2 text-left font-normal hover:bg-white/5"
+            className="group flex h-auto justify-start gap-2.5 whitespace-normal rounded-lg px-2.5 py-2 text-left font-normal hover:bg-white/5"
         >
             <span className="inline-flex w-16 shrink-0 justify-center rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-fg-muted">{badgeFor(quality)}</span>
             <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">{providerOf(stream) || stream.addonName || 'Stream'}</span>
@@ -250,7 +250,7 @@ const CuratedStreams = ({ streams }: { streams: any[] }) => {
                     <Button
                         href={playHref(rec.entry.stream)}
                         onClick={rec.entry.stream.onClick}
-                        className="h-9 gap-2 px-4 text-sm font-semibold active:scale-[0.98]"
+                        className="h-9 active:scale-[0.98]"
                     >
                         <Play className="size-4" />
                         Watch · {rec.label}
@@ -259,13 +259,11 @@ const CuratedStreams = ({ streams }: { streams: any[] }) => {
                 <LanguagePicker value={lang} options={langOptions} onSelect={setLang} />
             </div>
 
-            {/* The picks: a horizontal carousel of invisible tiles. */}
-            <div className="flex justify-center">
-                <div className="flex max-w-full gap-1 overflow-x-auto pb-1 [scrollbar-width:thin]">
-                    {tiles.map((p) => (
-                        <Tile key={p.tierKey} label={p.label} entry={p.entry} highlighted={p.highlighted} />
-                    ))}
-                </div>
+            {/* The picks: a horizontal carousel of invisible tiles, centered. */}
+            <div className="mx-auto flex w-fit max-w-full gap-1 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                {tiles.map((p) => (
+                    <Tile key={p.tierKey} label={p.label} entry={p.entry} highlighted={p.highlighted} />
+                ))}
             </div>
 
             {rest.length ? (
@@ -273,7 +271,7 @@ const CuratedStreams = ({ streams }: { streams: any[] }) => {
                     <Button
                         variant="ghost"
                         onClick={() => setShowAll((v) => !v)}
-                        className="h-auto self-center gap-1.5 rounded-full bg-white/5 px-3 py-1 text-xs font-medium text-fg-muted hover:bg-white/10 hover:text-fg"
+                        className="h-auto self-center gap-1.5 bg-white/5 px-3 py-1 text-xs font-medium text-fg-muted hover:bg-white/10 hover:text-fg"
                     >
                         <ChevronDown className={cn('size-3 transition-transform', showAll && 'rotate-180')} />
                         {showAll ? 'Hide' : `All ${rest.length} streams`}

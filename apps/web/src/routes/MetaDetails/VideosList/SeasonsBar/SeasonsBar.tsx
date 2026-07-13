@@ -67,13 +67,13 @@ const SeasonsBar = ({ className, seasons, season, onSelect }: Props) => {
     }, [season, seasons]);
 
     return (
-        <div className={cn('flex flex-row items-center justify-between overflow-visible p-4 max-sm:h-24', className)}>
+        <div className={cn('flex flex-row items-center justify-between p-4 max-sm:h-24', className)}>
             <Button
                 variant="ghost"
                 disabled={prevDisabled}
                 title={t('PREV_SEASON')}
                 onClick={(event) => stepSeason('prev', event)}
-                className="h-12 w-[6.5rem] flex-none gap-2 px-2 font-medium text-fg"
+                className="h-12 w-[6.5rem] flex-none px-2 font-medium text-fg"
             >
                 <ChevronLeft className="size-6 flex-none" />
                 <span className="flex-1 text-center">{t('BUTTON_PREV')}</span>
@@ -93,7 +93,7 @@ const SeasonsBar = ({ className, seasons, season, onSelect }: Props) => {
                 disabled={nextDisabled}
                 title={t('NEXT_SEASON')}
                 onClick={(event) => stepSeason('next', event)}
-                className="h-12 w-[6.5rem] flex-none gap-2 px-2 font-medium text-fg"
+                className="h-12 w-[6.5rem] flex-none px-2 font-medium text-fg"
             >
                 <span className="flex-1 text-center">{t('BUTTON_NEXT')}</span>
                 <ChevronRight className="size-6 flex-none" />

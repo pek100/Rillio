@@ -107,7 +107,7 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Prop
 
     return (
         <div className={cn('flex flex-col', className)}>
-            <div className="z-[2] mx-4 mt-4 flex items-center gap-x-2 overflow-visible">
+            <div className="z-[2] mx-4 mt-4 flex items-center gap-x-2">
                 {
                     video ?
                         <React.Fragment>
@@ -115,7 +115,7 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Prop
                                 variant="ghost"
                                 tabIndex={0}
                                 onClick={backButtonOnClick}
-                                className="inline-flex size-11 flex-none items-center justify-center rounded-full p-0 text-fg-muted hover:text-fg"
+                                className="size-11 flex-none p-0 text-fg-muted hover:text-fg"
                                 title={t('BACK')}
                             >
                                 <ChevronLeft className="size-6" />
@@ -199,7 +199,7 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Prop
                                         // Streams exist, so addons are already installed: a quiet
                                         // little link, not the yellow call-to-action.
                                         showInstallAddonsButton ?
-                                            <Button variant="ghost" className={'mx-auto mt-1 inline-flex h-7 items-center gap-1.5 rounded-full bg-white/5 px-3 text-xs font-medium text-fg-muted transition hover:bg-white/10 hover:text-fg'} title={t('ADDON_CATALOGUE_MORE')} href={'#/addons'}>
+                                            <Button variant="ghost" className={'mx-auto mt-1 h-7 gap-1.5 bg-white/5 px-3 text-xs font-medium text-fg-muted hover:bg-white/10 hover:text-fg'} title={t('ADDON_CATALOGUE_MORE')} href={'#/addons'}>
                                                 <Puzzle className={'size-3.5'} />
                                                 {t('ADDON_CATALOGUE_MORE')}
                                             </Button>
@@ -209,7 +209,7 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Prop
                                 </div>
                                 {
                                     countLoadingAddons > 0 ?
-                                        <div className="z-[1] m-8 flex flex-col items-center justify-center gap-4 overflow-visible">
+                                        <div className="z-[1] m-8 flex flex-col items-center justify-center gap-4">
                                             <div className="text-base text-fg">
                                                 {countLoadingAddons} {t('MOBILE_ADDONS_LOADING')}
                                             </div>
