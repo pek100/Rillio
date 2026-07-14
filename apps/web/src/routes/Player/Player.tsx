@@ -1027,7 +1027,9 @@ const Player = () => {
                 onMouseOver={onBarMouseMove}
             />
             {
-                player.metaItem?.type === 'Ready' ?
+                // Hidden while the drawer or any menu is open: the chevron is an
+                // opener, and open panels sit exactly where it points.
+                player.metaItem?.type === 'Ready' && !sideDrawerOpen && !menusOpen ?
                     <SideDrawerButton
                         className={SIDE_DRAWER_BUTTON_LAYER}
                         onClick={toggleSideDrawer}
