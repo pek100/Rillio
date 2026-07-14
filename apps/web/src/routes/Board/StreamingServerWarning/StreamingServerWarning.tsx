@@ -65,7 +65,7 @@ const StreamingServerWarning = ({ className }: Props) => {
     }, [updateSettings]);
 
     return (
-        <div className={cn('flex flex-row items-center gap-4 rounded-card border border-line bg-panel p-4 shadow-elevated max-[640px]:flex-col max-[640px]:px-2 max-[640px]:text-center', className)}>
+        <div className={cn('panel-tint flex flex-row items-center gap-4 rounded-card border border-line bg-panel p-4 shadow-elevated max-[640px]:flex-col max-[640px]:px-2 max-[640px]:text-center', className)}>
             <div className="max-h-[2.4em] flex-1 text-[1.2rem] font-medium text-fg">
                 {t('SETTINGS_SERVER_UNAVAILABLE')}
             </div>

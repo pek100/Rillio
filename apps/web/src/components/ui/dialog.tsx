@@ -55,7 +55,7 @@ export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
                         // Dark translucent panel; the blur comes from the overlay, so NO
                         // backdrop-blur here (one blur per stacking context). The
                         // border-line hairline crisps the edge over the scrim.
-                        'bg-card text-card-foreground rounded-squircle border border-line p-6 shadow-elevated',
+                        'panel-tint bg-card text-card-foreground rounded-squircle border border-line p-6 shadow-elevated',
                         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
                         'focus:outline-none',
                         className,

@@ -22,7 +22,7 @@ export function Toaster({ className, toastOptions, ...props }: ToasterProps) {
                 classNames: {
                     // Floating glass toast (same family as menus/tooltip): black-alpha
                     // bg-popover + the glass blur token + border-line hairline.
-                    toast: 'group rounded-card border border-line bg-popover text-fg shadow-elevated',
+                    toast: 'panel-tint group rounded-card border border-line bg-popover text-fg shadow-elevated',
                     title: 'text-sm font-semibold',
                     description: 'text-xs text-fg-muted',
                     actionButton: 'rounded-full bg-primary text-primary-foreground',

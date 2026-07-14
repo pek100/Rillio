@@ -40,7 +40,7 @@ export const DrawerContent = forwardRef<
                     // Same recipe as Dialog: the vaul overlay carries the scrim blur, so
                     // NO backdrop-blur here (one blur per stacking context). Dark
                     // translucent bg-card + shadow-elevated + a border-line top edge.
-                    'fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-squircle border-t border-line bg-card text-card-foreground shadow-elevated',
+                    'panel-tint fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-squircle border-t border-line bg-card text-card-foreground shadow-elevated',
                     className,
                 )}
                 {...props}

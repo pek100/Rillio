@@ -28,7 +28,7 @@ const contentClasses =
     // Cinematic glass: black-alpha bg-popover + the glass blur token darkens/frosts the
     // content behind (the player-island recipe); the border-line hairline defines the
     // panel edge over the pure-black page, where the translucent fill alone vanishes.
-    'z-50 min-w-[10rem] overflow-hidden rounded-card border border-line bg-popover p-1 text-popover-foreground shadow-elevated transition-none ' +
+    'panel-tint z-50 min-w-[10rem] overflow-hidden rounded-card border border-line bg-popover p-1 text-popover-foreground shadow-elevated transition-none ' +
     'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95';
 
 const itemClasses =

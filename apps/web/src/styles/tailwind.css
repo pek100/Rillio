@@ -106,8 +106,15 @@
      * NOTE: over the video these get NO usable blur - mpv is a native window behind
      * the transparent WebView, so backdrop-filter has nothing to sample. The alpha is
      * doing all the work. Real blur there needs a GPU-side mpv shader (see
-     * routes/Player/useVideoSnapshotBackdrop.ts). */
-    --color-panel: #0E1116;
+     * routes/Player/useVideoSnapshotBackdrop.ts).
+     *
+     * The app panel is BLACK, and the old blue-black falls through it from the top:
+     * the same ghost the nav glow drops behind the nav (--color-nav-glow), so a menu
+     * reads as a piece of the app rather than a grey box floating on it. A flat
+     * lifted grey looked unrelated to everything around it. The border-line hairline
+     * and shadow-elevated do the separating, not the fill. */
+    --color-panel: #000000;
+    --panel-gradient: linear-gradient(180deg, #0A1017 0%, #04070B 55%, #000000 100%);
     --color-glass-panel: rgba(0, 0, 0, 0.65);
     --color-glass-chrome: rgba(0, 0, 0, 0.35);
 
@@ -231,6 +238,14 @@
  * the pointer at the window level; body pointer-events are disabled so the drag is
  * not interrupted by hovering other elements. These need <html>/<body> selectors, so
  * they live here as global rules rather than as per-element Tailwind utilities. */
+/* The app's panel surface: applied ALONGSIDE bg-popover / bg-card (the black fill),
+ * this drops the old blue-black through the top of the panel. One class so every app
+ * menu, dialog and dropdown ties back to the nav glow instead of each picking a grey.
+ * Player surfaces never take it: they are translucent so the film shows through. */
+.panel-tint {
+    background-image: var(--panel-gradient);
+}
+
 html.active-slider-within { cursor: grabbing; }
 html.active-slider-within body { pointer-events: none; }
 
