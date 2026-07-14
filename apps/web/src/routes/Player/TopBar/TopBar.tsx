@@ -47,18 +47,18 @@ const TopBar = forwardRef<HTMLElement, Props>(function TopBar({ className, title
 
     const showHdr = hdrInfo != null && (hdrInfo.gamma === 'pq' || hdrInfo.gamma === 'hlg');
 
-    // Same vertical CONTENT placement as the main navbar (0.5rem gap + centered in
-    // the shared nav-bar height), but expressed as inner padding on a taller box:
-    // the bar itself must start at the window border, or the Player layer's
-    // darkening gradient (which sizes against this bar) leaves a bright seam at
-    // the very top edge. Margin outside the box is forbidden here.
+    // Same vertical CONTENT placement as the main navbar (the shared --nav-top-gap
+    // + centered in the shared nav-bar height), but expressed as inner padding on a
+    // taller box: the bar itself must start at the window border, or the Player
+    // layer's darkening gradient (which sizes against this bar) leaves a bright seam
+    // at the very top edge. Margin outside the box is forbidden here.
     return (
         <nav
             ref={ref}
             {...dragProps}
             onMouseMove={onMouseMove}
             onMouseOver={onMouseOver}
-            className={`flex h-[calc(var(--horizontal-nav-bar-size)+0.5rem+var(--safe-area-inset-top))] flex-row items-center gap-2 pl-4 pr-6 pt-[calc(0.5rem+var(--safe-area-inset-top))] ${className ?? ''}`}
+            className={`flex h-[calc(var(--horizontal-nav-bar-size)+var(--nav-top-gap)+var(--safe-area-inset-top))] flex-row items-center gap-2 pl-4 pr-6 pt-[calc(var(--nav-top-gap)+var(--safe-area-inset-top))] ${className ?? ''}`}
         >
             <IconButton
                 tabIndex={-1}

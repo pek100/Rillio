@@ -89,6 +89,13 @@
     --color-ice: #E8F1FB;
     --color-ice-muted: rgba(232, 241, 251, 0.62);
 
+    /* The gap above the nav bar. Hoisted into a token because TWO components must
+     * agree on it: MainNavBars (the main routes' TopNav offset AND the content
+     * offset below it) and the Player's TopBar (as inner padding, since that bar's
+     * box has to start at the window border for its gradient). A raw value in one
+     * of them silently misaligns the player chrome from the app chrome. */
+    --nav-top-gap: 1rem;
+
     /* Nav glow - a hint of the pre-cinematic identity: the app's FORMER background
      * blue-black, falling from behind the nav into the pure-black page (see the
      * nav-glow layer in MainNavBars). Deliberately the old --color-bg value and not

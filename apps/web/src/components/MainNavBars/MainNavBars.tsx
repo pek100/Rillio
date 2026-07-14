@@ -47,12 +47,12 @@ const MainNavBars = memo(({ className, route, children }: Props) => {
                 className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 bg-[linear-gradient(to_bottom,var(--color-nav-glow)_0%,color-mix(in_srgb,var(--color-nav-glow)_55%,transparent)_28%,transparent_100%)]"
             />
             <TopNav
-                className="absolute inset-x-0 top-2 z-[1] h-[var(--horizontal-nav-bar-size)]"
+                className="absolute inset-x-0 top-(--nav-top-gap) z-[1] h-[var(--horizontal-nav-bar-size)]"
                 route={route}
             />
             <div
                 ref={contentRef}
-                className="absolute inset-x-0 bottom-0 z-0 overflow-hidden top-[calc(var(--horizontal-nav-bar-size)+0.5rem+var(--safe-area-inset-top))]"
+                className="absolute inset-x-0 bottom-0 z-0 overflow-hidden top-[calc(var(--horizontal-nav-bar-size)+var(--nav-top-gap)+var(--safe-area-inset-top))]"
             >
                 {children}
             </div>
