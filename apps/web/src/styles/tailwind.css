@@ -89,15 +89,25 @@
     --color-ice: #E8F1FB;
     --color-ice-muted: rgba(232, 241, 251, 0.62);
 
-    /* GLASS LADDER - every floating surface picks exactly one of these two fills, so
-     * menus, modals, drawers, toasts, HUDs and the player islands can never drift
-     * apart again (they had reached four different alphas). Both are BLACK-alpha,
-     * never a white lift: they float over video and imagery, where a white blend
-     * reads milky (the HDR lesson, see --modal-background-color).
-     *   panel  = surfaces you READ and stay in (menus, dialogs, drawers, toasts,
-     *            tooltips, HUD indicators)
-     *   chrome = transient bars you GLANCE at, kept lighter so they never wall off
-     *            the film (control-bar islands, the preload chip) */
+    /* SURFACES split by WHERE they float, which is the only distinction that matters:
+     *
+     * IN THE APP -> OPAQUE (--color-panel). Menus, dialogs, popovers, tooltips and
+     * toasts are places you read; the house style is flat and tonal (elevation from a
+     * surface token + shadow, not glass). Opaque is also free: no backdrop-filter, no
+     * milky blend over a bright poster, no compositing cost. It is a blue-tinted near
+     * black, the old palette's ghost, so it lifts off the pure-black page.
+     *
+     * IN THE PLAYER -> TRANSLUCENT (--color-glass-*). There the film must stay present
+     * behind the chrome. Both are BLACK-alpha, never a white lift: over video a white
+     * blend reads milky on an HDR display (the lesson from --modal-background-color).
+     *   glass-panel  = surfaces you READ (the player menus, side drawer, HUDs)
+     *   glass-chrome = transient bars you GLANCE at, lighter so they never wall off
+     *                  the film (control-bar islands, the preload chip)
+     * NOTE: over the video these get NO usable blur - mpv is a native window behind
+     * the transparent WebView, so backdrop-filter has nothing to sample. The alpha is
+     * doing all the work. Real blur there needs a GPU-side mpv shader (see
+     * routes/Player/useVideoSnapshotBackdrop.ts). */
+    --color-panel: #0E1116;
     --color-glass-panel: rgba(0, 0, 0, 0.65);
     --color-glass-chrome: rgba(0, 0, 0, 0.35);
 
@@ -142,7 +152,7 @@
      * stacking context; the border-line hairline separates it from the scrim.
      * (Sheet is the one exception and says why: its only consumer renders with no
      * overlay at all, so that panel must carry the blur itself.) */
-    --color-card: var(--color-glass-panel);
+    --color-card: var(--color-panel);
     --color-card-foreground: var(--color-fg);
     /* popover = FLOATING MENU glass (dropdown / select / context / popover content, and
      * tooltip / toast). BLACK-alpha, not white: menus portal over posters and imagery,
@@ -152,7 +162,7 @@
      * border-line hairline + shadow-elevated in the primitives; over the pure-black
      * page the fill vanishes but the hairline + shadow define the panel and white
      * text/hover lifts still read. */
-    --color-popover: var(--color-glass-panel);
+    --color-popover: var(--color-panel);
     --color-popover-foreground: var(--color-fg);
     --color-primary: var(--color-accent);           /* #FFA033 brand */
     --color-primary-foreground: var(--color-bg);

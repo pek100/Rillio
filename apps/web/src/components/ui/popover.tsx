@@ -29,7 +29,7 @@ export const PopoverContent = forwardRef<
                 className={cn(
                     // Cinematic glass: black-alpha bg-popover + the glass blur token, with a
                     // border-line hairline so the panel reads over the pure-black page.
-                    'z-50 w-72 rounded-card border border-line bg-popover p-4 text-popover-foreground shadow-elevated outline-none backdrop-blur-(--glass-blur) transition-none',
+                    'z-50 w-72 rounded-card border border-line bg-popover p-4 text-popover-foreground shadow-elevated outline-none transition-none',
                     'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
                     className,
                 )}

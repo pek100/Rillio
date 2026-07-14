@@ -39,12 +39,12 @@ export const SheetOverlay = forwardRef<
 });
 
 const sheetVariants = cva(
-    // The house glass material: dark translucent fill + a border-line hairline +
-    // shadow-elevated + the glass blur token. The panel carries the blur itself
-    // (unlike Dialog, whose scrim carries it) because this primitive's only
-    // consumer, the Player SideDrawer, runs `overlay={false}` over live video and
-    // so has no scrim to blur for it.
-    'fixed z-50 flex flex-col gap-4 border border-line bg-card text-card-foreground shadow-elevated backdrop-blur-(--glass-blur) transition ease-in-out ' +
+    // TRANSLUCENT, not the app's opaque panel: this primitive's only consumer is the
+    // Player SideDrawer, which floats over live video (and runs `overlay={false}`, so
+    // there is no scrim to carry a blur for it either). Hence bg-glass-panel + its own
+    // blur, while every other app surface is opaque. If a non-player consumer ever
+    // appears, give it the opaque bg-card instead of changing this default.
+    'fixed z-50 flex flex-col gap-4 border border-line bg-glass-panel text-fg shadow-elevated backdrop-blur-(--glass-blur) transition ease-in-out ' +
         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:duration-300 data-[state=open]:duration-300',
     {
         variants: {
