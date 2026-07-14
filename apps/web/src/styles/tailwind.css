@@ -114,12 +114,14 @@
      * brand. warning/success have no shadcn slot - keep --color-warning/success. */
     --color-background: var(--color-bg);            /* #000000 pure black */
     --color-foreground: var(--color-fg);
-    /* card = dialog / sheet / drawer PANEL. White lift (a hair above flat surface) so
-     * the modal reads as a lifted pane against the dark blurred scrim behind it. NO
-     * blur on the panel itself: the Dialog overlay already blurs (bg-black/60 +
-     * blur-24), so blurring the panel too would be a wasted second backdrop-filter in
-     * the same stacking context. */
-    --color-card: rgba(255, 255, 255, 0.06);
+    /* card = dialog / sheet / drawer PANEL. DARK translucent, not a white lift: a
+     * white blend over the blurred imagery behind the scrim reads milky/washed (the
+     * same failure the player's overlays hit over video). Slightly more opaque than
+     * the menu glass because a modal is a place you stay and read. NO blur on the
+     * panel itself: the Dialog overlay already blurs (bg-black/60 + blur-24), so
+     * blurring the panel too would be a wasted second backdrop-filter in the same
+     * stacking context; the border-line hairline separates it from the scrim. */
+    --color-card: rgba(0, 0, 0, 0.65);
     --color-card-foreground: var(--color-fg);
     /* popover = FLOATING MENU glass (dropdown / select / context / popover content, and
      * tooltip / toast). BLACK-alpha, not white: menus portal over posters and imagery,
@@ -199,6 +201,12 @@
  * they live here as global rules rather than as per-element Tailwind utilities. */
 html.active-slider-within { cursor: grabbing; }
 html.active-slider-within body { pointer-events: none; }
+
+/* Fullscreen (the WINDOW's, toggled by WindowControls): the window header is gone,
+ * so the gap that keeps chrome clear of it collapses. Both the main navbar and the
+ * player's top bar read --nav-top-gap, so they move together. Beats the @theme
+ * :root value on specificity. */
+html.window-fullscreen { --nav-top-gap: 0rem; }
 
 /* Player immersion (ported verbatim from the former Player/styles.less). After the
  * idle timeout the Player container gets `data-immersed`; the cursor is hidden and

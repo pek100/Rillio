@@ -75,6 +75,16 @@ const WindowControls = () => {
         return () => window.removeEventListener('mousedown', onDown, true);
     }, [shell]);
 
+    // Fullscreen has no window header to clear, so the gap that keeps chrome off it
+    // collapses: this flag drives --nav-top-gap to 0 (see styles/tailwind.css), which
+    // both the main navbar and the player's top bar consume.
+    React.useEffect(() => {
+        if (!shell) return undefined;
+        const root = document.documentElement;
+        root.classList.toggle('window-fullscreen', fullscreen);
+        return () => root.classList.remove('window-fullscreen');
+    }, [shell, fullscreen]);
+
     // Fullscreen only: reveal the header when the pointer nears the top edge.
     // Leaving fullscreen resets the flag so the header is unconditionally shown.
     React.useEffect(() => {
