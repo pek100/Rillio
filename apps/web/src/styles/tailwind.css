@@ -113,9 +113,9 @@
      * (--color-nav-glow), so a menu reads as a piece of the app rather than a grey box
      * floating on it. A flat lifted grey looked unrelated to everything around it.
      * The border-line hairline and shadow-elevated do the separating, not the fill.
-     * At ~6% transmission there is nothing to blur, so app panels still take no
+     * At ~3% transmission there is nothing to blur, so app panels still take no
      * backdrop-filter: it is a hint of depth, not a frosted material. */
-    --color-panel: rgba(0, 0, 0, 0.94);
+    --color-panel: rgba(0, 0, 0, 0.97);
     /* An OVERLAY tint, not the fill: the fill carries the panel's slight transparency
      * and this only washes blue over its top. (If the gradient carried the color AND
      * the alpha it would paint over the fill and composite back to fully opaque.) */

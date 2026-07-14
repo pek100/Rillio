@@ -422,13 +422,18 @@ const Addons = ({ payload, onClose }: Props) => {
     const nestedOpenRef = React.useRef(false);
     return (
         <Dialog open modal={false} onOpenChange={(next) => { if (!next && !nestedOpenRef.current) onClose(); }}>
-            {/* modal={false} means Radix renders NO DialogOverlay, so without this
-                the page behind would show through unblurred. Paint our own scrim
-                matching the blur the ModalRoute-based modals (Settings/Cached) get
-                from DialogOverlay. pointer-events-none preserves the deliberate
-                non-trapping outside-interaction the nested AddonDetails modal needs. */}
+            {/* modal={false} means Radix renders NO DialogOverlay, so this stands in for
+                it and must match the one every other modal gets from DialogOverlay:
+                same fill, same blur token, same z, and it CATCHES pointer events.
+                It used to be pointer-events-none, which let every click sail through
+                to the page behind it (clicking a "backdrop" would hit a poster). The
+                nested AddonDetails modal is not harmed by that: it portals to the body
+                and stacks above this, so it stays interactive regardless. Clicking the
+                scrim is an interaction outside DialogContent, so Radix's own
+                onInteractOutside closes the modal, with the nested-open guard below
+                keeping the "a nested dialog eats the dismiss first" precedence. */}
             <DialogPortal>
-                <div aria-hidden className="pointer-events-none fixed inset-0 z-40 bg-black/60 backdrop-blur-(--scrim-blur) animate-in fade-in-0" />
+                <div aria-hidden className="fixed inset-0 z-50 bg-black/60 backdrop-blur-(--scrim-blur) animate-in fade-in-0" />
             </DialogPortal>
             <DialogContent
                 showClose={false}
