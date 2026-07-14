@@ -3,8 +3,13 @@
 /**
  * Layout wrapper for the main routes: TopNav floated over a scrolling content pane,
  * respecting safe-area insets. Clean-room rewrite of MainNavBars.less onto Tailwind
- * (arbitrary values on the same layout tokens). Pure glue - no visible surface of its
- * own; the 0.5rem gap above the nav is preserved. Gamepad wiring reused verbatim.
+ * (arbitrary values on the same layout tokens). The 0.5rem gap above the nav is
+ * preserved. Gamepad wiring reused verbatim.
+ *
+ * The one visible surface it owns: the nav glow, a soft fall of the brand's old
+ * blue-black from behind the nav into the pure-black page (a hint of the former
+ * palette on the cinematic base). It lives here so it spans the main browse routes
+ * only: MetaDetails paints its own backdrop art, and the Player is video.
  */
 
 import React, { memo } from 'react';
@@ -34,6 +39,13 @@ const MainNavBars = memo(({ className, route, children }: Props) => {
                 className,
             )}
         >
+            {/* Nav glow: sits under both the nav and the content (-z-10 against this
+                wrapper's own stacking context), so it tints the page top without ever
+                catching pointer events or washing the posters. */}
+            <div
+                aria-hidden
+                className="pointer-events-none absolute inset-x-0 top-0 -z-10 h-96 bg-[linear-gradient(to_bottom,var(--color-nav-glow)_0%,color-mix(in_srgb,var(--color-nav-glow)_55%,transparent)_28%,transparent_100%)]"
+            />
             <TopNav
                 className="absolute inset-x-0 top-2 z-[1] h-[var(--horizontal-nav-bar-size)]"
                 route={route}
