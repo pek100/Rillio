@@ -20,10 +20,22 @@ pnpm --filter rillio build      # build the web app into apps/web/build
 cargo run                       # in apps/desktop/src-tauri: build + launch the desktop shell
 ```
 
-The shell serves the static `apps/web/build`, so **rebuild the web app before
-`cargo run`** to see web changes. `libmpv-2.dll` is not present next to the debug
-binary, so playback is disabled under `cargo run` (harmless for UI work; the
-release bundle ships the dll).
+`generate_context!` **bakes `apps/web/build` into the binary** at compile time, so
+**rebuild the web app before `cargo run`** to see web changes. Corollary that
+bites: rebuilding the web app and then relaunching the EXE changes nothing, it
+still serves the bundle baked into that binary. Always web build, then cargo
+build, then launch (touch `src/lib.rs` first if cargo does not notice an
+asset-only change). This is a SECOND staleness trap, separate from the WebView2
+cache below. To tell them apart, `fetch(<stylesheet href>, {cache:'no-store'})`
+from the page and grep the text for your change: absent means the BINARY is
+stale, present but not applying means the WebView2 cache.
+
+`libmpv-2.dll` is not present next to the debug binary, so playback is disabled
+under `cargo run` (harmless for UI work; the release bundle ships the dll).
+
+To inspect the running shell (its real DOM/console, the only way to settle bugs
+that do not reproduce in a browser), launch with `RILLIO_DEVTOOLS_PORT=9222` and
+drive CDP over `ws://127.0.0.1:9222`. Off unless the env var is set.
 
 ### Dev-loop gotcha: stale WebView2 cache (bites constantly)
 
