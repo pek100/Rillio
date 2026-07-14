@@ -7,14 +7,25 @@ export { isShell, useIsShell };
 
 const currentWindow = () => getTauri()?.window?.getCurrentWindow?.();
 
+// How close to the top edge the pointer must come to reveal the header while
+// fullscreen. Comfortably taller than the 2rem control row itself.
+const REVEAL_ZONE_PX = 48;
+
 // The window is frameless (decorations off in the Tauri shell), so the web app
 // draws its own controls. They float in the top-right on every route and stay
 // clickable (never a drag region); a thin strip along the very top edge, plus
 // the draggable nav on the main routes, moves the window.
+//
+// While FULLSCREEN the whole header (controls + drag strip) hides and only
+// returns when the pointer approaches the top edge, so nothing overlays the
+// film. Revealing is driven by a pointer position test rather than a hover
+// target: an invisible full-width strip would swallow clicks meant for the
+// player's own top bar underneath it.
 const WindowControls = () => {
     const shell = useIsShell();
     const [maximized, setMaximized] = React.useState(false);
     const [fullscreen, setFullscreen] = React.useState(false);
+    const [nearTop, setNearTop] = React.useState(false);
 
     // Depends on the reactive `shell` so it attaches once useIsShell() flips
     // true, even when the Tauri global appeared after the first render (the
@@ -64,7 +75,24 @@ const WindowControls = () => {
         return () => window.removeEventListener('mousedown', onDown, true);
     }, [shell]);
 
+    // Fullscreen only: reveal the header when the pointer nears the top edge.
+    // Leaving fullscreen resets the flag so the header is unconditionally shown.
+    React.useEffect(() => {
+        if (!shell || !fullscreen) {
+            setNearTop(false);
+            return undefined;
+        }
+        const onMove = (e: MouseEvent) => setNearTop(e.clientY <= REVEAL_ZONE_PX);
+        window.addEventListener('mousemove', onMove);
+        return () => window.removeEventListener('mousemove', onMove);
+    }, [shell, fullscreen]);
+
     if (!shell) return null;
+
+    const headerHidden = fullscreen && !nearTop;
+    // pointer-events off while hidden: an invisible drag strip / control row must
+    // not intercept clicks aimed at the player chrome beneath it.
+    const headerVisibility = headerHidden ? 'pointer-events-none opacity-0' : 'opacity-100';
 
     // Fullscreen is fragile: any other window operation (drag, minimize,
     // maximize) performed while fullscreen leaves Windows in a stuck half-state
@@ -105,10 +133,10 @@ const WindowControls = () => {
                 below it). z sits just under the loading screen so the controls
                 stay grabbable even over the full-screen loading/updating
                 overlays. */}
-            <div data-tauri-drag-region className="fixed left-0 right-44 top-0 z-[2147483646] h-2.5" />
+            <div data-tauri-drag-region className={`fixed left-0 right-44 top-0 z-[2147483646] h-2.5 transition-opacity duration-150 ${headerVisibility}`} />
 
             {/* Controls: always on top, always clickable (no drag region). */}
-            <div className="fixed right-0 top-0 z-[2147483646] flex h-8 select-none">
+            <div className={`fixed right-0 top-0 z-[2147483646] flex h-8 select-none transition-opacity duration-150 ${headerVisibility}`}>
                 <button
                     type="button"
                     className={`${btn} hover:bg-white/10 hover:text-fg`}
