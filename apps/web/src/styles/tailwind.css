@@ -123,6 +123,14 @@
         rgba(30, 50, 80, 0.28) 0%,
         rgba(20, 34, 56, 0.10) 45%,
         transparent 100%);
+    /* The gradient's stops are percentages, so it is painted over a FIXED span rather
+     * than the element's own height (see .panel-tint): on a short panel a percentage
+     * ramp squeezes the whole blue-to-nothing fall into a few pixels and reads as a
+     * 3D bevel. With a fixed span a short panel simply shows the TOP of the fall, a
+     * tall one shows all of it and then plain fill (the ramp ends at transparent, so
+     * there is no seam). It is also what lets the search palette's two cards line one
+     * gradient up across their gap. */
+    --panel-gradient-span: 24rem;
     --color-glass-panel: rgba(0, 0, 0, 0.65);
     --color-glass-chrome: rgba(0, 0, 0, 0.35);
 
@@ -252,6 +260,11 @@
  * Player surfaces never take it: they are translucent so the film shows through. */
 .panel-tint {
     background-image: var(--panel-gradient);
+    /* Painted over a fixed span, never the element's own height - see
+     * --panel-gradient-span for why. no-repeat so a tall panel gets the fall once and
+     * then plain fill, instead of the ramp tiling down it. */
+    background-size: 100% var(--panel-gradient-span);
+    background-repeat: no-repeat;
 }
 
 html.active-slider-within { cursor: grabbing; }

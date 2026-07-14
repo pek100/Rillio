@@ -44,19 +44,21 @@ const { withCoreSuspender } = require('rillio/common/CoreSuspender');
 // palette is hand-rolled (its own portal, not a kit Dialog) - it must stay identical
 // to DialogContent's surface. Worn by BOTH panels: the field and the results.
 //
-// The two panels share ONE continuous gradient rather than each restarting it: both
-// stretch --panel-gradient over the same fixed span (bg-[length]) and the results
-// panel shifts it up by its own distance down the stack (RESULTS_OFFSET), so the tint
-// reads as one fall of colour cut in two. The span is a constant because CSS cannot
-// know a sibling's height, and 24rem covers the stack at any result count.
+// The two panels share ONE continuous gradient rather than each restarting it. They
+// get that for free: .panel-tint already paints the tint over a fixed
+// --panel-gradient-span instead of each element's own height, so both are drawing the
+// same ramp. The results panel then shifts its copy up by its own distance down the
+// stack (RESULTS_OFFSET) and the fall lines up across the gap.
+//
 // NO shadow-elevated here, unlike the single-panel dialogs: that shadow is 30px of
 // 50% black, and with two panels only 0.5rem apart the two of them merge across the
 // gap and wrap the pair in a dark cloud that reads as a box containing both (the same
 // illusion merged glows created on the poster cards). The panels sit on a blurred
 // black/60 scrim, so the hairline and their own fill are separation enough.
-const PANEL = 'panel-tint overflow-hidden rounded-squircle border border-line bg-card text-card-foreground bg-[length:100%_24rem] bg-no-repeat';
+const PANEL = 'panel-tint overflow-hidden rounded-squircle border border-line bg-card text-card-foreground';
 // The field panel is h-14 (3.5rem) and the gap is 0.5rem, so the results panel starts
 // 4rem down: shift its copy of the gradient up by exactly that to line the two up.
+// (If the field height or the gap ever changes, this has to change with them.)
 const RESULTS_OFFSET = 'bg-[position:0_-4rem]';
 
 type PlayUrlRef = React.MutableRefObject<((text: string) => Promise<boolean>) | null>;
