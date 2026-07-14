@@ -37,6 +37,9 @@ const METADATA_TIMEOUT: Duration = Duration::from_secs(180);
 /// (server.js:71921 / getDefaults). Without these, DHT is the only peer source
 /// and less-popular content gets zero peers; the addon's own trackers are added
 /// on top. librqbit supports UDP trackers.
+///
+/// These MUST reach a magnet through its `&tr=` params, not through
+/// `AddTorrentOptions::trackers` - see [`magnet_with_default_trackers`].
 const DEFAULT_TRACKERS: &[&str] = &[
     "udp://tracker.opentrackr.org:1337/announce",
     "udp://open.demonoid.ch:6969/announce",
@@ -92,8 +95,34 @@ fn rate_limit_from_env(var: &str) -> Option<std::num::NonZeroU32> {
         .and_then(std::num::NonZeroU32::new)
 }
 
+/// Append [`DEFAULT_TRACKERS`] to a magnet link as `&tr=` params.
+///
+/// librqbit 8.1.1 honours `AddTorrentOptions::trackers` ONLY on the `.torrent`
+/// bytes path (session.rs extends the announce-list with them). The MAGNET path
+/// builds its tracker list purely from `magnet.trackers` and drops `opts.trackers`
+/// on the floor. Every infohash-only add - the stream route AND /cache/download -
+/// goes through `get_or_create` -> a bare `magnet:?xt=urn:btih:<ih>`, so the
+/// injection above was silently dead for ALL of them: those torrents ran DHT-only
+/// and less-popular titles sat at 0 peers / 0 bytes forever (the exact failure the
+/// DEFAULT_TRACKERS doc warns about). Putting them in the URI is the only channel
+/// librqbit reads. Values are percent-encoded; `Magnet::parse` reads them back
+/// through `url::Url::query_pairs`, which decodes.
+fn magnet_with_default_trackers(magnet: &str) -> String {
+    // Every magnet we build or accept already carries `?xt=`, so `&tr=` appends
+    // cleanly. Duplicates (an addon magnet that already lists one of ours) are
+    // harmless: librqbit dedups trackers into a set before announcing.
+    let mut out = String::from(magnet);
+    for tracker in DEFAULT_TRACKERS {
+        out.push_str("&tr=");
+        out.extend(form_urlencoded::byte_serialize(tracker.as_bytes()));
+    }
+    out
+}
+
 fn add_torrent_options() -> librqbit::AddTorrentOptions {
     librqbit::AddTorrentOptions {
+        // Honoured on the .torrent-bytes path only (add_blob); the magnet path
+        // ignores this, which is why magnets get theirs via the URI instead.
         trackers: Some(DEFAULT_TRACKERS.iter().map(|s| s.to_string()).collect()),
         // Reuse existing cache files instead of failing on them. With
         // allow_overwrite=false librqbit's fs storage opens files with
@@ -746,9 +775,13 @@ impl Engine {
     /// idempotent auto-create on stream). Waits, bounded, for magnet metadata so
     /// files are available for index resolution.
     pub async fn add_magnet(&self, magnet: &str) -> anyhow::Result<Handle> {
+        // The defaults ride in the URI, the only channel librqbit reads for a
+        // magnet; an addon magnet's own trackers are preserved and ours are added
+        // on top, which is what the DEFAULT_TRACKERS doc always claimed happened.
+        let magnet = magnet_with_default_trackers(magnet);
         let resp = self
             .session
-            .add_torrent(AddTorrent::from_url(magnet), Some(add_torrent_options()))
+            .add_torrent(AddTorrent::from_url(&magnet), Some(add_torrent_options()))
             .await?;
         let handle = resp.into_handle().context("add_torrent returned list-only")?;
         // Bounded wait: a magnet with no reachable peers must not hang the request.
@@ -960,7 +993,45 @@ mod tests {
     use std::collections::HashSet;
     use std::sync::Mutex;
 
-    use super::{mark_prefetch_in, read_listen_pref, write_listen_pref, TORRENT_PREFS_FILE};
+    use super::{
+        magnet_with_default_trackers, mark_prefetch_in, read_listen_pref, write_listen_pref,
+        DEFAULT_TRACKERS, TORRENT_PREFS_FILE,
+    };
+
+    // The contract that matters is not the string we build, it is what librqbit
+    // parses back out of it - that is the step where opts.trackers was silently
+    // dropped and left every infohash-only add on DHT alone.
+    #[test]
+    fn librqbit_parses_our_default_trackers_out_of_a_bare_magnet() {
+        let bare = format!("magnet:?xt=urn:btih:{}", "a".repeat(40));
+        assert!(
+            librqbit::Magnet::parse(&bare)
+                .unwrap()
+                .trackers
+                .is_empty(),
+            "precondition: a bare magnet carries no trackers"
+        );
+
+        let parsed =
+            librqbit::Magnet::parse(&magnet_with_default_trackers(&bare)).unwrap();
+        assert_eq!(
+            parsed.trackers,
+            DEFAULT_TRACKERS.iter().map(|t| t.to_string()).collect::<Vec<_>>(),
+            "percent-encoded &tr= params must decode back to the exact tracker urls"
+        );
+    }
+
+    #[test]
+    fn an_addon_magnets_own_trackers_survive_and_ours_are_added_on_top() {
+        let magnet = format!(
+            "magnet:?xt=urn:btih:{}&tr=udp%3A%2F%2Faddon.example%3A1337%2Fannounce",
+            "b".repeat(40)
+        );
+        let parsed =
+            librqbit::Magnet::parse(&magnet_with_default_trackers(&magnet)).unwrap();
+        assert_eq!(parsed.trackers[0], "udp://addon.example:1337/announce");
+        assert_eq!(parsed.trackers.len(), 1 + DEFAULT_TRACKERS.len());
+    }
 
     #[test]
     fn mark_prefetch_dedups_per_infohash_and_file() {
