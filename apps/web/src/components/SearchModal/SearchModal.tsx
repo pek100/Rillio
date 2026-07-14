@@ -26,7 +26,12 @@ import React from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Command, CommandInput } from 'rillio/components/ui/command';
+// The cmdk root RAW, not the kit Command: that one paints its own bg-popover panel
+// and rounds/clips itself, which showed as a box wrapped around the two cards. Here
+// the root is pure layout (the panels are the surfaces), exactly as the nav SearchBar
+// does it. The kit CommandInput still works: CommandPrimitive supplies the context.
+import { Command as CommandPrimitive } from 'cmdk';
+import { CommandInput } from 'rillio/components/ui/command';
 import SearchSuggestions from 'rillio/components/SearchSuggestions';
 
 const debounce = require('lodash.debounce');
@@ -38,7 +43,16 @@ const { withCoreSuspender } = require('rillio/common/CoreSuspender');
 // The shared panel material. Named here rather than taken from the kit because this
 // palette is hand-rolled (its own portal, not a kit Dialog) - it must stay identical
 // to DialogContent's surface. Worn by BOTH panels: the field and the results.
-const PANEL = 'panel-tint overflow-hidden rounded-squircle border border-line bg-card text-card-foreground shadow-elevated';
+//
+// The two panels share ONE continuous gradient rather than each restarting it: both
+// stretch --panel-gradient over the same fixed span (bg-[length]) and the results
+// panel shifts it up by its own distance down the stack (RESULTS_OFFSET), so the tint
+// reads as one fall of colour cut in two. The span is a constant because CSS cannot
+// know a sibling's height, and 24rem covers the stack at any result count.
+const PANEL = 'panel-tint overflow-hidden rounded-squircle border border-line bg-card text-card-foreground shadow-elevated bg-[length:100%_24rem] bg-no-repeat';
+// The field panel is h-14 (3.5rem) and the gap is 0.5rem, so the results panel starts
+// 4rem down: shift its copy of the gradient up by exactly that to line the two up.
+const RESULTS_OFFSET = 'bg-[position:0_-4rem]';
 
 type PlayUrlRef = React.MutableRefObject<((text: string) => Promise<boolean>) | null>;
 
@@ -90,7 +104,7 @@ const SearchBody = ({ query, onClose, playUrlRef }: BodyProps) => {
     }
 
     return (
-        <div className={PANEL}>
+        <div className={`${PANEL} ${RESULTS_OFFSET}`}>
             <SearchSuggestions
                 historyItems={historyItems}
                 suggestions={suggestions}
@@ -186,7 +200,7 @@ const SearchModal = ({ onClose }: Props) => {
                 aria-label={t('SEARCH')}
                 className="absolute left-1/2 top-1/2 flex w-[min(40rem,calc(100vw-2rem))] -translate-x-1/2 -translate-y-1/2 flex-col gap-2"
             >
-                <Command shouldFilter={false} loop className="flex flex-col gap-2 bg-transparent">
+                <CommandPrimitive shouldFilter={false} loop className="flex flex-col gap-2">
                     <div className={PANEL}>
                         <CommandInput
                             ref={inputRef}
@@ -200,7 +214,7 @@ const SearchModal = ({ onClose }: Props) => {
                     </div>
 
                     <SearchBodySuspended query={query} onClose={close} playUrlRef={playUrlRef} />
-                </Command>
+                </CommandPrimitive>
             </div>
         </div>
     ), document.body);
