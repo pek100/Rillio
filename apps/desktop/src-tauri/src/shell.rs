@@ -562,7 +562,10 @@ fn snapshot_temp_path() -> PathBuf {
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_nanos())
         .unwrap_or(0);
-    std::env::temp_dir().join(format!("rillio-snapshot-{nanos}.png"))
+    // .jpg, NOT .png: mpv picks the encoder from the EXTENSION, and lossless-
+    // encoding a full-resolution (4K, HDR) frame costs SECONDS, which is what made
+    // the backdrop arrive whole seconds after a menu opened.
+    std::env::temp_dir().join(format!("rillio-snapshot-{nanos}.jpg"))
 }
 
 /// Capture one frame: mpv -> temp PNG -> downscaled JPEG data URL. Blocking.
@@ -575,16 +578,23 @@ fn capture_snapshot(ctrl: &Controller, temp: &Path) -> Result<String, String> {
     // SDR-ish image comes out is fine under blur + dark glass, so we
     // deliberately do not configure it.
     let path = temp.to_string_lossy().to_string();
+    // Encoder settings for LATENCY, not fidelity: this frame is downscaled to 320px
+    // and blurred by 24px before anyone sees it. 8-bit output (a 16-bit HDR PNG/JPEG
+    // is far heavier to write and decode) at a low quality. Set per capture because
+    // set_property is cheap and this keeps the capture self-contained; failures are
+    // ignored, mpv just uses its defaults.
+    let _ = ctrl.mpv.set_property("screenshot-high-bit-depth", "no");
+    let _ = ctrl.mpv.set_property("screenshot-jpeg-quality", "50");
     ctrl.mpv
         .command(&["screenshot-to-file", &path, "video"])
         .map_err(|e| format!("player_snapshot: mpv screenshot failed: {e}"))?;
 
-    let png = std::fs::read(temp)
+    let raw = std::fs::read(temp)
         .map_err(|e| format!("player_snapshot: reading {path}: {e}"))?;
     // Best-effort cleanup; a leaked temp file must not fail the capture.
     let _ = std::fs::remove_file(temp);
 
-    let image = image::load_from_memory(&png)
+    let image = image::load_from_memory(&raw)
         .map_err(|e| format!("player_snapshot: decoding the screenshot: {e}"))?;
     let image = downscale(image, SNAPSHOT_MAX_WIDTH);
 
@@ -610,8 +620,10 @@ fn downscale(image: image::DynamicImage, max_width: u32) -> image::DynamicImage 
         return image;
     }
     let scaled_height = ((height as u64 * max_width as u64) / width as u64).max(1) as u32;
-    // Triangle: cheap, and the result is about to be blurred by 24px anyway.
-    image.resize_exact(max_width, scaled_height, image::imageops::FilterType::Triangle)
+    // thumbnail_exact(): the fast path, meant for exactly this. A filtered resize
+    // over 8M source pixels would cost more than the whole rest of the pipeline,
+    // and the result is about to be blurred by 24px anyway.
+    image.thumbnail_exact(max_width, scaled_height)
 }
 
 /// Carry one outbound IPC message to mpv. `args` is the web client's argument

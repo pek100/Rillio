@@ -89,6 +89,18 @@
     --color-ice: #E8F1FB;
     --color-ice-muted: rgba(232, 241, 251, 0.62);
 
+    /* GLASS LADDER - every floating surface picks exactly one of these two fills, so
+     * menus, modals, drawers, toasts, HUDs and the player islands can never drift
+     * apart again (they had reached four different alphas). Both are BLACK-alpha,
+     * never a white lift: they float over video and imagery, where a white blend
+     * reads milky (the HDR lesson, see --modal-background-color).
+     *   panel  = surfaces you READ and stay in (menus, dialogs, drawers, toasts,
+     *            tooltips, HUD indicators)
+     *   chrome = transient bars you GLANCE at, kept lighter so they never wall off
+     *            the film (control-bar islands, the preload chip) */
+    --color-glass-panel: rgba(0, 0, 0, 0.65);
+    --color-glass-chrome: rgba(0, 0, 0, 0.35);
+
     /* The gap above the nav bar. Hoisted into a token because TWO components must
      * agree on it: MainNavBars (the main routes' TopNav offset AND the content
      * offset below it) and the Player's TopBar (as inner padding, since that bar's
@@ -121,7 +133,7 @@
      * panel itself: the Dialog overlay already blurs (bg-black/60 + blur-24), so
      * blurring the panel too would be a wasted second backdrop-filter in the same
      * stacking context; the border-line hairline separates it from the scrim. */
-    --color-card: rgba(0, 0, 0, 0.65);
+    --color-card: var(--color-glass-panel);
     --color-card-foreground: var(--color-fg);
     /* popover = FLOATING MENU glass (dropdown / select / context / popover content, and
      * tooltip / toast). BLACK-alpha, not white: menus portal over posters and imagery,
@@ -130,7 +142,7 @@
      * near-white poster regions. Paired with backdrop-blur-md + a border-line hairline
      * in the primitives; over the pure-black page the fill vanishes but the hairline +
      * shadow define the panel and white text/hover lifts still read. */
-    --color-popover: rgba(0, 0, 0, 0.55);
+    --color-popover: var(--color-glass-panel);
     --color-popover-foreground: var(--color-fg);
     --color-primary: var(--color-accent);           /* #FFA033 brand */
     --color-primary-foreground: var(--color-bg);

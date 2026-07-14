@@ -36,7 +36,7 @@ const CB_ICON = 'size-(--icon-size-player)';
 // with the circular button hover shapes; gap-2 gives each button breathing room.
 // flex-none is load-bearing: without it a tight row compresses the island and its
 // buttons below their circular size (the right island always had it).
-const CB_ISLAND = 'flex flex-none flex-row items-center gap-2 rounded-full bg-black/25 p-1.5 backdrop-blur-md';
+const CB_ISLAND = 'flex flex-none flex-row items-center gap-2 rounded-full bg-glass-chrome p-1.5 backdrop-blur-md';
 
 type Props = {
     className?: string;
@@ -266,7 +266,7 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                 <div className={cn(
                     // Desktop: the right menus island (min-width sm only, so it never
                     // clashes with the mobile overflow-popover styling below).
-                    'flex flex-none flex-row gap-2 sm:rounded-full sm:bg-black/25 sm:p-1.5 sm:backdrop-blur-md',
+                    'flex flex-none flex-row gap-2 sm:rounded-full sm:bg-glass-chrome sm:p-1.5 sm:backdrop-blur-md',
                     'max-sm:absolute max-sm:bottom-[4.5rem] max-sm:right-0 max-sm:m-2 max-sm:max-w-[calc(100dvw-1rem)] max-sm:gap-[0.15rem] max-sm:overflow-x-auto max-sm:rounded-card max-sm:bg-(--modal-background-color) max-sm:p-2 max-sm:shadow-(--outer-glow)',
                     buttonsMenuOpen ? 'max-sm:flex' : 'max-sm:hidden',
                 )}>

@@ -21,7 +21,7 @@ type Props = {
 const NextEpisodePreloadPrompt = ({ onAccept, onDismiss, onMouseMove, onMouseOver }: Props) => {
     return (
         <div
-            className={'player-immersion-fade absolute bottom-28 right-6 z-10 flex items-center gap-1 rounded-full bg-black/50 p-1 backdrop-blur-md'}
+            className={'player-immersion-fade absolute bottom-28 right-6 z-10 flex items-center gap-1 rounded-full bg-glass-chrome p-1 backdrop-blur-md'}
             onMouseMove={onMouseMove}
             onMouseOver={onMouseOver}
         >
