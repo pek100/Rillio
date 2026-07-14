@@ -101,6 +101,23 @@
     --color-glass-panel: rgba(0, 0, 0, 0.65);
     --color-glass-chrome: rgba(0, 0, 0, 0.35);
 
+    /* GLOSS - the TropX material recipe (see his app-build-playbook design-spec),
+     * adapted to the cinematic black base. A tight diagonal sheen over the fill, an
+     * inset top highlight + drop shadow INSTEAD of a border (TropX's final iteration
+     * removed borders), over a light backdrop blur. The sheen fades to nothing by
+     * 12% of the element's width: that tightness is the whole character, and it also
+     * masks the fact that a gradient angle cannot transition.
+     * Applied via the .glass class in the global block, never per surface. */
+    --glass-sheen: linear-gradient(150deg,
+        rgba(255, 255, 255, 0.09) 0%,
+        rgba(255, 255, 255, 0.02) 12%,
+        transparent 100%);
+    --glass-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.4), 0 4px 12px rgba(0, 0, 0, 0.22);
+    /* Blur strengths. Deliberately light: a heavy blur turned the backdrop to mush
+     * and read as a loading screen rather than a material. */
+    --glass-blur: 6px;
+    --scrim-blur: 8px;
+
     /* The gap above the nav bar. Hoisted into a token because TWO components must
      * agree on it: MainNavBars (the main routes' TopNav offset AND the content
      * offset below it) and the Player's TopBar (as inner padding, since that bar's
@@ -211,6 +228,17 @@
  * the pointer at the window level; body pointer-events are disabled so the drag is
  * not interrupted by hovering other elements. These need <html>/<body> selectors, so
  * they live here as global rules rather than as per-element Tailwind utilities. */
+/* The glossy-glass material. Applied ALONGSIDE a fill (bg-glass-panel /
+ * bg-glass-chrome / bg-popover / bg-card), so every floating surface gets an
+ * identical sheen and edge from one place: the fill says how dark, .glass says
+ * what material it is. Surfaces keep their own backdrop-blur utility (the strength
+ * is the --glass-blur / --scrim-blur token) because blur is per-context: a scrim
+ * blurs more than a menu. No border by design - the inset highlight is the edge. */
+.glass {
+    background-image: var(--glass-sheen);
+    box-shadow: var(--glass-shadow);
+}
+
 html.active-slider-within { cursor: grabbing; }
 html.active-slider-within body { pointer-events: none; }
 

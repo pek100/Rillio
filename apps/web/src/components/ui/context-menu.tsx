@@ -25,7 +25,7 @@ const contentClasses =
     // transform to place). Entrance/exit are `animation` utilities, not transitions.
     // Cinematic glass: black-alpha bg-popover + backdrop-blur-md, border-line hairline
     // edge (see dropdown-menu contentClasses for the full rationale).
-    'z-50 min-w-[8rem] overflow-hidden rounded-card border border-line bg-popover p-1 text-popover-foreground shadow-elevated backdrop-blur-md transition-none ' +
+    'z-50 min-w-[8rem] overflow-hidden glass rounded-card bg-popover p-1 text-popover-foreground backdrop-blur-(--glass-blur) transition-none ' +
     'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95';
 
 const itemClasses =

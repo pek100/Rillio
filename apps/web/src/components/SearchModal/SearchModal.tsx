@@ -170,7 +170,7 @@ const SearchModal = ({ onClose }: Props) => {
                 reach the page behind it (the still-open Chromium flicker bug 1194050 /
                 40175472). The addon modal's backdrop is smooth precisely because it just
                 appears, so match it. */}
-            <div className="absolute inset-0 bg-black/60 backdrop-blur-xl" onClick={close} />
+            <div className="absolute inset-0 bg-black/60 backdrop-blur-(--scrim-blur)" onClick={close} />
 
             <div
                 role="dialog"

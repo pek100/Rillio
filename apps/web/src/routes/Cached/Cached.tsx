@@ -34,6 +34,10 @@ const stateLabel = (entry: CacheEntry): string => {
     return 'Preparing';
 };
 
+// One tag treatment: a fixed-height pill that can never wrap or be squeezed, with
+// the small-caps typography a two-letter label needs to read as deliberate.
+const BADGE = 'inline-flex h-5 shrink-0 items-center whitespace-nowrap rounded-md bg-surface px-2 text-[0.625rem] font-semibold uppercase leading-none tracking-wider text-fg-muted';
+
 // Quality badges parsed from the torrent name, mirroring the stream cards.
 const QualityBadges = ({ name }: { name: string }) => {
     const quality: ParsedQuality = useMemo(() => parseStream({ name, description: '' }), [name]);
@@ -43,22 +47,26 @@ const QualityBadges = ({ name }: { name: string }) => {
         return null;
     }
     return (
-        <span className="inline-flex items-center gap-1.5">
+        // shrink-0 all the way down: this sits next to a truncating title in a flex
+        // row, and without it the row squeezes the badges until their labels wrap
+        // mid-word ("HD R"). Fixed height + leading-none centers the glyphs; uppercase
+        // + wide tracking is what makes a two-letter tag read as a tag.
+        <span className="inline-flex shrink-0 items-center gap-1.5">
             {
                 resolution !== null ?
-                    <span className="rounded-md bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-fg-muted">{resolution}</span>
+                    <span className={BADGE}>{resolution}</span>
                     :
                     null
             }
             {
                 quality.hdr ?
-                    <span className="rounded-md bg-surface px-1.5 py-0.5 text-[10px] font-semibold text-fg-muted">HDR</span>
+                    <span className={BADGE}>HDR</span>
                     :
                     null
             }
             {
                 quality.flags.length > 0 ?
-                    <span className="text-[11px] tracking-tight">{quality.flags.slice(0, 4).join(' ')}</span>
+                    <span className="shrink-0 whitespace-nowrap text-[0.6875rem] font-medium tracking-wide text-fg-subtle">{quality.flags.slice(0, 4).join(' ')}</span>
                     :
                     null
             }

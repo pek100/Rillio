@@ -428,7 +428,7 @@ const Addons = ({ payload, onClose }: Props) => {
                 from DialogOverlay. pointer-events-none preserves the deliberate
                 non-trapping outside-interaction the nested AddonDetails modal needs. */}
             <DialogPortal>
-                <div aria-hidden className="pointer-events-none fixed inset-0 z-40 bg-black/60 backdrop-blur-[24px] animate-in fade-in-0" />
+                <div aria-hidden className="pointer-events-none fixed inset-0 z-40 bg-black/60 backdrop-blur-(--scrim-blur) animate-in fade-in-0" />
             </DialogPortal>
             <DialogContent
                 showClose={false}
