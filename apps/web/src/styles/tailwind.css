@@ -89,11 +89,12 @@
     --color-ice: #E8F1FB;
     --color-ice-muted: rgba(232, 241, 251, 0.62);
 
-    /* Nav glow - a hint of the pre-cinematic blue-black identity, kept as a soft
-     * gradient falling from behind the nav into the pure-black page (see the
-     * nav-glow layer in MainNavBars). Deeper and slightly more chromatic than the
-     * old #020407 base so it actually reads against black before it fades out. */
-    --color-nav-glow: #0C1E33;
+    /* Nav glow - a hint of the pre-cinematic identity: the app's FORMER background
+     * blue-black, falling from behind the nav into the pure-black page (see the
+     * nav-glow layer in MainNavBars). Deliberately the old --color-bg value and not
+     * a lighter blue, so the page top reads exactly like the old base and dissolves
+     * into cinematic black rather than glowing. */
+    --color-nav-glow: #020407;
 
     /* shadcn token bridge (Phase 2 foundation kit). The adapted shadcn/Radix
      * primitives in components/ui read these semantic color names as Tailwind
