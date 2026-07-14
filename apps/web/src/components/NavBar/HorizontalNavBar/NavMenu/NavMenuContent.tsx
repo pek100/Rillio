@@ -1,33 +1,37 @@
 // Copyright (C) 2017-2024 Smart code 203358507
 
 /**
- * Account hub panel (contents of the NavMenu popover). Clean-room rewrite of the
- * legacy styles.less panel onto Tailwind semantic tokens; every hook/dispatch is
- * reused verbatim (Logout, PlayUrl clipboard, sync events, display-name edit,
- * fullscreen, shell gating). Rendered inside the kit Popover, so it no longer owns
- * its own positioning - just the flat, divide-y panel body.
+ * Account hub panel (contents of the NavMenu popover). THE ACCOUNT, AND NOTHING
+ * ELSE: who you are, and the way out.
+ *
+ * It used to carry a menu of eight rows, nearly all of them a second door to
+ * something that already had one. Settings duplicated the nav's own gear icon;
+ * Help & Feedback and Website duplicated, link for link, the Support and Website
+ * entries in Settings > General; and Sync & backup / Import from Stremio / Upload
+ * to Stremio were three rows opening ONE modal on three tabs. What genuinely had
+ * no other home (sync, Play URL/Magnet) moved into Settings > General rather than
+ * keeping a menu alive for it.
+ *
+ * Fullscreen is the one survivor, and only in a browser: `!inShell` means the
+ * desktop shell never renders it (its window header owns real fullscreen), and
+ * there is no window chrome to host it on the web. So in the shell this panel IS
+ * account-only.
  */
 
 import React from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
-import { Settings, RefreshCw, Download, Library, Magnet, CircleHelp, Minimize, Maximize } from 'lucide-react';
+import { Minimize, Maximize } from 'lucide-react';
 import { useCore } from 'rillio/core';
 import { useFullscreen } from 'rillio/common/Fullscreen';
 import { withCoreSuspender } from 'rillio/common/CoreSuspender';
 import { useDisplayName } from 'rillio/common/useDisplayName';
-import { openSync } from 'rillio/common/syncEvents';
-import { openModal } from 'rillio/common/modalEvents';
-import { useToast } from 'rillio/components/ui/use-toast';
 import { Button } from 'rillio/components/ui/button';
-import { cn } from 'rillio/components/ui/cn';
 import DisplayNameEdit from 'rillio/components/DisplayNameEdit';
 import { useIsShell } from 'rillio/components/WindowControls/WindowControls';
 
 const useProfile = require('rillio/common/useProfile');
 const usePWA = require('rillio/common/usePWA');
-const useStreamingServer = require('rillio/common/useStreamingServer');
-const { default: usePlayUrl } = require('rillio/common/usePlayUrl');
 const avatarAnonymous = require('/assets/images/avatar-anonymous.svg');
 const avatarDefault = require('/assets/images/avatar-default.svg');
 
@@ -43,9 +47,6 @@ const NavMenuContent = ({ onSelect }: Props) => {
     const core = useCore();
     const profile = useProfile();
     const [displayName, setDisplayName] = useDisplayName();
-    const streamingServer = useStreamingServer();
-    const { handlePlayUrl } = usePlayUrl();
-    const toast = useToast();
     const [fullscreen, requestFullscreen, exitFullscreen, , supported] = useFullscreen();
     const [, isAndroidPWA] = usePWA();
     // In the desktop shell the window header owns (native) fullscreen; this
@@ -55,22 +56,6 @@ const NavMenuContent = ({ onSelect }: Props) => {
     const logout = React.useCallback(() => {
         core.transport.dispatch({ action: 'Ctx', args: { action: 'Logout' } });
     }, [core]);
-
-    const onPlayMagnetLinkClick = React.useCallback(async () => {
-        try {
-            const clipboardText = await navigator.clipboard.readText();
-            const handled = await handlePlayUrl(clipboardText);
-            if (!handled) {
-                toast.show({
-                    type: 'error',
-                    title: 'Clipboard does not contain a valid URL or magnet link.',
-                    timeout: 5000
-                });
-            }
-        } catch (e) {
-            console.error(e);
-        }
-    }, [handlePlayUrl, toast]);
 
     const handleAuth = React.useCallback(() => {
         return profile.auth !== null ? logout() : navigate('/intro');
@@ -120,38 +105,6 @@ const NavMenuContent = ({ onSelect }: Props) => {
                     null
             }
 
-            <div className="border-t border-line py-1">
-                <Button variant="ghost" className={ROW} title={t('SETTINGS')} onClick={() => openModal('settings')}>
-                    <Settings />
-                    <span className="flex-1 text-left">{t('SETTINGS')}</span>
-                </Button>
-                <Button variant="ghost" className={ROW} title="Sync & backup" onClick={() => openSync('backup')}>
-                    <RefreshCw />
-                    <span className="flex-1 text-left">Sync & backup</span>
-                </Button>
-                <Button variant="ghost" className={ROW} title="Import from Stremio" onClick={() => openSync('stremio')}>
-                    <Download />
-                    <span className="flex-1 text-left">Import from Stremio</span>
-                </Button>
-                <Button variant="ghost" className={ROW} title="Upload to Stremio" onClick={() => openSync('upload')}>
-                    <Library />
-                    <span className="flex-1 text-left">Upload to Stremio</span>
-                </Button>
-                <Button variant="ghost" className={ROW} title={t('PLAY_URL_MAGNET_LINK')} onClick={onPlayMagnetLinkClick}>
-                    <Magnet />
-                    <span className="flex-1 text-left">{t('PLAY_URL_MAGNET_LINK')}</span>
-                </Button>
-                <Button variant="ghost" className={ROW} title={t('HELP_FEEDBACK')} href="https://github.com/pek100/rillio/issues" target="_blank">
-                    <CircleHelp />
-                    <span className="flex-1 text-left">{t('HELP_FEEDBACK')}</span>
-                </Button>
-            </div>
-
-            <div className="border-t border-line py-1">
-                <Button variant="ghost" className={ROW} title="Website" href="https://rillio.app" target="_blank">
-                    <span className="flex-1 text-left">Website</span>
-                </Button>
-            </div>
         </div>
     );
 };

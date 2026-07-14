@@ -27,7 +27,7 @@ import useToast from 'rillio/common/Toast/useToast';
 import { setDisplayName } from 'rillio/common/useDisplayName';
 import { OPEN_SYNC_EVENT } from 'rillio/common/syncEvents';
 import { exportLocalData, importLocalData, anonymizeBucket } from 'rillio/common/localData';
-import { uploadToStremio, type UploadAuth } from 'rillio/common/stremioUpload';
+import { uploadToStremio, type UploadAuth, type UploadResult } from 'rillio/common/stremioUpload';
 import { makeQrSvg } from 'rillio/common/qr';
 import useFacebookLogin from 'rillio/routes/Intro/useFacebookLogin';
 import useAppleLogin from 'rillio/routes/Intro/useAppleLogin';
@@ -48,7 +48,11 @@ const PERSIST_TIMEOUT_MS = 30000;
 const LABEL = 'text-[11px] font-semibold uppercase tracking-wider text-fg-subtle';
 const HINT = 'mt-1.5 mb-3 text-sm leading-snug text-fg-muted';
 
-type Tab = 'backup' | 'stremio' | 'upload';
+type Tab = 'backup' | 'stremio';
+// Which way the Stremio tab moves data. Import and Upload used to be two tabs
+// carrying two copies of the same sign-in form; they need the SAME credentials,
+// so the sign-in is shared now and this only picks what it does afterwards.
+type Direction = 'import' | 'upload';
 
 const SyncModal = () => {
     const core = useCore();
@@ -58,6 +62,7 @@ const SyncModal = () => {
 
     const [open, setOpen] = React.useState(false);
     const [tab, setTab] = React.useState<Tab>('backup');
+    const [direction, setDirection] = React.useState<Direction>('import');
 
     const [code, setCode] = React.useState('');
     const [exportError, setExportError] = React.useState<string | null>(null);
@@ -100,7 +105,8 @@ const SyncModal = () => {
         const onOpen = (event: Event) => {
             const detail = (event as CustomEvent).detail;
             const requested = detail ? detail.tab : null;
-            setTab(requested === 'stremio' || requested === 'upload' ? requested : 'backup');
+            setTab(requested === 'stremio' ? 'stremio' : 'backup');
+            setDirection('import');
             setError(null);
             setRestoreDraft('');
             try {
@@ -252,12 +258,26 @@ const SyncModal = () => {
         setError(null);
         setUploadStage('Starting…');
         uploadToStremio(auth, (stage: string) => setUploadStage(stage))
-            .then(({ itemsPushed, addonsAdded }: { itemsPushed: number, addonsAdded: number }) => {
+            .then(({ itemsPushed, addonsAdded, removalsPushed }: UploadResult) => {
                 setUploadStage(null);
-                const message = itemsPushed === 0 && addonsAdded === 0 ?
-                    'Your Stremio account already has everything on this device.' :
-                    `Sent ${itemsPushed} library item${itemsPushed === 1 ? '' : 's'} and ${addonsAdded} add-on${addonsAdded === 1 ? '' : 's'} to your account.`;
-                toast.show({ type: 'success', title: 'Uploaded to Stremio', message, timeout: 5000 });
+                // Count what will actually be VISIBLE on the account. Most of a typical
+                // library is `removed: true` - things taken out, plus the "temp"
+                // continue-watching entries never explicitly added. Those sync as
+                // tombstones and then appear nowhere, so reporting them as "library
+                // items sent" reads as a lie: the account looks unchanged. Say the
+                // visible number, and mention the removals as what they are.
+                const added = itemsPushed - removalsPushed;
+                const plural = (n: number, word: string) => `${n} ${word}${n === 1 ? '' : 's'}`;
+                const parts: string[] = [];
+                if (added > 0) parts.push(plural(added, 'library item'));
+                if (addonsAdded > 0) parts.push(plural(addonsAdded, 'add-on'));
+                const message = parts.length === 0 ?
+                    (removalsPushed > 0 ?
+                        `Your account was already up to date; synced ${plural(removalsPushed, 'removal')}.` :
+                        'Your Stremio account already has everything on this device.') :
+                    `Sent ${parts.join(' and ')} to your account.` +
+                        (removalsPushed > 0 ? ` (${plural(removalsPushed, 'removal')} also synced.)` : '');
+                toast.show({ type: 'success', title: 'Uploaded to Stremio', message, timeout: 6000 });
             })
             .catch((e: Error) => {
                 setUploadStage(null);
@@ -303,31 +323,55 @@ const SyncModal = () => {
             });
     }, [uploadStage, startAppleLogin, runUpload]);
 
+    // Either flow being in flight locks the whole shared form.
+    const inFlight = busy || uploadStage !== null;
+
+    const submitWithEmail = direction === 'import' ? importWithEmail : uploadWithEmail;
+
     if (!open) return null;
 
-    const tabBtn = (id: Tab, label: string) => (
+    const pillBtn = (selected: boolean, label: string, onClick: () => void) => (
         <Button
             variant="ghost"
-            className={cn('h-8 rounded-full px-3.5 text-sm font-medium', tab === id ? 'bg-accent text-bg hover:bg-accent' : 'text-fg-muted hover:text-fg')}
-            onClick={() => { setError(null); setTab(id); }}
+            className={cn('h-8 rounded-full px-3.5 text-sm font-medium', selected ? 'bg-accent text-bg hover:bg-accent' : 'text-fg-muted hover:text-fg')}
+            onClick={onClick}
         >
             {label}
         </Button>
     );
 
+    const tabBtn = (id: Tab, label: string) => pillBtn(tab === id, label, () => { setError(null); setTab(id); });
+
+    // Switching direction mid-flight would leave the in-flight flow's label on the
+    // other direction's button, so it is locked while either is running.
+    const directionBtn = (id: Direction, label: string) => pillBtn(
+        direction === id,
+        label,
+        () => { if (!inFlight) { setError(null); setDirection(id); } },
+    );
+
     return (
         <Dialog open onOpenChange={(next) => { if (!next) close(); }}>
+            {/* No bg / radius overrides: DialogContent already paints the house panel
+                (panel-tint + bg-card + border-line + rounded-squircle + shadow). This
+                used to pass `bg-surface rounded-[22px]`, and since cn() is twMerge those
+                REPLACED the panel with the 5%-white lift meant for cards on the page -
+                translucent over the scrim, so the blurred backdrop showed straight
+                through the panel and its buttons. rounded-[22px] was --radius-squircle
+                spelled out by hand. Only p-0 stays: the sticky tab bar and the bodies
+                own their padding. */}
             <DialogContent
                 showClose={false}
-                className="flex max-h-[85dvh] w-full max-w-md flex-col gap-0 overflow-y-auto rounded-[22px] bg-surface p-0"
+                className="flex max-h-[85dvh] w-full max-w-md flex-col gap-0 overflow-y-auto p-0"
             >
                 <DialogTitle className="sr-only">Sync</DialogTitle>
 
-                <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-surface px-5 pt-4 pb-3">
+                {/* bg-card matches the panel fill so rows scrolling under the sticky bar
+                    are hidden by it rather than showing through. */}
+                <div className="sticky top-0 z-10 flex items-center justify-between gap-2 bg-card px-5 pt-4 pb-3">
                     <div className="inline-flex gap-1 rounded-full bg-surface-hover p-1">
                         {tabBtn('backup', 'Backup & restore')}
-                        {tabBtn('stremio', 'Import')}
-                        {tabBtn('upload', 'Upload')}
+                        {tabBtn('stremio', 'Stremio')}
                     </div>
                     <IconButton size="sm" title="Close" onClick={close}>
                         <X className="size-4" />
@@ -365,14 +409,38 @@ const SyncModal = () => {
                             <Button variant="ghost" className="w-full bg-surface-hover text-fg hover:brightness-110" onClick={restore}>Restore</Button>
                         </div>
                         :
-                        tab === 'stremio' ?
                         <div className="flex flex-col px-5 pb-6 pt-1">
-                            <div className={LABEL}>Import from Stremio</div>
-                            <div className={HINT}>Sign in once. We pull your library and add-ons into Rillio, store them locally, and don&apos;t stay connected, your Stremio session is untouched.</div>
-                            <Input className="mb-2.5" type="email" placeholder="Stremio email" value={email} autoComplete="off" disabled={busy} onChange={(e) => setEmail(e.target.value)} />
-                            <Input className="mb-3" type="password" placeholder="Stremio password" value={password} disabled={busy} onChange={(e) => setPassword(e.target.value)} onSubmit={importWithEmail} />
-                            <Button className={cn('w-full', busy && 'pointer-events-none opacity-70')} onClick={importWithEmail}>
-                                {busy ? 'Importing…' : 'Import my data'}
+                            {/* One sign-in, two directions. Both flows need the same
+                                Stremio credentials, so the form (and the Facebook /
+                                Apple buttons, which have to know which way to go before
+                                they open their popup) is shared and this picks what the
+                                sign-in does. */}
+                            <div className={LABEL}>Stremio</div>
+                            <div className={HINT}>Move your library and add-ons between this device and a Stremio account. Sign in once; we never stay connected.</div>
+
+                            <div className="mb-4 inline-flex gap-1 self-start rounded-full bg-surface-hover p-1">
+                                {directionBtn('import', 'Import')}
+                                {directionBtn('upload', 'Upload')}
+                            </div>
+
+                            <div className={cn(HINT, 'mt-0')}>
+                                {
+                                    direction === 'import' ?
+                                        'Pulls your Stremio library and add-ons into Rillio and stores them locally. Your Stremio session is untouched.'
+                                        :
+                                        'Pushes this device’s library and add-ons to your Stremio account, then signs out. Nothing on the account is removed, newer account data is kept, and your local data stays untouched.'
+                                }
+                            </div>
+
+                            <Input className="mb-2.5" type="email" placeholder="Stremio email" value={email} autoComplete="off" disabled={inFlight} onChange={(e) => setEmail(e.target.value)} />
+                            <Input className="mb-3" type="password" placeholder="Stremio password" value={password} disabled={inFlight} onChange={(e) => setPassword(e.target.value)} onSubmit={submitWithEmail} />
+                            <Button className={cn('w-full', inFlight && 'pointer-events-none opacity-70')} onClick={submitWithEmail}>
+                                {
+                                    direction === 'import' ?
+                                        (busy ? 'Importing…' : 'Import my data')
+                                        :
+                                        (uploadStage !== null ? uploadStage : 'Upload my data')
+                                }
                             </Button>
 
                             <div className="my-4 flex items-center gap-3 text-[11px] uppercase tracking-wider text-fg-subtle">
@@ -380,36 +448,11 @@ const SyncModal = () => {
                             </div>
 
                             <div className="flex flex-col gap-2.5">
-                                <Button variant="ghost" className={cn('w-full bg-surface-hover text-fg hover:brightness-110', busy && 'pointer-events-none opacity-50')} onClick={importWithFacebook}>
+                                <Button variant="ghost" className={cn('w-full bg-surface-hover text-fg hover:brightness-110', inFlight && 'pointer-events-none opacity-50')} onClick={direction === 'import' ? importWithFacebook : uploadWithFacebook}>
                                     <Facebook className="size-4" />
                                     Continue with Facebook
                                 </Button>
-                                <Button variant="ghost" className={cn('w-full bg-surface-hover text-fg hover:brightness-110', busy && 'pointer-events-none opacity-50')} onClick={importWithApple}>
-                                    <Apple className="size-4" />
-                                    Continue with Apple
-                                </Button>
-                            </div>
-                        </div>
-                        :
-                        <div className="flex flex-col px-5 pb-6 pt-1">
-                            <div className={LABEL}>Upload to Stremio</div>
-                            <div className={HINT}>Sign in once. We push this device&apos;s library and add-ons to your Stremio account, then sign out. Nothing on the account is removed, newer account data is kept, and your local data stays untouched.</div>
-                            <Input className="mb-2.5" type="email" placeholder="Stremio email" value={email} autoComplete="off" disabled={uploadStage !== null} onChange={(e) => setEmail(e.target.value)} />
-                            <Input className="mb-3" type="password" placeholder="Stremio password" value={password} disabled={uploadStage !== null} onChange={(e) => setPassword(e.target.value)} onSubmit={uploadWithEmail} />
-                            <Button className={cn('w-full', uploadStage !== null && 'pointer-events-none opacity-70')} onClick={uploadWithEmail}>
-                                {uploadStage !== null ? uploadStage : 'Upload my data'}
-                            </Button>
-
-                            <div className="my-4 flex items-center gap-3 text-[11px] uppercase tracking-wider text-fg-subtle">
-                                <span className="h-px flex-1 bg-line" />or<span className="h-px flex-1 bg-line" />
-                            </div>
-
-                            <div className="flex flex-col gap-2.5">
-                                <Button variant="ghost" className={cn('w-full bg-surface-hover text-fg hover:brightness-110', uploadStage !== null && 'pointer-events-none opacity-50')} onClick={uploadWithFacebook}>
-                                    <Facebook className="size-4" />
-                                    Continue with Facebook
-                                </Button>
-                                <Button variant="ghost" className={cn('w-full bg-surface-hover text-fg hover:brightness-110', uploadStage !== null && 'pointer-events-none opacity-50')} onClick={uploadWithApple}>
+                                <Button variant="ghost" className={cn('w-full bg-surface-hover text-fg hover:brightness-110', inFlight && 'pointer-events-none opacity-50')} onClick={direction === 'import' ? importWithApple : uploadWithApple}>
                                     <Apple className="size-4" />
                                     Continue with Apple
                                 </Button>

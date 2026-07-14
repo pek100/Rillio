@@ -2,11 +2,16 @@ import React, { forwardRef, useCallback, useEffect, useMemo, useState } from 're
 import { useTranslation } from 'react-i18next';
 import { useCore } from 'rillio/core';
 import { usePlatform, useToast, useDiscord } from 'rillio/common';
+import { openSync } from 'rillio/common/syncEvents';
 import { Button } from 'rillio/components/ui/button';
 import { Trakt, Discord } from 'rillio/components/ui/brand-icons';
 import { Section, Option, Link, SettingsSwitch } from '../components';
 import User from './User';
 import useDataExport from './useDataExport';
+
+// CJS require, matching how the rest of the app consumes usePlayUrl (it is an
+// `export =` module).
+const { default: usePlayUrl } = require('rillio/common/usePlayUrl');
 
 type Props = {
     profile: Profile,
@@ -19,6 +24,7 @@ const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
     const toast = useToast();
     const discord = useDiscord();
     const [dataExport, loadDataExport] = useDataExport();
+    const { handlePlayUrl } = usePlayUrl();
 
     const [traktAuthStarted, setTraktAuthStarted] = useState(false);
 
@@ -30,6 +36,23 @@ const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
     const onExportData = useCallback(() => {
         loadDataExport();
     }, []);
+
+    // Moved here from the account menu, which is the account and nothing else now.
+    const onPlayUrl = useCallback(async () => {
+        try {
+            const clipboardText = await navigator.clipboard.readText();
+            const handled = await handlePlayUrl(clipboardText);
+            if (!handled) {
+                toast.show({
+                    type: 'error',
+                    title: 'Clipboard does not contain a valid URL or magnet link.',
+                    timeout: 5000
+                });
+            }
+        } catch (e) {
+            console.error(e);
+        }
+    }, [handlePlayUrl, toast]);
 
     const onCalendarSubscribe = useCallback(() => {
         if (!profile.auth) return;
@@ -102,6 +125,19 @@ const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
         </Section>
 
         <Section>
+            {/* Sync & backup and Play URL/Magnet used to live in the account menu.
+                They were the only two rows there with no other door, so they moved
+                here rather than keeping a whole menu alive for them; the rest of
+                that menu was duplicating Settings (including, literally, the
+                Support and Website links right below). */}
+            <Link
+                label="Sync & backup"
+                onClick={() => openSync('backup')}
+            />
+            <Link
+                label={t('PLAY_URL_MAGNET_LINK')}
+                onClick={onPlayUrl}
+            />
             {
                 profile?.auth?.user &&
                     <Link
