@@ -44,6 +44,13 @@ export type UploadResult = {
     itemsPushed: number;
     itemsConsidered: number;
     addonsAdded: number;
+    // Of itemsPushed, how many are REMOVALS (removed: true). These are tombstones:
+    // items taken out of the library, and the "temp" continue-watching entries that
+    // were never explicitly added. They sync correctly and then show up nowhere,
+    // which made "Sent 41 library items" read as a lie when 26 of the 41 were these
+    // and only 15 appeared on the account. Reported separately so the result can say
+    // what will actually be VISIBLE.
+    removalsPushed: number;
 };
 
 // POST one API request and unwrap the { result } | { error: { message, code } }
@@ -141,10 +148,10 @@ const login = async (auth: UploadAuth): Promise<string> => {
 // Push the library: ask the API for its per-item mtimes (datastoreMeta), then put
 // only the items it is missing or that are newer here - the push half of the
 // core's plan_sync_with_api, with identical second-granularity comparison.
-const pushLibrary = async (authKey: string, items: StoredLibraryItem[]): Promise<{ pushed: number; considered: number }> => {
+const pushLibrary = async (authKey: string, items: StoredLibraryItem[]): Promise<{ pushed: number; considered: number; removals: number }> => {
     const syncable = items.filter(shouldSync);
-    if (syncable.length === 0) return { pushed: 0, considered: 0 };
-    const remoteMeta = await apiFetch<Array<[string, number]>>('datastoreMeta', {
+    if (syncable.length === 0) return { pushed: 0, considered: 0, removals: 0 };
+    const remoteMeta = await apiFetch<[string, number][]>('datastoreMeta', {
         authKey,
         collection: LIBRARY_COLLECTION,
     });
@@ -166,7 +173,11 @@ const pushLibrary = async (authKey: string, items: StoredLibraryItem[]): Promise
             changes,
         });
     }
-    return { pushed: changes.length, considered: syncable.length };
+    return {
+        pushed: changes.length,
+        considered: syncable.length,
+        removals: changes.filter((item) => item.removed === true).length,
+    };
 };
 
 // Merge add-ons: append local add-ons the account is missing (matched by
@@ -203,10 +214,10 @@ export const uploadToStremio = async (
     const authKey = await login(auth);
     try {
         onProgress('Uploading library…');
-        const { pushed, considered } = await pushLibrary(authKey, items);
+        const { pushed, considered, removals } = await pushLibrary(authKey, items);
         onProgress('Uploading add-ons…');
         const addonsAdded = await pushAddons(authKey, addons);
-        return { itemsPushed: pushed, itemsConsidered: considered, addonsAdded };
+        return { itemsPushed: pushed, itemsConsidered: considered, addonsAdded, removalsPushed: removals };
     } finally {
         // Close the temporary session; a failure here must not mask the outcome.
         apiFetch('logout', { type: 'Logout', authKey }).catch(() => { /* best effort */ });
