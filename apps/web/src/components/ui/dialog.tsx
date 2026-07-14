@@ -52,7 +52,10 @@ export const DialogContent = forwardRef<ElementRef<typeof DialogPrimitive.Conten
                     ref={ref}
                     className={cn(
                         'fixed left-1/2 top-1/2 z-50 grid w-full max-w-lg -translate-x-1/2 -translate-y-1/2 gap-4',
-                        'bg-card text-card-foreground rounded-squircle p-6 shadow-elevated',
+                        // White-lift bg-card panel; the blur comes from the overlay
+                        // (bg-black/60 + blur-24), so NO backdrop-blur here (one blur per
+                        // stacking context). border-line crisps the edge over the scrim.
+                        'bg-card text-card-foreground rounded-squircle border border-line p-6 shadow-elevated',
                         'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
                         'focus:outline-none',
                         className,

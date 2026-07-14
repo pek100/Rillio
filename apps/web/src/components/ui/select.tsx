@@ -59,7 +59,9 @@ export const SelectContent = forwardRef<
                     // transition-none keeps the popper positioning instant (no snap to
                     // place on open / reposition); the animate-in/zoom below are
                     // `animation` utilities, not transitions, so they still run.
-                    'relative z-50 max-h-[--radix-select-content-available-height] min-w-[8rem] overflow-hidden rounded-card bg-popover text-popover-foreground shadow-elevated transition-none',
+                    // Cinematic glass: black-alpha bg-popover + backdrop-blur-md, border-line
+                    // hairline edge (see dropdown-menu contentClasses for the rationale).
+                    'relative z-50 max-h-[--radix-select-content-available-height] min-w-[8rem] overflow-hidden rounded-card border border-line bg-popover text-popover-foreground shadow-elevated backdrop-blur-md transition-none',
                     'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95',
                     position === 'popper' && 'data-[side=bottom]:translate-y-1 data-[side=top]:-translate-y-1',
                     className,

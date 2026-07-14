@@ -37,7 +37,10 @@ export const DrawerContent = forwardRef<
             <DrawerPrimitive.Content
                 ref={ref}
                 className={cn(
-                    'fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-squircle bg-card text-card-foreground shadow-elevated',
+                    // The vaul overlay is bg-black/60 with NO blur, so the panel itself
+                    // carries the glass: white-lift bg-card + backdrop-blur-md + a
+                    // border-line top edge. Only one blur in this stacking context.
+                    'fixed inset-x-0 bottom-0 z-50 mt-24 flex h-auto flex-col rounded-t-squircle border-t border-line bg-card text-card-foreground shadow-elevated backdrop-blur-md',
                     className,
                 )}
                 {...props}

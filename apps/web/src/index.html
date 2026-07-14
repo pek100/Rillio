@@ -13,11 +13,11 @@
     <style>
         /* Solid background from the first painted frame so the transparent desktop
            window never shows through while the app bundle loads. */
-        html, body { margin: 0; background: #020407; }
+        html, body { margin: 0; background: #000; }
         #rillio-loading {
             position: fixed; inset: 0; z-index: 2147483647;
             display: flex; align-items: center; justify-content: center;
-            background: #020407; transition: opacity .45s ease;
+            background: #000; transition: opacity .45s ease;
         }
         #rillio-loading.rl-hide { opacity: 0; pointer-events: none; }
         #rl-canvas, #rillio-loading svg { width: 118px; height: 122px; filter: drop-shadow(0 8px 30px rgba(255, 160, 51, .2)); }
@@ -110,7 +110,7 @@
                 var t = gl.createTexture(); gl.bindTexture(gl.TEXTURE_2D, t); gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, N, N, 0, gl.RGBA, gl.UNSIGNED_BYTE, tex);
                 gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.LINEAR); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE); gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
                 gl.uniform1i(gl.getUniformLocation(pr, 'M'), 0); var uT = gl.getUniformLocation(pr, 'T');
-                gl.clearColor(.008, .016, .027, 1);
+                gl.clearColor(0, 0, 0, 1); /* pure-black canvas backdrop, matches the #000 boot bg */
                 started = true; clearTimeout(safety);
                 var start = performance.now();
                 // opts.hover: when set, the mark holds fully filled at rest and only

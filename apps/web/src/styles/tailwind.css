@@ -20,10 +20,26 @@
  * var(--color-...) directly, and v4 does not scan .less, so without `static` those
  * vars are tree-shaken to empty (e.g. --color-fg-subtle -> black text on dark). */
 @theme static {
-    /* Palette - semantic tokens only, single dark theme. */
-    --color-bg: #020407;
-    --color-surface: #0A1017;
-    --color-surface-hover: #111A24;
+    /* Palette - semantic tokens only, single dark theme.
+     *
+     * CINEMATIC THEME: the app base is PURE BLACK and every menu/card is translucent
+     * glass. Two glass families, chosen by PHYSICS of the backdrop (see each token):
+     *   - Over the pure-black PAGE, black-on-black is invisible, so anything that must
+     *     read as a surface there is a WHITE-alpha LIFT (surface/surface-hover/card).
+     *   - Floating menus portal over BRIGHT or varied content (posters, imagery), so
+     *     they are BLACK-alpha DARKENING glass (the player's bg-black/25 island recipe,
+     *     scaled up for small text) - see --color-popover. */
+    --color-bg: #000000;
+    /* Flat STATIC card/row surface (poster body, settings sections, addon/cached rows).
+     * White lift because a black tint over the pure-black page would be invisible; over
+     * solid black this reads as a faint ~#0D0D0D pane. Applied via bg-surface with NO
+     * backdrop-blur - over an opaque black bg blur is a no-op, so 100+ poster cards do
+     * not each pay a WebView2 backdrop-filter (the load-bearing perf rule). */
+    --color-surface: rgba(255, 255, 255, 0.05);
+    /* Interactive lift: pills, secondary buttons, select triggers, and the hover state
+     * of surface + of every menu item. A clear luminance step above surface (~#1A1A1A
+     * over black) so hover/pressed feedback is legible. */
+    --color-surface-hover: rgba(255, 255, 255, 0.10);
     --color-line: rgba(255, 255, 255, 0.08);
     --color-accent: #FFA033;
     --color-accent-soft: rgba(255, 160, 51, 0.14);
@@ -65,8 +81,9 @@
     --icon-size-sm: 0.875rem;
     --icon-size-player: 1rem; /* same scale as the app chrome (Michael's call) */
 
-    /* "Ice" - off-whites subtly tinted toward the blue palette (bg #020407 /
-     * surface #0A1017 are blue-blacks). The player chrome paints its icons / text
+    /* "Ice" - off-whites subtly tinted toward blue (a legacy of the former blue-black
+     * palette; kept as the player/glass glyph color on the new pure-black base). The
+     * player chrome paints its icons / text
      * and the seek-bar track / buffered fill in ice instead of flat neutral greys.
      * -muted is the lower-emphasis variant (labels, HDR badge, disabled glyphs). */
     --color-ice: #E8F1FB;
@@ -81,15 +98,27 @@
      * NAMING TRAP: shadcn `primary` = our brand accent #FFA033; shadcn `accent`
      * = the neutral menu-item hover surface (--color-surface-hover), NOT the
      * brand. warning/success have no shadcn slot - keep --color-warning/success. */
-    --color-background: var(--color-bg);            /* #020407 */
+    --color-background: var(--color-bg);            /* #000000 pure black */
     --color-foreground: var(--color-fg);
-    --color-card: var(--color-surface);             /* #0A1017 */
+    /* card = dialog / sheet / drawer PANEL. White lift (a hair above flat surface) so
+     * the modal reads as a lifted pane against the dark blurred scrim behind it. NO
+     * blur on the panel itself: the Dialog overlay already blurs (bg-black/60 +
+     * blur-24), so blurring the panel too would be a wasted second backdrop-filter in
+     * the same stacking context. */
+    --color-card: rgba(255, 255, 255, 0.06);
     --color-card-foreground: var(--color-fg);
-    --color-popover: var(--color-surface);
+    /* popover = FLOATING MENU glass (dropdown / select / context / popover content, and
+     * tooltip / toast). BLACK-alpha, not white: menus portal over posters and imagery,
+     * where black darkens the backdrop so ice/white glyphs stay legible - the player's
+     * bg-black/25 recipe, pushed to 0.55 because menu text is small and can land over
+     * near-white poster regions. Paired with backdrop-blur-md + a border-line hairline
+     * in the primitives; over the pure-black page the fill vanishes but the hairline +
+     * shadow define the panel and white text/hover lifts still read. */
+    --color-popover: rgba(0, 0, 0, 0.55);
     --color-popover-foreground: var(--color-fg);
     --color-primary: var(--color-accent);           /* #FFA033 brand */
     --color-primary-foreground: var(--color-bg);
-    --color-secondary: var(--color-surface-hover);  /* #111A24 */
+    --color-secondary: var(--color-surface-hover);  /* white 10% lift */
     --color-secondary-foreground: var(--color-fg);
     --color-muted: var(--color-surface);
     --color-muted-foreground: var(--color-fg-muted);
@@ -112,9 +141,9 @@
 :root {
     --background: var(--color-bg);
     --foreground: var(--color-fg);
-    --card: var(--color-surface);
+    --card: var(--color-card);
     --card-foreground: var(--color-fg);
-    --popover: var(--color-surface);
+    --popover: var(--color-popover);
     --popover-foreground: var(--color-fg);
     --primary: var(--color-accent);
     --primary-foreground: var(--color-bg);
@@ -237,8 +266,8 @@ html:not(.active-slider-within) .player-container[data-immersed] .player-immersi
      * semantic tokens above, so they alias. --primary-foreground-color stays literal
      * (0.9) because the semantic --color-fg is 0.95 - aliasing would brighten every
      * legacy consumer. --border-radius == --radius-card, so it aliases. */
-    --primary-background-color: var(--color-bg);            /* #020407 */
-    --secondary-background-color: var(--color-surface);     /* #0A1017 */
+    --primary-background-color: var(--color-bg);            /* #000000 */
+    --secondary-background-color: var(--color-surface);     /* white 5% lift */
     --primary-foreground-color: rgba(255, 255, 255, 0.9);
     --secondary-foreground-color: rgb(12, 11, 17, 1);
     --primary-accent-color: var(--color-accent);            /* #FFA033 */
