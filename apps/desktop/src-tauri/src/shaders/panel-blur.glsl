@@ -57,17 +57,15 @@
 //!MAXIMUM 512
 32
 
-//!PARAM corner
-//!DESC Panel corner radius, in OUTPUT pixels
-//!TYPE DYNAMIC float
-//!MINIMUM 0
-//!MAXIMUM 512
-0
-
 // The four panel rects, in OUTPUT-normalized coords: (x, y) is the top-left
-// corner, (w, h) the size. Bounds are deliberately far wider than [0,1]: a panel
-// over a heavily letterboxed video maps to large normalized values, and mpv
-// rejects the whole option string if any value falls outside its declared range.
+// corner, (w, h) the size, and c the corner radius in OUTPUT PIXELS (a length, so
+// it stays circular rather than being squashed by a non-square output rect).
+// The radius is per-rect, not shared: the menus are rounded but the side drawer
+// sits flush against the window edge with square corners.
+//
+// Bounds are deliberately far wider than [0,1]: a panel over a heavily
+// letterboxed video maps to large normalized values, and mpv rejects the whole
+// option string if any single value falls outside its declared range.
 
 //!PARAM r0x
 //!TYPE DYNAMIC float
@@ -91,6 +89,12 @@
 //!TYPE DYNAMIC float
 //!MINIMUM 0
 //!MAXIMUM 64
+0
+
+//!PARAM r0c
+//!TYPE DYNAMIC float
+//!MINIMUM 0
+//!MAXIMUM 512
 0
 
 //!PARAM r1x
@@ -117,6 +121,12 @@
 //!MAXIMUM 64
 0
 
+//!PARAM r1c
+//!TYPE DYNAMIC float
+//!MINIMUM 0
+//!MAXIMUM 512
+0
+
 //!PARAM r2x
 //!TYPE DYNAMIC float
 //!MINIMUM -32
@@ -139,6 +149,12 @@
 //!TYPE DYNAMIC float
 //!MINIMUM 0
 //!MAXIMUM 64
+0
+
+//!PARAM r2c
+//!TYPE DYNAMIC float
+//!MINIMUM 0
+//!MAXIMUM 512
 0
 
 //!PARAM r3x
@@ -165,6 +181,12 @@
 //!MAXIMUM 64
 0
 
+//!PARAM r3c
+//!TYPE DYNAMIC float
+//!MINIMUM 0
+//!MAXIMUM 512
+0
+
 //!HOOK OUTPUT
 //!BIND HOOKED
 //!SAVE RILLIO_PANEL_BLUR_H
@@ -178,11 +200,21 @@
 #define TAPS 10
 #define MAX_RECTS 4
 
+// (x, y, w, h) in OUTPUT-normalized coords, plus the corner radius in OUTPUT px.
+// Indexed by hand because //!PARAM only takes scalars, so there is no array to
+// subscript.
 vec4 rillio_rect(int i) {
     if (i == 0) return vec4(r0x, r0y, r0w, r0h);
     if (i == 1) return vec4(r1x, r1y, r1w, r1h);
     if (i == 2) return vec4(r2x, r2y, r2w, r2h);
     return vec4(r3x, r3y, r3w, r3h);
+}
+
+float rillio_corner(int i) {
+    if (i == 0) return r0c;
+    if (i == 1) return r1c;
+    if (i == 2) return r2c;
+    return r3c;
 }
 
 // Signed distance to a rounded rect (negative inside). `p`, `center`, `half_size`
@@ -202,7 +234,7 @@ float rillio_sd_panels(vec2 p) {
         vec4 r = rillio_rect(i);
         vec2 half_size = r.zw * 0.5 * HOOKED_size;
         vec2 center = (r.xy + r.zw * 0.5) * HOOKED_size;
-        d = min(d, rillio_sd_rrect(p, center, half_size, corner));
+        d = min(d, rillio_sd_rrect(p, center, half_size, rillio_corner(i)));
     }
     return d;
 }
@@ -242,11 +274,21 @@ vec4 hook()
 #define TAPS 10
 #define MAX_RECTS 4
 
+// (x, y, w, h) in OUTPUT-normalized coords, plus the corner radius in OUTPUT px.
+// Indexed by hand because //!PARAM only takes scalars, so there is no array to
+// subscript.
 vec4 rillio_rect(int i) {
     if (i == 0) return vec4(r0x, r0y, r0w, r0h);
     if (i == 1) return vec4(r1x, r1y, r1w, r1h);
     if (i == 2) return vec4(r2x, r2y, r2w, r2h);
     return vec4(r3x, r3y, r3w, r3h);
+}
+
+float rillio_corner(int i) {
+    if (i == 0) return r0c;
+    if (i == 1) return r1c;
+    if (i == 2) return r2c;
+    return r3c;
 }
 
 float rillio_sd_rrect(vec2 p, vec2 center, vec2 half_size, float rad) {
@@ -262,7 +304,7 @@ float rillio_sd_panels(vec2 p) {
         vec4 r = rillio_rect(i);
         vec2 half_size = r.zw * 0.5 * HOOKED_size;
         vec2 center = (r.xy + r.zw * 0.5) * HOOKED_size;
-        d = min(d, rillio_sd_rrect(p, center, half_size, corner));
+        d = min(d, rillio_sd_rrect(p, center, half_size, rillio_corner(i)));
     }
     return d;
 }

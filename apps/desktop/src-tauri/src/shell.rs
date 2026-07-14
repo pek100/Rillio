@@ -23,7 +23,7 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use tauri::{AppHandle, Emitter, State};
 
@@ -43,6 +43,8 @@ struct Controller {
     /// Last video-frame snapshot handed to the web layer, for the rate limit in
     /// [`player_snapshot`].
     snapshot: Mutex<SnapshotCache>,
+    /// GPU panel-blur shader state (see [`player_blur_rect`]).
+    blur: Mutex<BlurState>,
 }
 
 /// The most recent [`player_snapshot`] result and when it was produced.
@@ -70,6 +72,12 @@ const STATS_PROPS: &[&str] = &[
     "height",
 ];
 
+/// Properties the shell observes for its OWN geometry maths - neither the stats
+/// panel nor the web player reads them. `osd-dimensions` carries the video
+/// rectangle inside the mpv window, which is what maps a web panel's rect into
+/// the blur shader's OUTPUT coordinates (see [`blur_shader_opts`]).
+const GEOMETRY_PROPS: &[&str] = &["osd-dimensions"];
+
 /// High-frequency props whose forwarding to the web UI is rate-limited.
 const HF_PROPS: &[&str] = &["time-pos", "demuxer-cache-time"];
 /// Minimum spacing between forwarded high-frequency updates (~5/s).
@@ -86,6 +94,81 @@ const SNAPSHOT_MIN_INTERVAL: Duration = Duration::from_millis(200);
 const SNAPSHOT_MAX_WIDTH: u32 = 320;
 /// JPEG quality for the same reason: blur hides the artifacts.
 const SNAPSHOT_JPEG_QUALITY: u8 = 60;
+
+/// The GLSL user shader that blurs the video under the player's panels. EMBEDDED
+/// rather than bundled as a Tauri resource: mpv's `glsl-shaders` takes FILE
+/// PATHS, so it has to reach disk either way, and writing it out ourselves keeps
+/// `cargo run` and the NSIS bundle on exactly one code path with no
+/// resource-resolution difference between them.
+const BLUR_SHADER: &str = include_str!("shaders/panel-blur.glsl");
+
+/// The most rects [`player_blur_rect`] accepts. Matches `MAX_RECTS` in the
+/// shader, which holds four sets of `r<i>{x,y,w,h}` parameters.
+const MAX_BLUR_RECTS: usize = 4;
+
+/// Gaussian radius for the panel blur, in CSS px (scaled to output pixels along
+/// with everything else). Matches the `blur-[24px]` the web fallback uses, so
+/// flipping the flag changes where the blur comes from, not how strong it looks.
+/// A shell constant, never a web argument: the web chooses WHERE to blur, the
+/// shell chooses HOW MUCH.
+const BLUR_RADIUS_CSS_PX: f64 = 24.0;
+
+/// Minimum spacing between `glsl-shader-opts` writes. A panel open/close is one
+/// call, but a window drag-resize re-measures every frame; this throttles
+/// leading+trailing (never dropping the final state) so a drag cannot spam mpv.
+const BLUR_MIN_INTERVAL: Duration = Duration::from_millis(16);
+
+/// How long to wait before re-applying the params once the shader is first
+/// loaded. mpv DROPS `glsl-shader-opts` values for parameters that are not
+/// registered yet (mpv#12039, closed as not-planned), and registration only
+/// happens when the VO thread gets around to parsing the file we just handed it -
+/// long after our `set_property` returned. One deferred re-apply closes that
+/// window; it is a race with an upstream ordering quirk, not a fallback.
+const BLUR_PARAM_SETTLE: Duration = Duration::from_millis(250);
+
+/// One panel's bounds, in CSS px relative to the WebView viewport. `corner` is
+/// that panel's own border radius, also in CSS px: it is per-panel rather than
+/// one shared setting because the menus are rounded while the side drawer sits
+/// flush against the window edge with square corners.
+#[derive(Deserialize, Clone, Copy, PartialEq, Debug)]
+pub struct BlurRect {
+    x: f64,
+    y: f64,
+    width: f64,
+    height: f64,
+    corner: f64,
+}
+
+/// The WebView viewport, in CSS px (`innerWidth`/`innerHeight`).
+#[derive(Deserialize, Clone, Copy, PartialEq, Debug)]
+pub struct BlurViewport {
+    width: f64,
+    height: f64,
+}
+
+/// The blur state the web layer last asked for.
+#[derive(Clone, PartialEq, Debug)]
+struct BlurRequest {
+    rects: Vec<BlurRect>,
+    viewport: BlurViewport,
+}
+
+#[derive(Default)]
+struct BlurState {
+    /// Whether the shader has been written to disk and handed to mpv. Latches on
+    /// the first call and never clears: see [`player_blur_rect`] for why.
+    loaded: bool,
+    /// When the last `glsl-shader-opts` write went out (the throttle's clock).
+    last_applied: Option<Instant>,
+    /// The latest state asked for. Never consumed, only overwritten: a trailing
+    /// apply and the post-load re-apply both need the CURRENT state, not a queue.
+    desired: Option<BlurRequest>,
+    /// Whether a trailing apply is already scheduled and will read `desired`.
+    trailing: bool,
+    /// The last option string written, to skip redundant writes. `None` forces
+    /// the next apply through (used after a load, when mpv's parameters are new).
+    last_opts: Option<String>,
+}
 
 /// SECURITY (S1): the ONLY mpv `command`s the web player is allowed to run over
 /// the bridge. mpv's command set also includes `run`, `subprocess` and
@@ -310,7 +393,9 @@ impl Controller {
         // Observe the extra stats properties ShellVideo doesn't, so the panel can
         // show codec/bitrate/hwdec/etc. (Their changes flow through the same
         // event loop and land in `props`.)
-        for name in STATS_PROPS {
+        // GEOMETRY_PROPS ride the same event loop into the same `props` cache;
+        // the shell reads them itself (blur geometry) and never forwards them.
+        for name in STATS_PROPS.iter().chain(GEOMETRY_PROPS.iter()) {
             if let Err(e) = mpv.observe_property(name) {
                 tracing::debug!("mpv: observe {name} failed: {e}");
             }
@@ -319,6 +404,7 @@ impl Controller {
             mpv: Arc::new(mpv),
             props: Mutex::new(serde_json::Map::new()),
             snapshot: Mutex::new(SnapshotCache::default()),
+            blur: Mutex::new(BlurState::default()),
         })
     }
 
@@ -388,7 +474,8 @@ fn spawn_event_loop(ctrl: Arc<Controller>, app: AppHandle) {
                     // Stats-only props (our extra observes) are read by the panel
                     // via `shell_mpv_stats`; don't forward them to the web player
                     // - some update per-frame and would flood the UI event stream.
-                    let mut forward = !STATS_PROPS.contains(&name.as_str());
+                    let mut forward = !STATS_PROPS.contains(&name.as_str())
+                        && !GEOMETRY_PROPS.contains(&name.as_str());
                     if forward {
                         if let Some(key) = HF_PROPS.iter().find(|k| **k == name.as_str()) {
                             let now = Instant::now();
@@ -626,6 +713,272 @@ fn downscale(image: image::DynamicImage, max_width: u32) -> image::DynamicImage 
     image.thumbnail_exact(max_width, scaled_height)
 }
 
+/// Blur the video behind the player's open panels, for real, on the GPU.
+///
+/// WHY THIS EXISTS: mpv renders into a NATIVE child window behind the transparent
+/// WebView, so CSS `backdrop-filter` on a panel has nothing to sample and blurs
+/// nothing. [`player_snapshot`] answered that by pulling frames back off the GPU,
+/// which lands tens to hundreds of ms late and reads as lag. A user shader inside
+/// mpv's own pipeline is the only way to get a live, free blur.
+///
+/// `rects` are the open panels in CSS px relative to the WebView `viewport`; an
+/// EMPTY list means "nothing is open, stop blurring". Each rect carries its own
+/// corner radius, so the blur ends on exactly the rounded edge the panel is
+/// drawn with rather than showing blurred video outside a rounded corner.
+///
+/// LOAD-ONCE, THEN TOGGLE. The shader is loaded lazily, on the first call that
+/// actually wants a blur, and is never unloaded. Two things fall out of that:
+///   - With the web-side flag off nothing ever calls this, so the shader is never
+///     loaded and the render pipeline that carries HDR/DV passthrough is
+///     bit-for-bit what it is today. That is the whole point of the ordering.
+///   - Once loaded, open/close is a `glsl-shader-opts` write - a uniform update,
+///     because every parameter is `//!TYPE DYNAMIC` - not a pipeline rebuild. And
+///     at `enabled=0` the shader's `//!WHEN enabled 0 >` skips both stages
+///     outright, so a closed panel costs nothing. Unloading on close would buy
+///     that same nothing back at the price of a recompile on every open.
+///
+/// SECURITY: a dedicated command, like [`player_snapshot`]. It does NOT widen the
+/// generic `shell_send` bridge - `MPV_COMMAND_ALLOWLIST` and
+/// `MPV_SETPROP_ALLOWLIST` are untouched, and web content still cannot reach
+/// `glsl-shaders` (a FILE PATH property, hence a real one to keep out of reach)
+/// through them. The only thing web content can ask for here is "blur under these
+/// rectangles"; the shader, the path and the radius are all chosen by the shell.
+///
+/// Fails loud (an `Err` the web layer logs once and then gives up on, falling
+/// back to today's dark glass) when there is no video geometry yet or mpv rejects
+/// the shader.
+#[tauri::command]
+pub fn player_blur_rect(
+    app: AppHandle,
+    state: State<ShellState>,
+    rects: Vec<BlurRect>,
+    viewport: BlurViewport,
+) -> Result<(), String> {
+    if rects.len() > MAX_BLUR_RECTS {
+        return Err(format!(
+            "player_blur_rect: {} rects, but the shader holds {MAX_BLUR_RECTS}",
+            rects.len()
+        ));
+    }
+    let ctrl = state.ensure(&app)?;
+    // "Stop blurring" before anything was ever blurred: nothing to do, and in
+    // particular nothing worth loading a shader for.
+    if rects.is_empty() && !ctrl.blur.lock().unwrap_or_else(|e| e.into_inner()).loaded {
+        return Ok(());
+    }
+    ensure_blur_shader(&app, &ctrl)?;
+
+    let wait = {
+        let mut blur = ctrl.blur.lock().unwrap_or_else(|e| e.into_inner());
+        blur.desired = Some(BlurRequest { rects, viewport });
+        match blur.last_applied.map(|t| t.elapsed()) {
+            Some(elapsed) if elapsed < BLUR_MIN_INTERVAL => {
+                if blur.trailing {
+                    // One is already scheduled and will read `desired`, which we
+                    // just overwrote - so it lands on the newest state, not this.
+                    return Ok(());
+                }
+                blur.trailing = true;
+                Some(BLUR_MIN_INTERVAL - elapsed)
+            }
+            _ => None,
+        }
+    };
+    match wait {
+        None => apply_blur(&ctrl),
+        Some(delay) => {
+            let ctrl = ctrl.clone();
+            std::thread::Builder::new()
+                .name("mpv-blur-trailing".into())
+                .spawn(move || {
+                    std::thread::sleep(delay);
+                    if let Err(e) = apply_blur(&ctrl) {
+                        tracing::warn!("shell: panel blur trailing apply failed: {e}");
+                    }
+                })
+                .map_err(|e| format!("player_blur_rect: spawning the trailing apply: {e}"))?;
+            Ok(())
+        }
+    }
+}
+
+/// Where the blur shader is handed to mpv from. Under the app data dir, next to
+/// the rest of our per-machine state.
+fn blur_shader_path(app: &AppHandle) -> Result<PathBuf, String> {
+    use tauri::Manager;
+    let dir = app
+        .path()
+        .app_data_dir()
+        .map_err(|e| format!("player_blur_rect: no app data dir: {e}"))?;
+    Ok(dir.join("shaders").join("panel-blur.glsl"))
+}
+
+/// Write the shader out and hand it to mpv, once per mpv instance.
+fn ensure_blur_shader(app: &AppHandle, ctrl: &Arc<Controller>) -> Result<(), String> {
+    if ctrl.blur.lock().unwrap_or_else(|e| e.into_inner()).loaded {
+        return Ok(());
+    }
+    let path = blur_shader_path(app)?;
+    if let Some(dir) = path.parent() {
+        std::fs::create_dir_all(dir)
+            .map_err(|e| format!("player_blur_rect: creating {}: {e}", dir.display()))?;
+    }
+    // Rewritten every session, never reused: the file is a handoff to mpv, not
+    // user data, and an app update must not be shadowed by a stale copy.
+    std::fs::write(&path, BLUR_SHADER)
+        .map_err(|e| format!("player_blur_rect: writing {}: {e}", path.display()))?;
+    let text = path.to_string_lossy().to_string();
+    // mpv splits its path LISTS on ',', so a comma in the path would silently
+    // become two bogus shader paths. Nothing we control puts one there; if that
+    // ever changes, say so rather than render a mystery.
+    if text.contains(',') {
+        return Err(format!("player_blur_rect: shader path contains a comma: {text}"));
+    }
+    // Set the list wholesale rather than -append: we own it outright (Rillio ships
+    // no other user shader, and `config=no` keeps any on-machine mpv.conf out), and
+    // appending would stack a duplicate copy on every load.
+    ctrl.mpv.set_property("glsl-shaders", &text)?;
+    {
+        let mut blur = ctrl.blur.lock().unwrap_or_else(|e| e.into_inner());
+        blur.loaded = true;
+        blur.last_opts = None; // nothing has been applied to this fresh pipeline
+    }
+    tracing::info!("shell: panel blur shader loaded from {text}");
+    // See BLUR_PARAM_SETTLE: re-apply once the VO thread has actually parsed the
+    // file and registered the parameters, or this first open silently has no blur.
+    let ctrl = ctrl.clone();
+    std::thread::Builder::new()
+        .name("mpv-blur-settle".into())
+        .spawn(move || {
+            std::thread::sleep(BLUR_PARAM_SETTLE);
+            ctrl.blur.lock().unwrap_or_else(|e| e.into_inner()).last_opts = None;
+            if let Err(e) = apply_blur(&ctrl) {
+                tracing::warn!("shell: panel blur settle re-apply failed: {e}");
+            }
+        })
+        .map_err(|e| format!("player_blur_rect: spawning the settle re-apply: {e}"))?;
+    Ok(())
+}
+
+/// Push the currently desired blur state to mpv.
+fn apply_blur(ctrl: &Controller) -> Result<(), String> {
+    let desired = {
+        let mut blur = ctrl.blur.lock().unwrap_or_else(|e| e.into_inner());
+        blur.trailing = false;
+        blur.last_applied = Some(Instant::now());
+        blur.desired.clone()
+    };
+    let Some(req) = desired else { return Ok(()) };
+    let opts = blur_shader_opts(ctrl, &req)?;
+    {
+        let mut blur = ctrl.blur.lock().unwrap_or_else(|e| e.into_inner());
+        if blur.last_opts.as_deref() == Some(opts.as_str()) {
+            return Ok(());
+        }
+        blur.last_opts = Some(opts.clone());
+    }
+    ctrl.mpv.set_property("glsl-shader-opts", &opts)
+}
+
+/// The video rectangle inside the mpv window, from mpv's `osd-dimensions`:
+/// `(x, y, w, h, window_w, window_h)`, all in the window's physical pixels.
+///
+/// `osd-dimensions` reports the video rect's size (`w`/`h`) plus its margins to
+/// each window edge (`ml`/`mr`/`mt`/`mb`), so the window size falls out of the
+/// same object and no second source of truth (nor any assumed DPR) is needed.
+fn video_rect(ctrl: &Controller) -> Result<(f64, f64, f64, f64, f64, f64), String> {
+    let props = ctrl.props.lock().unwrap_or_else(|e| e.into_inner());
+    let dims = props
+        .get("osd-dimensions")
+        .filter(|v| v.is_object())
+        .ok_or("player_blur_rect: mpv has not reported osd-dimensions (nothing playing?)")?;
+    let get = |key: &str| -> Result<f64, String> {
+        dims.get(key)
+            .and_then(Value::as_f64)
+            .ok_or_else(|| format!("player_blur_rect: osd-dimensions.{key} missing"))
+    };
+    let (w, h) = (get("w")?, get("h")?);
+    let (ml, mr, mt, mb) = (get("ml")?, get("mr")?, get("mt")?, get("mb")?);
+    let (win_w, win_h) = (ml + w + mr, mt + h + mb);
+    if !(w > 0.0 && h > 0.0 && win_w > 0.0 && win_h > 0.0) {
+        return Err(format!(
+            "player_blur_rect: degenerate osd-dimensions ({w}x{h} video in a {win_w}x{win_h} window)"
+        ));
+    }
+    Ok((ml, mt, w, h, win_w, win_h))
+}
+
+/// Render `req` as an mpv `glsl-shader-opts` string, mapping the web's panel
+/// rects into the shader's coordinate space.
+///
+/// THE MAPPING, end to end. The web measures panels in CSS px against its own
+/// viewport. The shader's OUTPUT hook works in coords normalized over the VIDEO
+/// RECTANGLE - which is NOT the window: letterbox/pillarbox bars are not part of
+/// the OUTPUT texture at all. Three steps bridge that:
+///
+///   1. CSS px -> the window's physical px, by `win_size / viewport_size`. This
+///      works because mpv's child window and the WebView are both sized to the
+///      SAME main-window client area (shell.rs only ever re-orders that child,
+///      never moves or resizes it), so the two describe one rectangle at two
+///      scales. Deriving the scale by measurement rather than trusting
+///      `devicePixelRatio` keeps them in step through a display-scaling change.
+///   2. window px -> output px, by subtracting the video rect's origin. Lengths
+///      need no conversion at this step: the output rect is a sub-rect of the same
+///      window, in the same physical pixels.
+///   3. output px -> normalized, by dividing by the video rect's size.
+///
+/// Nothing is clamped to the video rect: a panel overhanging into the black bars
+/// simply maps outside [0,1], and the shader's SDF intersects it with the texture
+/// for free. Values ARE clamped to each parameter's declared range, because mpv
+/// rejects the whole option string over a single out-of-range value.
+fn blur_shader_opts(ctrl: &Controller, req: &BlurRequest) -> Result<String, String> {
+    blur_opts_string(video_rect(ctrl)?, req)
+}
+
+/// The pure half of [`blur_shader_opts`]: the geometry, with mpv's video rect
+/// (`(x, y, w, h, window_w, window_h)` in physical px) already read.
+fn blur_opts_string(
+    video: (f64, f64, f64, f64, f64, f64),
+    req: &BlurRequest,
+) -> Result<String, String> {
+    let (video_x, video_y, video_w, video_h, win_w, win_h) = video;
+    if !(req.viewport.width > 0.0 && req.viewport.height > 0.0) {
+        return Err(format!("player_blur_rect: bad viewport {:?}", req.viewport));
+    }
+    let scale_x = win_w / req.viewport.width;
+    let scale_y = win_h / req.viewport.height;
+    // A length only needs the CSS->physical scale (step 2 above is a translation).
+    // x and y scale identically under any real display scaling; average them
+    // rather than silently picking one and being wrong if they ever diverge.
+    let length_scale = (scale_x + scale_y) * 0.5;
+
+    let mut opts: Vec<String> = Vec::with_capacity(4 + MAX_BLUR_RECTS * 4);
+    opts.push(format!("enabled={}", u8::from(!req.rects.is_empty())));
+    opts.push(format!("count={}", req.rects.len()));
+    opts.push(format!("radius={:.4}", (BLUR_RADIUS_CSS_PX * length_scale).clamp(0.0, 512.0)));
+    for i in 0..MAX_BLUR_RECTS {
+        // Unused slots are zeroed rather than left stale: `count` already gates
+        // them, but the whole string is written every time, so it should describe
+        // the whole state.
+        let (x, y, w, h, c) = match req.rects.get(i) {
+            Some(r) => (
+                (r.x * scale_x - video_x) / video_w,
+                (r.y * scale_y - video_y) / video_h,
+                r.width * scale_x / video_w,
+                r.height * scale_y / video_h,
+                r.corner * length_scale,
+            ),
+            None => (0.0, 0.0, 0.0, 0.0, 0.0),
+        };
+        opts.push(format!("r{i}x={:.6}", x.clamp(-32.0, 32.0)));
+        opts.push(format!("r{i}y={:.6}", y.clamp(-32.0, 32.0)));
+        opts.push(format!("r{i}w={:.6}", w.clamp(0.0, 64.0)));
+        opts.push(format!("r{i}h={:.6}", h.clamp(0.0, 64.0)));
+        opts.push(format!("r{i}c={:.4}", c.clamp(0.0, 512.0)));
+    }
+    Ok(opts.join(","))
+}
+
 /// Carry one outbound IPC message to mpv. `args` is the web client's argument
 /// list; each method takes a single argument at `args[0]` (an array for
 /// commands/prop-sets, a string for prop-observes, a bool for the gpu toggle).
@@ -855,6 +1208,162 @@ mod tests {
         ] {
             check_mpv_setprop(name).unwrap_or_else(|e| panic!("{name} should be allowed: {e}"));
         }
+    }
+
+    /// Pull one `name=value` out of a `glsl-shader-opts` string.
+    fn opt(opts: &str, name: &str) -> f64 {
+        opts.split(',')
+            .find_map(|pair| pair.strip_prefix(&format!("{name}=")))
+            .unwrap_or_else(|| panic!("{name} missing from {opts:?}"))
+            .parse()
+            .unwrap()
+    }
+
+    fn request(rects: Vec<BlurRect>) -> BlurRequest {
+        BlurRequest { rects, viewport: BlurViewport { width: 1600.0, height: 900.0 } }
+    }
+
+    /// A 1600x900 CSS viewport on a 2x display, video filling the window: CSS px
+    /// map straight through the DPR to normalized output coords.
+    #[test]
+    fn blur_maps_a_full_window_video() {
+        // No letterbox: the video rect IS the 3200x1800 physical window.
+        let video = (0.0, 0.0, 3200.0, 1800.0, 3200.0, 1800.0);
+        let opts = blur_opts_string(
+            video,
+            &request(vec![BlurRect {
+                x: 800.0,
+                y: 450.0,
+                width: 400.0,
+                height: 225.0,
+                corner: 12.0,
+            }]),
+        )
+        .unwrap();
+        assert_eq!(opt(&opts, "enabled"), 1.0);
+        assert_eq!(opt(&opts, "count"), 1.0);
+        // A panel at the viewport's centre lands at the output's centre.
+        assert!((opt(&opts, "r0x") - 0.5).abs() < 1e-6);
+        assert!((opt(&opts, "r0y") - 0.5).abs() < 1e-6);
+        assert!((opt(&opts, "r0w") - 0.25).abs() < 1e-6);
+        assert!((opt(&opts, "r0h") - 0.25).abs() < 1e-6);
+        // Lengths are CSS px scaled by the measured DPR, not passed through raw.
+        assert!((opt(&opts, "radius") - BLUR_RADIUS_CSS_PX * 2.0).abs() < 1e-3);
+        assert!((opt(&opts, "r0c") - 24.0).abs() < 1e-3);
+        // Unused slots are zeroed, not stale.
+        assert_eq!(opt(&opts, "r3w"), 0.0);
+    }
+
+    /// The load-bearing case: OUTPUT is the VIDEO rect, so the letterbox bars
+    /// have to be subtracted out or every panel sits too low.
+    #[test]
+    fn blur_accounts_for_letterbox_bars() {
+        // 1600x900 CSS at 1x; a 2.39:1 film leaves 180px bars top and bottom.
+        let video = (0.0, 180.0, 1600.0, 540.0, 1600.0, 900.0);
+        let req = BlurRequest {
+            rects: vec![BlurRect { x: 0.0, y: 180.0, width: 1600.0, height: 540.0, corner: 0.0 }],
+            viewport: BlurViewport { width: 1600.0, height: 900.0 },
+        };
+        let opts = blur_opts_string(video, &req).unwrap();
+        // A panel covering exactly the video rect maps to the whole output.
+        assert!((opt(&opts, "r0x") - 0.0).abs() < 1e-6);
+        assert!((opt(&opts, "r0y") - 0.0).abs() < 1e-6);
+        assert!((opt(&opts, "r0w") - 1.0).abs() < 1e-6);
+        assert!((opt(&opts, "r0h") - 1.0).abs() < 1e-6);
+
+        // A panel up in the top bar maps ABOVE the output (negative), which the
+        // shader's SDF intersects away. Deliberately not clamped.
+        let opts = blur_opts_string(
+            video,
+            &BlurRequest {
+                rects: vec![BlurRect { x: 0.0, y: 0.0, width: 100.0, height: 100.0, corner: 0.0 }],
+                ..req
+            },
+        )
+        .unwrap();
+        assert!(opt(&opts, "r0y") < 0.0, "a panel over the top bar must map above the video");
+    }
+
+    /// An empty rect list is "stop blurring", and must switch the shader's stages
+    /// off rather than blur a zero-sized panel.
+    #[test]
+    fn blur_disables_on_an_empty_rect_list() {
+        let video = (0.0, 0.0, 1600.0, 900.0, 1600.0, 900.0);
+        let opts = blur_opts_string(video, &request(vec![])).unwrap();
+        assert_eq!(opt(&opts, "enabled"), 0.0);
+        assert_eq!(opt(&opts, "count"), 0.0);
+    }
+
+    /// Every value must stay inside the range its //!PARAM block declares, or mpv
+    /// rejects the whole option string and the blur silently stops updating.
+    #[test]
+    fn blur_opts_stay_inside_the_declared_param_ranges() {
+        // A pathological sliver of video in a huge window drives the normalized
+        // coords far out; they must be clamped, not emitted raw.
+        let video = (0.0, 0.0, 1.0, 1.0, 4000.0, 4000.0);
+        let opts = blur_opts_string(
+            video,
+            &request(vec![BlurRect {
+                x: 1500.0,
+                y: 800.0,
+                width: 100.0,
+                height: 100.0,
+                corner: 9999.0,
+            }]),
+        )
+        .unwrap();
+        assert!(opt(&opts, "r0x") <= 32.0 && opt(&opts, "r0x") >= -32.0);
+        assert!(opt(&opts, "r0y") <= 32.0 && opt(&opts, "r0y") >= -32.0);
+        assert!(opt(&opts, "r0w") <= 64.0 && opt(&opts, "r0w") >= 0.0);
+        assert!(opt(&opts, "r0h") <= 64.0 && opt(&opts, "r0h") >= 0.0);
+        assert!(opt(&opts, "r0c") <= 512.0 && opt(&opts, "r0c") >= 0.0);
+        assert!(opt(&opts, "radius") <= 512.0);
+    }
+
+    /// A zero-sized viewport (a hidden/collapsed WebView) is nonsense in, not a
+    /// division by zero out.
+    #[test]
+    fn blur_rejects_a_degenerate_viewport() {
+        let video = (0.0, 0.0, 1600.0, 900.0, 1600.0, 900.0);
+        let req = BlurRequest {
+            rects: vec![BlurRect { x: 0.0, y: 0.0, width: 10.0, height: 10.0, corner: 0.0 }],
+            viewport: BlurViewport { width: 0.0, height: 900.0 },
+        };
+        assert!(blur_opts_string(video, &req).is_err());
+    }
+
+    /// The shader and the shell must agree on how many rects exist, and on the
+    /// parameter names the option string is built from.
+    #[test]
+    fn blur_shader_matches_the_shell() {
+        assert!(
+            BLUR_SHADER.contains("#define MAX_RECTS 4") && MAX_BLUR_RECTS == 4,
+            "MAX_BLUR_RECTS and the shader's MAX_RECTS have drifted apart"
+        );
+        for name in ["enabled", "count", "radius"] {
+            assert!(BLUR_SHADER.contains(&format!("//!PARAM {name}")), "{name} is not a shader param");
+        }
+        for i in 0..MAX_BLUR_RECTS {
+            for axis in ['x', 'y', 'w', 'h', 'c'] {
+                assert!(
+                    BLUR_SHADER.contains(&format!("//!PARAM r{i}{axis}")),
+                    "r{i}{axis} is not a shader param"
+                );
+            }
+        }
+        // Count DIRECTIVES, not substrings: the file's header comment discusses
+        // both of these by name, and matching loosely would count the prose too.
+        let directives = |d: &str| BLUR_SHADER.lines().filter(|line| line.trim_end() == d).count();
+        // Both stages must be skippable, or "loaded but closed" would not be free
+        // and the load-once-then-toggle choice would be wrong.
+        assert_eq!(directives("//!WHEN enabled 0 >"), 2);
+        // The hook the whole HDR argument rests on: OUTPUT is downstream of the
+        // colour conversion, so no hook here can disturb passthrough.
+        assert_eq!(directives("//!HOOK OUTPUT"), 2);
+        // Two passes, one saving the intermediate the other reads: a single-pass
+        // gaussian at these radii would cost an order of magnitude more.
+        assert_eq!(directives("//!SAVE RILLIO_PANEL_BLUR_H"), 1);
+        assert_eq!(directives("//!BIND RILLIO_PANEL_BLUR_H"), 1);
     }
 
     /// Properties outside the player's set (including anything that could reach

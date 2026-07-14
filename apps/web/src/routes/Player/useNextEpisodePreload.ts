@@ -255,6 +255,7 @@ const useNextEpisodePreload = ({ player, video }: UseNextEpisodePreloadArgs) => 
             const started = downloadToCache(stream);
             if (!started) {
                 // Should be unreachable: the prompt only shows for a torrent stream.
+                // useCacheDownload raises its own error toast, so this stays a log.
                 console.error('useNextEpisodePreload: accepted but the next stream is not downloadable', stream);
                 return;
             }

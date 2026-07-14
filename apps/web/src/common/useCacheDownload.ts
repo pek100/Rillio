@@ -15,6 +15,19 @@ const useCacheDownload = () => {
     return React.useCallback((stream: any): boolean => {
         const serverUrl = profile.settings.streamingServerUrl;
         if (!stream || typeof stream.infoHash !== 'string' || typeof serverUrl !== 'string') {
+            // FAIL LOUD. This used to return false in silence, so a caller handed an
+            // undownloadable stream (or a missing server url) produced no request, no
+            // cache entry and no explanation - indistinguishable from a dead button.
+            console.error('cache/download: not a downloadable torrent stream', { stream, serverUrl });
+            toast.show({
+                type: 'error',
+                title: 'Cannot download this stream',
+                message: typeof serverUrl !== 'string' ?
+                    'The streaming service is not configured.'
+                    :
+                    'This source is not a torrent.',
+                timeout: 4000,
+            });
             return false;
         }
         const body: { infoHash: string; fileIdx?: number } = { infoHash: stream.infoHash };
