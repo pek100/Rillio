@@ -272,7 +272,13 @@ html:not(.active-slider-within) .player-container[data-immersed] .player-immersi
     --secondary-foreground-color: rgb(12, 11, 17, 1);
     --primary-accent-color: var(--color-accent);            /* #FFA033 */
     --overlay-color: rgba(255, 255, 255, 0.05);
-    --modal-background-color: var(--color-surface-hover);
+    /* Player overlay panels (menus, side drawer, indicators). DARK glass, not the
+     * white lift: these float over VIDEO, and on an HDR display a white-alpha
+     * blend over PQ-bright content reads milky/washed on screen (while SDR
+     * screen captures tone-map it back to looking fine - Michael caught the
+     * difference live). Black-alpha darkening scales correctly over any
+     * backdrop brightness; all consumers already carry backdrop-blur. */
+    --modal-background-color: var(--color-popover);
     --outer-glow: 0 12px 34px rgba(0, 0, 0, 0.55), 0 3px 10px rgba(0, 0, 0, 0.42);
     --border-radius: var(--radius-card);                    /* 0.75rem */
 
