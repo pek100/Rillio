@@ -4,7 +4,6 @@ import React from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { useSearchParams } from 'react-router-dom';
 import debounce from 'lodash.debounce';
-import langs from 'langs';
 import { useTranslation } from 'react-i18next';
 import useRouteFocused from 'rillio/common/useRouteFocused';
 import { useCore } from 'rillio/core';
@@ -31,6 +30,9 @@ import useStatistics from './useStatistics';
 import useSlowDownload from './useSlowDownload';
 import useNextEpisodePreload from './useNextEpisodePreload';
 import NextEpisodePreloadPrompt from './NextEpisodePreloadPrompt';
+import { useSkipSegments, activeSegment } from './skipIntro';
+import SkipPill from './SkipPill/SkipPill';
+import { pickAudioTrack } from './smartTracks';
 import useVideo from './useVideo';
 import useSubtitles from './useSubtitles';
 import useVideoSnapshotBackdrop from './useVideoSnapshotBackdrop';
@@ -63,7 +65,9 @@ const INDICATOR_LAYER = 'absolute bottom-40 left-0 right-0 z-0';
 // layer's fixed bottom-right placement.
 const MENU_LAYER = 'player-immersion-fade absolute bottom-(--player-chrome-clearance) left-auto right-16 top-auto z-0 max-h-[calc(100%-13rem)] max-w-[calc(100%-4rem)] overflow-auto rounded-card border border-line bg-glass-panel shadow-elevated backdrop-blur-(--glass-blur) [@media(orientation:portrait)_and_(max-width:640px)]:bottom-44 [@media(orientation:portrait)_and_(max-width:640px)]:right-10';
 
-const findTrackByLang = (tracks: any[], lang: string) => tracks.find((track) => track.lang === lang || langs.where('1', track.lang)?.[2] === lang);
+// Replaced by smartTracks.pickAudioTrack: find-first took whatever the muxer
+// listed, including commentary tracks; scoring rejects those and lets the
+// container's default flag break ties.
 const findTrackById = (tracks: any[], id: string) => tracks.find((track) => track.id === id);
 
 const GAMEPAD_HANDLER_ID = 'player';
@@ -183,6 +187,20 @@ const Player = () => {
     // Next-episode preload: prompt scheduling, per-series dismissal, the
     // /cache/download trigger, and the start-next-paused handoff after ended.
     const nextEpisodePreload = useNextEpisodePreload({ player, video });
+
+    // Skip intro/outro: known segments for this video (file chapters + the
+    // AniSkip/TheIntroDB community databases), and whichever one the playhead
+    // is currently inside - that one gets the pill.
+    const skipSegments = useSkipSegments(
+        player.selected?.metaRequest?.path?.id ?? null,
+        player.selected?.streamRequest?.path?.id ?? null,
+        video.state.chapters ?? [],
+        video.state.duration,
+    );
+    const skipTarget = React.useMemo(
+        () => activeSegment(skipSegments, video.state.time),
+        [skipSegments, video.state.time],
+    );
 
     // "Try a different source": back to this title's streams list. The player
     // route carries the meta type/id and the video id, which is exactly the
@@ -635,12 +653,14 @@ const Player = () => {
         }
     }, [player.nextVideo, video.state.time, video.state.duration]);
 
-    // Auto audio track selection
+    // Auto audio track selection: the track the user explicitly chose last time
+    // wins; otherwise the best-scoring track in the preferred audio language
+    // (commentary/descriptive tracks never win - see smartTracks).
     React.useEffect(() => {
         if (!defaultAudioTrackSelected.current) {
             const savedTrackId = player.streamState?.audioTrack?.id;
             const savedTrack = savedTrackId ? findTrackById(video.state.audioTracks, savedTrackId) : null;
-            const audioTrack = savedTrack ?? findTrackByLang(video.state.audioTracks, settings.audioLanguage);
+            const audioTrack = savedTrack ?? pickAudioTrack(video.state.audioTracks, settings.audioLanguage);
 
             if (audioTrack && audioTrack.id) {
                 video.setAudioTrack(audioTrack.id);
@@ -1108,6 +1128,18 @@ const Player = () => {
                 videoState={video.state}
                 disabled={subtitlesMenuOpen}
             />
+            {
+                // Not gated on the chrome: the pill exists precisely for the
+                // faded-out mid-intro moment. Menus take priority over it (they
+                // occupy its corner), and casting has no local seek to serve.
+                skipTarget !== null && !menusOpen && !casting ?
+                    <SkipPill
+                        segment={skipTarget}
+                        onSkip={(segment) => onSeekRequested(Math.round(segment.endSec * 1000))}
+                    />
+                    :
+                    null
+            }
             {
                 nextVideoPopupOpen ?
                     <NextVideoPopup
