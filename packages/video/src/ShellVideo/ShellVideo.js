@@ -21,6 +21,7 @@ var stremioToMPVProps = {
     'selectedAudioTrackId': 'aid',
     'subtitlesTracks': 'subtitlesTracks',
     'selectedSubtitlesTrackId': 'sid',
+    'chapters': 'chapter-list',
     'subtitlesSize': 'sub-scale',
     'subtitlesOffset': 'sub-pos',
     'subtitlesDelay': 'sub-delay',
@@ -80,6 +81,7 @@ function ShellVideo(options) {
     ipc.send('mpv-observe-prop', 'metadata');
     ipc.send('mpv-observe-prop', 'video-params'); // video width/height
     ipc.send('mpv-observe-prop', 'track-list');
+    ipc.send('mpv-observe-prop', 'chapter-list');
 
     ipc.send('mpv-observe-prop', 'paused-for-cache');
     ipc.send('mpv-observe-prop', 'cache-buffering-state');
@@ -222,6 +224,10 @@ function ShellVideo(options) {
             // In that case onPropChanged() is manually invoked as track-list contains all
             // the tracks but we have different event for each track type
             case 'track-list': {
+                // `forced` / `default` ride along for the smart track selector:
+                // forced tracks are partial translations (signs, alien dialogue)
+                // that must not win normal selection but SHOULD win when the
+                // audio language matches the viewer's subtitle language.
                 props.audioTracks = args.data.filter(function(x) { return x.type === 'audio'; })
                     .map(function(x, index) {
                         return {
@@ -230,6 +236,8 @@ function ShellVideo(options) {
                             label: x.title === undefined || x.lang === undefined ? '' : x.title || x.lang,
                             origin: 'EMBEDDED',
                             embedded: true,
+                            forced: x.forced === true,
+                            default: x['default'] === true,
                             mode: x.id === props.aid ? 'showing' : 'disabled',
                         };
                     });
@@ -244,10 +252,26 @@ function ShellVideo(options) {
                             label: x.title === undefined || x.lang === undefined ? '' : x.title || x.lang,
                             origin: 'EMBEDDED',
                             embedded: true,
+                            forced: x.forced === true,
+                            default: x['default'] === true,
                             mode: x.id === props.sid ? 'showing' : 'disabled',
                         };
                     });
                 onPropChanged('subtitlesTracks');
+                break;
+            }
+            // Chapters power the skip-intro pill (a chapter named "Opening"/
+            // "Ending" is the most reliable segment source when present) and any
+            // future chapter markers on the seek bar. mpv reports seconds;
+            // everything time-shaped crossing this bridge is milliseconds.
+            case 'chapter-list': {
+                props[args.name] = (Array.isArray(args.data) ? args.data : [])
+                    .map(function(x, index) {
+                        return {
+                            title: typeof x.title === 'string' ? x.title : 'Chapter ' + (index + 1),
+                            time: typeof x.time === 'number' && isFinite(x.time) ? Math.round(x.time * 1000) : 0,
+                        };
+                    });
                 break;
             }
             default: {
@@ -514,6 +538,7 @@ function ShellVideo(options) {
                     speed: 1,
                     subtitlesTracks: [],
                     audioTracks: [],
+                    'chapter-list': [],
                     buffering: false,
                     buffered: null,
                     aid: null,
@@ -532,6 +557,7 @@ function ShellVideo(options) {
                 onPropChanged('muted');
                 onPropChanged('subtitlesTracks');
                 onPropChanged('selectedSubtitlesTrackId');
+                onPropChanged('chapters');
                 setBackground(true);
                 break;
             }

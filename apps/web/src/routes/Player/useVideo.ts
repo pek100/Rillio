@@ -39,6 +39,7 @@ const useVideo = () => {
         selectedAudioTrackId: null,
         subtitlesTracks: [],
         selectedSubtitlesTrackId: null,
+        chapters: [],
         subtitlesOffset: null,
         subtitlesSize: null,
         subtitlesTextColor: null,
