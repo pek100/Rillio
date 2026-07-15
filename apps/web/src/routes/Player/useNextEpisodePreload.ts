@@ -224,46 +224,58 @@ const useNextEpisodePreload = ({ player, video }: UseNextEpisodePreloadArgs) => 
     // merely unpaused/pinned: deleting that would destroy their copy over a
     // toast click. Undo only our own change there.
     const cancelPreload = React.useCallback(() => {
-        if (acceptTimer.current !== null) {
-            clearAcceptTimer();
-        } else if (acceptedDownload.current !== null && acceptedDownload.current.started) {
-            const serverUrl = profile.settings.streamingServerUrl;
-            const { infoHash, preExisting } = acceptedDownload.current;
-            if (typeof serverUrl === 'string') {
-                const path = preExisting ? 'cache/pause' : 'cache/delete';
-                const body = preExisting ? { infoHash, paused: true } : { infoHash };
-                fetch(new URL(path, serverUrl), {
-                    method: 'POST',
-                    headers: { 'content-type': 'application/json' },
-                    body: JSON.stringify(body),
-                })
-                    .then((resp) => {
-                        if (!resp.ok) {
-                            throw new Error(`${path} responded ${resp.status}`);
-                        }
-                        // The preload is gone: drop the top-nav dot now rather
-                        // than on its next lazy tick.
-                        notifyCacheChanged();
-                    })
-                    .catch((error) => {
-                        console.error(`useNextEpisodePreload: ${path} failed`, error);
-                        toast.show({
-                            type: 'error',
-                            title: 'Could not cancel the preload',
-                            message: 'It may still be downloading; the Cached page can stop it.',
-                            timeout: 4000,
-                        });
-                    });
-            }
-        }
+        // Disarming is synchronous either way; the confirmation is not. The undo
+        // is a server round-trip that can be REFUSED (librqbit will not pause a
+        // torrent still hash-checking - it answers 409), so "Preload cancelled"
+        // must be tied to the outcome. Showing it unconditionally, as this used
+        // to, paired a green "cancelled" with the red "could not cancel" for one
+        // click while the download in fact kept running.
+        const cancelled = () => toast.show({ type: 'success', title: 'Preload cancelled', timeout: 3000 });
+        const started = acceptedDownload.current !== null && acceptedDownload.current.started;
+        const serverUrl = profile.settings.streamingServerUrl;
+        const undo = started ? { ...acceptedDownload.current! } : null;
+
         acceptedDownload.current = null;
         setAccepted(false);
         pendingPausedStart = null;
-        toast.show({
-            type: 'success',
-            title: 'Preload cancelled',
-            timeout: 3000,
-        });
+
+        if (acceptTimer.current !== null) {
+            // Before the grace timer fires nothing started, so the cancel is clean
+            // and instant.
+            clearAcceptTimer();
+            cancelled();
+            return;
+        }
+        if (undo === null || typeof serverUrl !== 'string') {
+            cancelled();
+            return;
+        }
+        const path = undo.preExisting ? 'cache/pause' : 'cache/delete';
+        const body = undo.preExisting ? { infoHash: undo.infoHash, paused: true } : { infoHash: undo.infoHash };
+        fetch(new URL(path, serverUrl), {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+        })
+            .then((resp) => {
+                if (!resp.ok) {
+                    throw new Error(`${path} responded ${resp.status}`);
+                }
+                // Undone: confirm, and drop the top-nav dot now rather than on its
+                // next lazy tick.
+                notifyCacheChanged();
+                cancelled();
+            })
+            .catch((error) => {
+                // The undo was refused/unreachable - do NOT claim it was cancelled.
+                console.error(`useNextEpisodePreload: ${path} failed`, error);
+                toast.show({
+                    type: 'error',
+                    title: 'Could not cancel the preload',
+                    message: 'It may still be downloading; the Cached page can stop it.',
+                    timeout: 4000,
+                });
+            });
     }, [profile.settings.streamingServerUrl, toast]);
 
     // Accept hides the prompt immediately (answered silences both prompt
