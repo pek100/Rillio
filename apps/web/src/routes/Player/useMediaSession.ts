@@ -93,9 +93,15 @@ const useMediaSession = (
         shell.on('media.status', onMediaStatus);
 
         return () => {
-            navigator.mediaSession.setActionHandler('play', null);
-            navigator.mediaSession.setActionHandler('pause', null);
-            navigator.mediaSession.setActionHandler('nexttrack', null);
+            // navigator.mediaSession is absent on some platforms (e.g. the
+            // Android System WebView), unlike Windows WebView2. The setup above
+            // guards every call; this cleanup must too, or an unmount on such a
+            // platform throws and takes down the whole app via the error boundary.
+            if (navigator.mediaSession) {
+                navigator.mediaSession.setActionHandler('play', null);
+                navigator.mediaSession.setActionHandler('pause', null);
+                navigator.mediaSession.setActionHandler('nexttrack', null);
+            }
             shell.off('media.status', onMediaStatus);
         };
     }, [player.nextVideo, onPlayRequested, onPauseRequested, onNextVideoRequested]);
