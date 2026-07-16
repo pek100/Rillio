@@ -499,6 +499,11 @@ fn clear_stale_webview_cache(identifier: String, current: String) {
 fn build_mobile_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
     tauri::WebviewWindowBuilder::new(app, "main", tauri::WebviewUrl::default())
         .title("Rillio")
+        // Transparent WebView background (wry setBackgroundColor(0)): the video
+        // SurfaceView sits UNDERNEATH the WebView (MainActivity.kt) and must show
+        // through during playback, mirroring the Windows transparent-window
+        // embedding. The app's own dark theme keeps pages opaque otherwise.
+        .transparent(true)
         .on_navigation(|url| match url.scheme() {
             "http" | "https" | "tauri" | "data" | "blob" | "about" => true,
             scheme => {

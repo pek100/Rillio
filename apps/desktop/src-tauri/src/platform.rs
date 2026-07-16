@@ -65,10 +65,12 @@ impl PlatformCaps {
                 signed_updater: true,
                 webview2_cache: true,
             },
-            // Filled in Phase 2. Conservative defaults so a partial Android
-            // build fails safe (no embedding, no blur, store updates).
             Platform::Android => PlatformCaps {
-                embed_video: false,
+                // libmpv renders into the SurfaceView under the WebView
+                // (surface.rs AndroidSurface + MainActivity.kt).
+                embed_video: true,
+                // The panel blur shader is untested on the Android GLES
+                // context; stays off until proven (checklists/android-mpv D3).
                 gpu_blur: false,
                 signed_updater: false,
                 webview2_cache: false,

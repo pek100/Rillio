@@ -386,25 +386,83 @@ unsafe fn node_to_json(node: &MpvNode) -> serde_json::Value {
     }
 }
 
+/// Android: hand the JavaVM (and app context) to ffmpeg BEFORE mpv init.
+/// mediacodec hwdec, the audiotrack AO, and mpv's own android VO
+/// (ANativeWindow_fromSurface on the `wid` Surface) all reach Java over JNI;
+/// ffmpeg has no way to discover the VM itself (mpv-android does exactly this
+/// call in its JNI_OnLoad). The symbols live in the bundled libavcodec.so,
+/// already mapped as a libmpv dependency, so this dlopen returns the existing
+/// handle rather than loading anything new.
+#[cfg(target_os = "android")]
+pub fn set_ffmpeg_java_vm() -> Result<(), String> {
+    use std::ffi::c_void;
+    type SetVm = unsafe extern "C" fn(*mut c_void, *mut c_void) -> i32;
+    type SetCtx = unsafe extern "C" fn(*mut c_void, *mut c_void) -> i32;
+
+    // Captured by the SurfaceBridge JNI calls (MainActivity.onCreate); always
+    // set long before any playback. ndk-context is deliberately NOT used: its
+    // singleton is never initialized under Tauri and aborts the process.
+    let vm = crate::surface::android::java_vm_ptr()
+        .ok_or("JavaVM not captured yet (SurfaceBridge.onActivityCreated has not run)")?;
+    unsafe {
+        let lib = Library::new("libavcodec.so").map_err(|e| format!("libavcodec.so: {e}"))?;
+        let set_vm = lib
+            .get::<SetVm>(b"av_jni_set_java_vm\0")
+            .map_err(|e| format!("av_jni_set_java_vm: {e}"))?;
+        let rc = set_vm(vm, std::ptr::null_mut());
+        if rc < 0 {
+            return Err(format!("av_jni_set_java_vm failed: rc={rc}"));
+        }
+        // ffmpeg 7+: mediacodec also wants the Application context (codec
+        // enumeration via the app's PackageManager). Best-effort: warn-only,
+        // the VM handoff above is the hard requirement.
+        if let Ok(set_ctx) = lib.get::<SetCtx>(b"av_jni_set_android_app_ctx\0") {
+            if let Some(app) = crate::surface::android::app_context_ptr() {
+                let rc = set_ctx(app, std::ptr::null_mut());
+                if rc < 0 {
+                    tracing::warn!("mpv: av_jni_set_android_app_ctx failed: rc={rc}");
+                }
+            }
+        }
+        // Keep libavcodec pinned for the process lifetime (it is anyway, via
+        // libmpv); dropping the handle must never unmap it under mpv.
+        std::mem::forget(lib);
+    }
+    tracing::info!("mpv: JavaVM handed to ffmpeg");
+    Ok(())
+}
+
 /// Default location of the dev/bundled `libmpv-2.dll`: next to the executable,
 /// falling back to the crate dir during `cargo test`/`run`.
+///
+/// Android: the bare soname. `libmpv.so` ships in the APK's jniLibs next to our
+/// own cdylib, and dlopen resolves a plain soname from the app's linker
+/// namespace (nativeLibraryDir); its ffmpeg dependencies resolve from the same
+/// directory automatically. No filesystem probing applies there.
 pub fn default_dll_path() -> PathBuf {
-    // Dev override: point at any libmpv-2.dll (e.g. an on-machine build).
-    if let Ok(p) = std::env::var("RILLIO_LIBMPV") {
-        let p = PathBuf::from(p);
-        if p.exists() {
-            return p;
-        }
+    #[cfg(target_os = "android")]
+    {
+        return PathBuf::from("libmpv.so");
     }
-    if let Ok(exe) = std::env::current_exe() {
-        if let Some(dir) = exe.parent() {
-            let p = dir.join("libmpv-2.dll");
+    #[cfg(not(target_os = "android"))]
+    {
+        // Dev override: point at any libmpv-2.dll (e.g. an on-machine build).
+        if let Ok(p) = std::env::var("RILLIO_LIBMPV") {
+            let p = PathBuf::from(p);
             if p.exists() {
                 return p;
             }
         }
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                let p = dir.join("libmpv-2.dll");
+                if p.exists() {
+                    return p;
+                }
+            }
+        }
+        PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("libmpv-2.dll")
     }
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("libmpv-2.dll")
 }
 
 #[cfg(test)]

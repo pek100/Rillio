@@ -344,6 +344,11 @@ impl Controller {
     fn create(wid: Option<isize>) -> Result<Self, String> {
         let dll = mpv::default_dll_path();
         let mpv = Mpv::load(&dll)?;
+        // ffmpeg's mediacodec hwdec + audiotrack AO and mpv's android VO all
+        // reach Java over JNI; hand them the JavaVM before anything initializes.
+        // Fail loud: without it they die cryptically at first use instead.
+        #[cfg(target_os = "android")]
+        mpv::set_ffmpeg_java_vm()?;
         // `wid` must be set before initialize(): mpv creates its video output as
         // a child of this window rather than a standalone one.
         if let Some(wid) = wid {
@@ -380,28 +385,47 @@ impl Controller {
             // `gpu` vo washes highlights to grey); keep `gpu` as a fallback for
             // a minimal libmpv build that lacks it.
             ("vo", "gpu-next,gpu"),
-            // HDR passthrough, diagnosed 2026-07-12 on a Windows-HDR desktop.
-            // The hint re-flags the swapchain to the content's colorspace (PQ
-            // for HDR files, sRGB for SDR files, per file) and DWM honors it,
-            // including for our embedded child window. `auto` engages only when
-            // the display can actually present the space; SDR displays fall
-            // back to tone-mapping. Two defaults break it and must be overridden:
-            // - hint-mode defaults to `target`, which ADAPTS the image toward
-            //   the display's inferred characterization instead of passing the
-            //   source signal through; with the (sRGB) display ICC profile in
-            //   that inference the picture goes washed-out grey, because the
-            //   manual guarantees "the ICC profile always takes precedence over
-            //   any metadata". `source` is the true passthrough mode.
-            // - icc-profile-auto is forced off for the same reason.
-            ("target-colorspace-hint", "auto"),
-            ("target-colorspace-hint-mode", "source"),
-            ("icc-profile-auto", "no"),
             // Tone-mapping path (SDR displays only): measure scene peak for the
             // roll-off, and use bt.2446a, the curve the mpv manual recommends
             // for well-mastered content (the default spline reads flat).
             ("hdr-compute-peak", "yes"),
             ("tone-mapping", "bt.2446a"),
         ] {
+            if let Err(e) = mpv.set_option(name, value) {
+                tracing::warn!("mpv: option {name}={value} not applied: {e}");
+            }
+        }
+        // Windows-only: HDR passthrough into the DWM-composited window,
+        // diagnosed 2026-07-12 on a Windows-HDR desktop.
+        // The hint re-flags the swapchain to the content's colorspace (PQ
+        // for HDR files, sRGB for SDR files, per file) and DWM honors it,
+        // including for our embedded child window. `auto` engages only when
+        // the display can actually present the space; SDR displays fall
+        // back to tone-mapping. Two defaults break it and must be overridden:
+        // - hint-mode defaults to `target`, which ADAPTS the image toward
+        //   the display's inferred characterization instead of passing the
+        //   source signal through; with the (sRGB) display ICC profile in
+        //   that inference the picture goes washed-out grey, because the
+        //   manual guarantees "the ICC profile always takes precedence over
+        //   any metadata". `source` is the true passthrough mode.
+        // - icc-profile-auto is forced off for the same reason.
+        // On Android none of this applies: mpv's GLES context has no HDR
+        // colorspace path, so output is tone-mapped SDR via the options above
+        // (HDR output mode is tracked as android-mpv E2).
+        #[cfg(windows)]
+        for (name, value) in [
+            ("target-colorspace-hint", "auto"),
+            ("target-colorspace-hint-mode", "source"),
+            ("icc-profile-auto", "no"),
+        ] {
+            if let Err(e) = mpv.set_option(name, value) {
+                tracing::warn!("mpv: option {name}={value} not applied: {e}");
+            }
+        }
+        // Android: route audio through AudioTrack (the JNI AO; deterministic
+        // rather than relying on the build's AO autodetection order).
+        #[cfg(target_os = "android")]
+        for (name, value) in [("ao", "audiotrack")] {
             if let Err(e) = mpv.set_option(name, value) {
                 tracing::warn!("mpv: option {name}={value} not applied: {e}");
             }

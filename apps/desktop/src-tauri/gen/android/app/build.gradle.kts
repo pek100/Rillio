@@ -19,7 +19,11 @@ android {
     defaultConfig {
         manifestPlaceholders["usesCleartextTraffic"] = "false"
         applicationId = "com.rillio.desktop"
-        minSdk = 24
+        // 26 (Android 8, 2017): the libmpv-android prebuilt (jarnedemeulemeester
+        // v1.0.0, see scripts/fetch-libmpv-android.ps1) is built against minSdk
+        // 26; dlopen on an older device would fail at player init. TV devices
+        // below API 26 are out of scope.
+        minSdk = 26
         targetSdk = 36
         versionCode = tauriProperties.getProperty("tauri.android.versionCode", "1").toInt()
         versionName = tauriProperties.getProperty("tauri.android.versionName", "1.0")

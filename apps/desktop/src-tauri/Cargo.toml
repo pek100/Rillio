@@ -65,3 +65,12 @@ windows = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
 ] }
+
+[target.'cfg(target_os = "android")'.dependencies]
+# The Android surface seam (surface.rs `android` module): receive the video
+# Surface jobject from Kotlin (SurfaceBridge), hold it as a JNI global ref (its
+# pointer is libmpv's `wid` on Android), and capture the JavaVM for the ffmpeg
+# handoff. NOTE: ndk-context is deliberately NOT used - its singleton is never
+# initialized in Tauri's mobile flow (tao/wry keep their own) and
+# android_context() aborts the process (found the hard way, SIGABRT on launch).
+jni = "0.21"
