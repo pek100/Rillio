@@ -246,7 +246,10 @@ fn setup_deep_links(app: &tauri::App) {
     });
 }
 
-/// Build and run the Tauri application.
+/// Build and run the Tauri application. On mobile there is no `main()`: the
+/// Android Activity loads this `.so` via JNI and calls the entry point the
+/// `mobile_entry_point` macro generates. On desktop `main.rs` calls it directly.
+#[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     let _ = tracing_subscriber::fmt()
         .with_env_filter(
