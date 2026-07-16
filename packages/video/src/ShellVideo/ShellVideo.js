@@ -3,7 +3,11 @@ var cloneDeep = require('lodash.clonedeep');
 var deepFreeze = require('deep-freeze');
 var ERROR = require('../error');
 
-var SUBS_SCALE_FACTOR = 0.0066;
+// Maps the profile's subtitlesSize percentage to mpv's sub-scale. Stremio shipped
+// 0.0066 (100% -> 0.66, far too small); 0.01 makes the default 100% land exactly on
+// mpv's own default sub-scale of 1.0. The observe path divides by the same factor,
+// so the round-trip stays consistent.
+var SUBS_SCALE_FACTOR = 0.01;
 var EOF_END_TOLERANCE = 60000;
 
 var stremioToMPVProps = {

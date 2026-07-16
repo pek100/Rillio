@@ -60,6 +60,10 @@ type UseSubtitlesArgs = {
     closeMenus: () => void,
     closeSubtitlesMenu: () => void,
     toggleSubtitlesMenu: () => void,
+    // While true (player chrome visible, no menu open), the applied offset is
+    // lifted above the control bar; the user's intended offset is restored
+    // when it turns false.
+    liftOffset?: boolean,
 };
 
 type SubtitlesMenuProps = {

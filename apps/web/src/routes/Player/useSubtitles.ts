@@ -1,6 +1,7 @@
 // Copyright (C) 2017-2026 Smart code 203358507
 
 import { useCallback, useEffect, useMemo, useRef } from 'react';
+import { animate } from 'motion';
 import { useTranslation } from 'react-i18next';
 import { CONSTANTS, onFileDrop, onShortcut, useToast } from 'rillio/common';
 import { pickSubtitlesTrack } from './smartTracks';
@@ -36,6 +37,19 @@ const findTrackByLanguage = (tracks: SubtitleTrack[], language?: string | null) 
     return pickSubtitlesTrack(tracks, language) ?? undefined;
 };
 
+// The offset (% from the bottom) the subtitles lift to while the chrome is up,
+// derived from the control bar's REAL height (--player-chrome-clearance, a
+// fixed rem value) against the CURRENT window height. A hardcoded percentage
+// was wrong twice over: it landed at a different pixel height on every window
+// size, and a value below the user's own offset made the fade change nothing.
+const chromeLiftPercent = (): number => {
+    const root = document.documentElement;
+    const raw = getComputedStyle(root).getPropertyValue('--player-chrome-clearance').trim();
+    const rem = parseFloat(getComputedStyle(root).fontSize) || 16;
+    const px = raw.endsWith('rem') ? parseFloat(raw) * rem : parseFloat(raw) || 7.5 * rem;
+    return Math.min(30, (px / Math.max(1, window.innerHeight)) * 100);
+};
+
 const useSubtitles = ({
     player,
     video,
@@ -45,6 +59,7 @@ const useSubtitles = ({
     closeMenus,
     closeSubtitlesMenu,
     toggleSubtitlesMenu,
+    liftOffset = false,
 }: UseSubtitlesArgs): UseSubtitlesResult => {
     const { t } = useTranslation();
     const toast = useToast();
@@ -52,9 +67,46 @@ const useSubtitles = ({
     const settingsRef = useRef(settings);
     const defaultTrackSelected = useRef(false);
     const lastSelectedTrack = useRef<SelectedSubtitleTrack | null>(null);
+    // The offset the USER means (settings default / their menu tweak / the
+    // per-stream restore) - as opposed to what is currently applied, which may
+    // be lifted above the control bar while the chrome is visible. Every write
+    // path records intent here so the chrome fading can restore it.
+    const intendedOffset = useRef<number | null>(null);
+    const liftOffsetRef = useRef(liftOffset);
+    liftOffsetRef.current = liftOffset;
 
     videoRef.current = video;
     settingsRef.current = settings;
+
+    // The offset actually applied to the video right now (may be mid-tween),
+    // and the running tween. Fractional values go through as-is: mpv >= 0.36
+    // made sub-pos a float, and integer rounding turned the glide into ~7
+    // visible one-percent jumps.
+    const appliedOffset = useRef<number | null>(null);
+    const offsetTween = useRef<{ stop: () => void } | null>(null);
+    const writeOffset = useCallback((value: number, animated: boolean) => {
+        offsetTween.current?.stop();
+        offsetTween.current = null;
+        const from = appliedOffset.current;
+        if (!animated || from === null || from === value) {
+            appliedOffset.current = value;
+            videoRef.current.setSubtitlesOffset(value);
+            return;
+        }
+        offsetTween.current = animate(from, value, {
+            duration: 0.3,
+            ease: 'easeOut',
+            onUpdate: (v: number) => {
+                appliedOffset.current = v;
+                videoRef.current.setSubtitlesOffset(v);
+            },
+        });
+    }, []);
+
+    const applyOffset = useCallback((base: number) => {
+        intendedOffset.current = base;
+        writeOffset(liftOffsetRef.current ? Math.max(base, chromeLiftPercent()) : base, false);
+    }, [writeOffset]);
 
     const streamSubtitles = useMemo(() => {
         return withFallbackLabels(player.selected?.stream.subtitles);
@@ -75,11 +127,11 @@ const useSubtitles = ({
         const currentVideo = videoRef.current;
 
         currentVideo.setSubtitlesSize(currentSettings.subtitlesSize);
-        currentVideo.setSubtitlesOffset(currentSettings.subtitlesOffset);
+        applyOffset(currentSettings.subtitlesOffset);
         currentVideo.setSubtitlesTextColor(currentSettings.subtitlesTextColor);
         currentVideo.setSubtitlesBackgroundColor(currentSettings.subtitlesBackgroundColor);
         currentVideo.setSubtitlesOutlineColor(currentSettings.subtitlesOutlineColor);
-    }, []);
+    }, [applyOffset]);
 
     const rememberTrack = useCallback((track: SubtitleTrack, embedded: boolean) => {
         lastSelectedTrack.current = { id: track.id, embedded };
@@ -148,9 +200,9 @@ const useSubtitles = ({
     }, [changeSize, video.state.subtitlesSize]);
 
     const changeOffset = useCallback((offset: number) => {
-        video.setSubtitlesOffset(offset);
+        applyOffset(offset);
         streamStateChanged({ subtitleOffset: offset });
-    }, [streamStateChanged, video]);
+    }, [applyOffset, streamStateChanged]);
 
     onFileDrop(CONSTANTS.SUPPORTED_LOCAL_SUBTITLES, (file: File, buffer: ArrayBuffer) => {
         videoRef.current.addLocalSubtitles(file.name, buffer);
@@ -233,9 +285,22 @@ const useSubtitles = ({
 
         const offset = player.streamState?.subtitleOffset;
         if (typeof offset === 'number') {
-            video.setSubtitlesOffset(offset);
+            applyOffset(offset);
         }
-    }, [player.streamState, video.state.stream]);
+    }, [applyOffset, player.streamState, video.state.stream]);
+
+    // The chrome toggled: re-apply the intended offset, lifted or not, riding a
+    // short easeOut tween so the subtitles glide with the chrome fade instead of
+    // jumping. Falls back to the settings default when nothing has been applied
+    // yet.
+    useEffect(() => {
+        const base = intendedOffset.current ?? settingsRef.current.subtitlesOffset;
+        if (typeof base === 'number') {
+            writeOffset(liftOffset ? Math.max(base, chromeLiftPercent()) : base, true);
+        }
+    }, [liftOffset, writeOffset]);
+
+    useEffect(() => () => offsetTween.current?.stop(), []);
 
     useEffect(() => {
         defaultTrackSelected.current = false;
