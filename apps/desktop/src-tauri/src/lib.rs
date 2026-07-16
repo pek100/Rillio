@@ -253,11 +253,19 @@ pub fn run() {
     // otherwise the running WebView2 holds its own cache dirs open and they
     // cannot be deleted. Uses the context (available before .run()) for the
     // identifier + version.
+    //
+    // Host-lifecycle seam: this whole stale-cache sweep is a Windows-WebView2
+    // concern (a platform without a persistent WebView2 profile - Android's
+    // System WebView, updated by the store - has nothing to sweep). Gated on the
+    // capability rather than `#cfg` so the seam is one readable switch; on
+    // Windows the cap is true and this runs exactly as before.
     let ctx = tauri::generate_context!();
-    clear_stale_webview_cache(
-        ctx.config().identifier.clone(),
-        ctx.package_info().version.to_string(),
-    );
+    if platform::PlatformCaps::current().webview2_cache {
+        clear_stale_webview_cache(
+            ctx.config().identifier.clone(),
+            ctx.package_info().version.to_string(),
+        );
+    }
 
     tauri::Builder::default()
         // Single-instance MUST be the first plugin registered (Tauri requirement).

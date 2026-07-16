@@ -53,23 +53,35 @@ target supports compiles. Interface = runtime; construction = compile-time.
    D-pad key events into the one `direction` dispatch `services/GamepadNavigation`
    already consumes. Plus an `'android'` arm in `packages/video/src/platform.js`.
 
-## Phase 1 checklist (Windows, no behavior change, keep GREEN + run after each)
+## Phase 1: DONE (Windows, behavior byte-identical, verified with real playback)
 
-- [ ] `platform.rs`: `Platform` enum + `detect()` + `PlatformCaps` (embed_video,
-      gpu_blur, signed_updater, webview2_cache). Windows caps = today's values.
-- [ ] `NativeSurface` trait + `WindowsSurface` impl wrapping `main_window_wid`
-      + `composite_behind_webview`. Factory `create_native_surface()`. Callers
-      use the trait. Non-Windows already stubbed.
-- [ ] `PlayerBackend` trait + `MpvBackend` impl wrapping `Controller`. `shell_send`
-      + all player commands route through `Box<dyn PlayerBackend>` held in
-      `ShellState`. Bridge contract + allowlists UNCHANGED.
-- [ ] `HostPlatform` trait + `WindowsHost` impl for cache-dir / cache-clear /
-      updater / profile-release. `lib.rs` calls the trait.
-- [ ] Web: input-source seam in `GamepadContext` + `'android'` arm in platform.js
-      (inert on Windows).
-- [ ] Verify: cargo build green, cargo test green, launch shell, play the cached
-      Silo title, confirm HDR/DV + blur + trickplay + chapters all still work
-      (the whole point: byte-identical Windows behavior).
+- [x] `platform.rs`: `Platform::detect()` + `PlatformCaps` (embed_video, gpu_blur,
+      signed_updater, webview2_cache). Windows caps = today's values.
+- [x] `surface.rs`: `NativeSurface` trait + `create()` factory + `WindowsSurface`
+      (HWND wid + z-order compositing), moved out of shell.rs. Non-Windows =
+      `NoSurface`. shell.rs calls the trait.
+- [x] `shell.rs`: `NativePlayer` enum (the Rust-idiomatic factory for a closed
+      backend set; `Mpv` variant today, `Android` Media3 later). `ShellState`
+      holds it; `shell_send` / stats / snapshot / blur route through it. Security
+      allowlists stay in `shell_send` (backend-agnostic); the loadfile/stop
+      normalization moved into `Controller::run_command`.
+- [x] Host-lifecycle seam (lighter than a full trait: the updater is
+      data-loss-adjacent, not worth the risk): the WebView2 stale-cache sweep is
+      gated on `PlatformCaps::webview2_cache` in lib.rs. The updater command and
+      the in-exe cache dir are already Windows-shaped and simply not invoked on a
+      store-updated / scoped-storage host. `default_cache_dir` already falls back
+      to `app_data_dir` when the exe folder is not writable (Android scoped
+      storage), so it ports as-is.
+- [x] Verified: cargo build + 16/16 tests green; launched the shell, drove
+      `loadfile` on the cached 4K DV/HDR Silo file, confirmed real HEVC 3840x1606
+      decode, mpv embedding + `composite mpv behind WebView`, and `player.stats()`
+      through the enum. Byte-identical Windows behavior.
+
+Web-side seams moved to Phase 2 (they need the Android runtime to be meaningful;
+inert untested code now would be speculative): the D-pad input source in
+`GamepadContext` (Android remote key events -> the existing spatial-nav
+`direction` dispatch) and the `'android'` arm in `packages/video/src/platform.js`
+(VO / player selection) both land when the Android player exists to test against.
 
 ## Phase 2 (Android TV, separate branch, later)
 
