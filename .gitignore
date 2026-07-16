@@ -20,8 +20,10 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Tauri generated schemas
-/apps/desktop/src-tauri/gen/
+# Tauri generated schemas. The Android Gradle project in gen/android IS
+# tracked (it carries the TV manifest and is where per-platform config lives);
+# its build outputs are covered by gen/android/.gitignore.
+/apps/desktop/src-tauri/gen/schemas/
 
 # libmpv dev DLL (dropped in locally; distribution bundles an official build)
 /apps/desktop/src-tauri/libmpv-2.dll
