@@ -13,6 +13,43 @@ jail: absolute paths, drive prefixes, and `..` traversal are rejected and the
 offending torrent is removed), the local API accepts mutations only from the
 app's own origin, and updates are signed. Details below.
 
+## Why the security posture exists (the receipts)
+
+This app category handles attacker-controlled input by definition: torrents,
+subtitles and addon responses all come from strangers. The hardening is aimed
+at attack classes that have actually shipped, with honest framing of how
+common each is:
+
+- **Crafted torrents escaping the download folder.** File names in a torrent
+  can attempt `..` traversal or absolute paths; libtorrent documented and fixed
+  this class in [2014](https://blog.libtorrent.org/2014/12/filenames/), and
+  path-handling bugs keep recurring in clients (e.g. the 2025 Deluge advisories,
+  [GHSL-2024-188..191](https://securitylab.github.com/advisories/GHSL-2024-188_GHSL-2024-191_Deluge/)).
+  Rillio validates every declared path against the cache root on top of
+  librqbit's own parse-time check, and removes the torrent on violation.
+- **Parser memory corruption reaching code execution.** uTorrent's
+  [CVE-2020-8437](https://mavlevin.com/2020/09/20/utorrent-cve-2020-8437-vulnerability-and-exploit-overview)
+  achieved RCE from a crafted bencoded dictionary. Rillio's engine and parsers
+  are Rust: the overflow class is removed at the language level. That is not
+  immunity (logic bugs exist in every language); it deletes the most common
+  exploit class.
+- **The subtitle supply chain.** Check Point's 2017
+  ["Hacked in Translation"](https://research.checkpoint.com/2017/hacked-in-translation/)
+  demonstrated RCE via crafted subtitle files in VLC, Kodi, Popcorn Time and
+  Stremio - roughly 200 million installs of vulnerable players at the time,
+  deliverable through poisoned subtitle-repository rankings with no user
+  interaction. Long patched, but it is the proof that these apps are a real
+  target surface, not a hypothetical one.
+- **Honest prevalence.** In-app parser exploits are the rarer threat; most
+  malware around media downloads arrives as fake installers and bundled
+  executables from untrustworthy websites. Rillio avoids that class
+  structurally: it never executes downloaded content, it only demuxes media
+  into the player.
+
+None of this makes any software invulnerable, and this README will not claim
+otherwise. It means the known, shipped attack classes for this category each
+have a specific, auditable countermeasure here.
+
 ## Layout
 
 ```
@@ -64,6 +101,21 @@ The desktop app is a **Tauri v2 shell** (`apps/desktop/src-tauri`) that:
 The web client is shared. In a plain browser it decodes with `HTMLVideo` (the
 browser's decoder); in the desktop shell it uses `ShellVideo`, which drives the
 native mpv. The same React app runs both places.
+
+Player features beyond playback fidelity (as of v0.1.22):
+
+- **Trickplay**: hover the seek bar for real decoded frame previews, generated
+  by a second in-process libmpv instance seeking keyframes at thumbnail size.
+- **Chapter-segmented timeline**: real chapter marks when the file carries
+  them (titles in the hover card), merged with dialogue-gap boundaries from
+  external subtitles and a background visual scene scan for files with neither.
+- **Skip intro/outro**: file chapters plus the AniSkip and TheIntroDB
+  community databases, surfaced as a single Skip pill.
+- **Smart track selection**: audio/subtitle defaults are scored (language,
+  full-dialogue over signs/commentary, forced-flag handling), not first-listed.
+- **GPU frosted glass**: the player panels blur the live video inside mpv's
+  own render pipeline (a libplacebo user shader), downstream of the HDR/DV
+  color pipeline so passthrough is untouched.
 
 ## The Rust streaming server (replaces server.js)
 
