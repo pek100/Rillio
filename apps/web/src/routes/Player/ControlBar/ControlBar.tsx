@@ -53,6 +53,7 @@ type Props = {
     nextVideo?: unknown | null;
     stream?: unknown | null;
     thumbStreamUrl?: string | null;
+    chapters?: { time: number, title?: string | null }[];
     videoScale?: string | null;
     videoScaleLabel?: string;
     onVideoScaleChanged?: () => void;
@@ -89,6 +90,7 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
     nextVideo,
     stream,
     thumbStreamUrl,
+    chapters,
     onPlayRequested,
     onPauseRequested,
     onNextVideoRequested,
@@ -200,6 +202,7 @@ const ControlBar = forwardRef<HTMLDivElement, Props>(function ControlBar({
                 duration={duration ?? null}
                 buffered={buffered}
                 thumbStreamUrl={thumbStreamUrl}
+                chapters={chapters}
                 onSeekRequested={onSeekRequested}
                 onSeekPreview={setSeekPreview}
             />

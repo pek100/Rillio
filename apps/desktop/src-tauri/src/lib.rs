@@ -302,7 +302,8 @@ pub fn run() {
             shell::player_snapshot,
             shell::player_blur_rect,
             thumbs::player_thumb,
-            thumbs::player_thumb_stop
+            thumbs::player_thumb_stop,
+            thumbs::player_scene_cuts
         ])
         .build(ctx)
         .expect("error while building the Rillio desktop shell")

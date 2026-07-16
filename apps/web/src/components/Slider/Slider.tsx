@@ -55,6 +55,12 @@ type Props = {
     onSlide?: (value: number) => void;
     onComplete?: (value: number) => void;
     audioBoost?: boolean;
+    // A mask-image applied to the track / buffered / filled layers (NOT the
+    // thumb): transparent regions become REAL holes the page behind shows
+    // through. The SeekBar uses it to cut chapter gaps into the bar - painting
+    // notches over the translucent track instead reads as black rectangles on
+    // bright video.
+    barMask?: string;
 };
 
 const Slider = ({
@@ -71,6 +77,7 @@ const Slider = ({
     onSlide,
     onComplete,
     audioBoost,
+    barMask,
 }: Props) => {
     const minimumValueRef = useLiveRef(minimumValue !== null && minimumValue !== undefined && !isNaN(minimumValue) ? minimumValue : 0);
     const maximumValueRef = useLiveRef(maximumValue !== null && maximumValue !== undefined && !isNaN(maximumValue) ? maximumValue : 100);
@@ -212,13 +219,27 @@ const Slider = ({
                         !audioBoost && 'bg-(--primary-accent-color) opacity-20',
                         trackClassName,
                     )}
-                    style={audioBoost ? { backgroundImage: AUDIO_BOOST_BAND } : undefined}
+                    style={{
+                        ...(audioBoost ? { backgroundImage: AUDIO_BOOST_BAND } : null),
+                        ...(barMask ? { maskImage: barMask, WebkitMaskImage: barMask } : null),
+                    }}
                 />
             </div>
             <div className={layer}>
                 <div
-                    className={cn('h-(--track-size) flex-none rounded-(--track-size) bg-(--overlay-color)', bufferedClassName)}
-                    style={{ width: `calc(100% * ${bufferedPosition})` }}
+                    className={cn('h-(--track-size) w-full flex-none rounded-(--track-size) bg-(--overlay-color)', bufferedClassName)}
+                    style={{
+                        // The buffered layer keeps full width and masks down to
+                        // the buffered fraction, so the barMask holes (fractions
+                        // of the FULL bar) line up with the other layers.
+                        maskImage: barMask ?
+                            `linear-gradient(to right, black calc(100% * ${bufferedPosition}), transparent calc(100% * ${bufferedPosition})), ${barMask}` :
+                            `linear-gradient(to right, black calc(100% * ${bufferedPosition}), transparent calc(100% * ${bufferedPosition}))`,
+                        WebkitMaskImage: barMask ?
+                            `linear-gradient(to right, black calc(100% * ${bufferedPosition}), transparent calc(100% * ${bufferedPosition})), ${barMask}` :
+                            `linear-gradient(to right, black calc(100% * ${bufferedPosition}), transparent calc(100% * ${bufferedPosition}))`,
+                        ...(barMask ? { maskComposite: 'intersect', WebkitMaskComposite: 'source-in' } : null),
+                    }}
                 />
             </div>
             <div className={layer}>
@@ -229,8 +250,9 @@ const Slider = ({
                         filledClassName,
                     )}
                     style={{
-                        maskImage: filledMask,
-                        WebkitMaskImage: filledMask,
+                        maskImage: barMask ? `${filledMask}, ${barMask}` : filledMask,
+                        WebkitMaskImage: barMask ? `${filledMask}, ${barMask}` : filledMask,
+                        ...(barMask ? { maskComposite: 'intersect', WebkitMaskComposite: 'source-in' } : null),
                         ...(audioBoost ? { backgroundImage: AUDIO_BOOST_GRADIENT } : null),
                     }}
                 />

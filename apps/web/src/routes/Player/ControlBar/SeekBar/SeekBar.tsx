@@ -22,6 +22,13 @@ const BUFFERED = 'bg-ice/30';
 const FILLED = 'bg-(--color-accent)';
 const THUMB = 'bg-(--color-accent) transition-transform duration-150 group-hover:scale-[1.2]';
 
+type Chapter = { time: number, title?: string | null };
+
+// Two boundaries closer than this (fraction of the duration) merge: encoders
+// sometimes emit a stray zero-length chapter, and two gap markers one pixel
+// apart read as dirt on the bar.
+const MIN_BOUNDARY_GAP = 0.01;
+
 type Props = {
     className?: string;
     time: number | null;
@@ -30,11 +37,15 @@ type Props = {
     // The URL mpv is actually playing (video.state.stream.url): what the
     // shell's shadow player opens for trickplay thumbnails. Shell-only.
     thumbStreamUrl?: string | null;
+    // The file's chapter marks (ms), from the player bridge. When present the
+    // bar renders YouTube-style: gaps at each boundary, chapter title in the
+    // hover preview.
+    chapters?: Chapter[];
     onSeekRequested?: (time: number) => void;
     onSeekPreview?: (time: number | null) => void;
 };
 
-const SeekBar = ({ className, time, duration, buffered, thumbStreamUrl, onSeekRequested, onSeekPreview }: Props) => {
+const SeekBar = ({ className, time, duration, buffered, thumbStreamUrl, chapters, onSeekRequested, onSeekPreview }: Props) => {
     const disabled = time === null || isNaN(time as number) || duration === null || isNaN(duration as number);
     const routeFocused = useRouteFocused();
     const [seekTime, setSeekTime] = useState<number | null>(null);
@@ -59,6 +70,50 @@ const SeekBar = ({ className, time, duration, buffered, thumbStreamUrl, onSeekRe
         null;
     const previewFraction = !disabled && previewTimeMs !== null ? previewTimeMs / (duration as number) : null;
     const thumb = usePlayerThumb(thumbStreamUrl ?? null, previewTimeMs);
+
+    // Chapter boundaries as bar fractions: sorted, interior-only (a mark at 0
+    // or at the very end draws no gap), near-duplicates merged.
+    const chapterMarks = React.useMemo(() => {
+        if (disabled || !Array.isArray(chapters) || chapters.length === 0) return [];
+        const marks: { fraction: number, title: string | null }[] = [];
+        for (const chapter of [...chapters].sort((a, b) => a.time - b.time)) {
+            const fraction = chapter.time / (duration as number);
+            if (fraction <= MIN_BOUNDARY_GAP || fraction >= 1 - MIN_BOUNDARY_GAP) continue;
+            if (marks.length > 0 && fraction - marks[marks.length - 1].fraction < MIN_BOUNDARY_GAP) continue;
+            marks.push({ fraction, title: typeof chapter.title === 'string' && chapter.title.length > 0 ? chapter.title : null });
+        }
+        return marks;
+    }, [chapters, duration, disabled]);
+    // The chapter under the preview cursor (for the hover card's title line).
+    // Untitled or number-only chapters ("Chapter 3") add nothing over the
+    // timestamp already shown - skip them.
+    // Chapter gaps as a mask on the Slider's bar layers: transparent 4px holes
+    // at each boundary that the video actually shows through.
+    const barMask = React.useMemo(() => {
+        if (chapterMarks.length === 0) return undefined;
+        const stops = ['black 0%'];
+        for (const { fraction } of chapterMarks) {
+            const at = `${(fraction * 100).toFixed(3)}%`;
+            stops.push(
+                `black calc(${at} - 2px)`,
+                `transparent calc(${at} - 2px)`,
+                `transparent calc(${at} + 2px)`,
+                `black calc(${at} + 2px)`,
+            );
+        }
+        stops.push('black 100%');
+        return `linear-gradient(to right, ${stops.join(', ')})`;
+    }, [chapterMarks]);
+
+    const previewChapterTitle = React.useMemo(() => {
+        if (previewFraction === null || chapterMarks.length === 0 || !Array.isArray(chapters)) return null;
+        let title: string | null = null;
+        for (const chapter of [...chapters].sort((a, b) => a.time - b.time)) {
+            if (chapter.time / (duration as number) > previewFraction) break;
+            title = typeof chapter.title === 'string' && chapter.title.length > 0 ? chapter.title : null;
+        }
+        return title !== null && !/^chapter\s*\d*$/i.test(title.trim()) ? title : null;
+    }, [previewFraction, chapterMarks, chapters, duration]);
 
     const setSeekTimeAndPreview = useCallback((value: number | null) => {
         setSeekTime(value);
@@ -112,9 +167,43 @@ const SeekBar = ({ className, time, duration, buffered, thumbStreamUrl, onSeekRe
                         style={{ left: `clamp(5.5rem, ${previewFraction * 100}%, calc(100% - 5.5rem))` }}
                     >
                         <img src={thumb} alt={''} className={'block w-44'} draggable={false} />
-                        <div className={'bg-black/80 py-0.5 text-center text-xs tabular-nums text-ice'}>
-                            {formatTime(previewTimeMs as number)}
+                        <div className={'bg-black/80 py-0.5 text-center text-xs text-ice'}>
+                            {
+                                previewChapterTitle !== null ?
+                                    <div className={'truncate px-2 font-semibold'}>{previewChapterTitle}</div>
+                                    :
+                                    null
+                            }
+                            <div className={'tabular-nums'}>{formatTime(previewTimeMs as number)}</div>
                         </div>
+                    </div>
+                    :
+                    null
+            }
+            {
+                // The hovered/scrubbed chapter grows, YouTube-style: a taller
+                // translucent band over exactly that segment. Positioned in the
+                // SLIDER's coordinate space (it is inset by mx-(--thumb-size)).
+                // The gaps themselves are cut into the bar via the Slider's
+                // barMask below - real holes, not painted notches (a notch over
+                // the translucent track reads as a black rectangle on bright
+                // video).
+                chapterMarks.length > 0 && previewFraction !== null ?
+                    <div className={'pointer-events-none absolute inset-y-0 left-(--thumb-size) right-(--thumb-size) z-[1]'}>
+                        {
+                            (() => {
+                                const bounds = [0, ...chapterMarks.map(({ fraction }) => fraction), 1];
+                                const index = bounds.findIndex((b, i) => previewFraction >= b && previewFraction < bounds[i + 1]);
+                                if (index < 0) return null;
+                                const [start, end] = [bounds[index], bounds[index + 1]];
+                                return (
+                                    <div
+                                        className={'absolute top-1/2 h-[calc(var(--track-size)*2.2)] -translate-y-1/2 rounded-(--track-size) bg-ice/20 transition-[left,width] duration-100 ease-smooth'}
+                                        style={{ left: `${start * 100}%`, width: `${(end - start) * 100}%` }}
+                                    />
+                                );
+                            })()
+                        }
                     </div>
                     :
                     null
@@ -125,6 +214,7 @@ const SeekBar = ({ className, time, duration, buffered, thumbStreamUrl, onSeekRe
                 bufferedClassName={BUFFERED}
                 filledClassName={FILLED}
                 thumbClassName={THUMB}
+                barMask={barMask}
                 value={
                     !disabled ?
                         seekTime !== null ? seekTime : (time as number)

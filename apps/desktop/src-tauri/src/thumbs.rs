@@ -44,6 +44,85 @@ const JPEG_QUALITY: u32 = 72;
 const SEEK_SETTLE_MS: u64 = 4000;
 const SETTLE_POLL: Duration = Duration::from_millis(25);
 
+// Scene scan: the shadow sweeps the whole file at a coarse spacing, comparing
+// tiny luma grids of consecutive samples; strong differences are scene cuts.
+// The scan runs in the SAME worker, always yielding to hover-thumbnail
+// requests, so scrubbing never waits on it. Results feed the seek bar's
+// derived chapter segments for files that carry no chapter marks.
+/// Sample spacing in seconds; ~20s resolves chapter-level boundaries without
+/// turning the scan into a full decode.
+const SCAN_SPACING_SECONDS: f64 = 20.0;
+/// Cap on samples for very long files (a 4h file scans at coarser spacing).
+const SCAN_MAX_SAMPLES: usize = 240;
+/// Mean absolute luma difference (0-255) on the 16x9 grid above which two
+/// consecutive samples are considered different scenes.
+const SCENE_CUT_THRESHOLD: f64 = 28.0;
+/// At most this many cuts survive selection (strongest first, min-gap apart).
+const SCENE_CUT_MAX: usize = 24;
+
+struct Scan {
+    spacing: f64,
+    total: usize,
+    next: usize,
+    prev_luma: Option<Vec<u8>>,
+    /// (time_sec, strength) of every raw cut candidate.
+    candidates: Vec<(f64, f64)>,
+    /// Selected cut times, present once the sweep finishes.
+    result: Option<Vec<f64>>,
+    /// Minimum distance between two kept cuts (derived from duration).
+    min_gap: f64,
+}
+
+impl Scan {
+    fn new(duration: f64) -> Self {
+        let total = ((duration / SCAN_SPACING_SECONDS) as usize).clamp(2, SCAN_MAX_SAMPLES);
+        Self {
+            spacing: duration / total as f64,
+            total,
+            next: 0,
+            prev_luma: None,
+            candidates: Vec::new(),
+            result: None,
+            min_gap: (duration * 0.03).max(45.0),
+        }
+    }
+
+    /// Greedy strongest-first selection with a minimum gap, then chronological.
+    fn select(&mut self) {
+        let mut sorted = self.candidates.clone();
+        sorted.sort_by(|a, b| b.1.total_cmp(&a.1));
+        let mut kept: Vec<f64> = Vec::new();
+        for (time, _) in sorted {
+            if kept.len() >= SCENE_CUT_MAX {
+                break;
+            }
+            if kept.iter().all(|k| (k - time).abs() >= self.min_gap) {
+                kept.push(time);
+            }
+        }
+        kept.sort_by(|a, b| a.total_cmp(b));
+        self.result = Some(kept);
+    }
+}
+
+/// Decode a screenshot jpg down to a 16x9 luma grid for scene comparison.
+fn luma_grid(jpeg: &[u8]) -> Result<Vec<u8>, String> {
+    let img = image::load_from_memory_with_format(jpeg, image::ImageFormat::Jpeg)
+        .map_err(|e| format!("thumbs: scan decode: {e}"))?;
+    Ok(img
+        .resize_exact(16, 9, image::imageops::FilterType::Triangle)
+        .to_luma8()
+        .into_raw())
+}
+
+fn luma_diff(a: &[u8], b: &[u8]) -> f64 {
+    if a.len() != b.len() || a.is_empty() {
+        return 0.0;
+    }
+    let sum: u64 = a.iter().zip(b).map(|(x, y)| x.abs_diff(*y) as u64).sum();
+    sum as f64 / a.len() as f64
+}
+
 #[derive(Default)]
 pub struct ThumbsState(Arc<Mutex<Inner>>);
 
@@ -59,6 +138,10 @@ struct Inner {
     cache: HashMap<u32, String>,
     /// The single pending bucket - latest hover wins.
     wanted: Option<u32>,
+    /// The scene sweep for the current url; created by the worker (it needs the
+    /// loaded file's duration) once requested, never blocking a thumbnail request.
+    scan: Option<Scan>,
+    scan_requested: bool,
     worker_running: bool,
     /// After a failed shadow spawn (no dll / broken stream), stop retrying for
     /// this url; every later request would fail the same way.
@@ -130,8 +213,8 @@ impl Shadow {
     }
 
     /// Screenshot the current (already thumbnail-scaled) frame to a fresh temp
-    /// jpg and return it as a data URL. Synchronous: on Ok the file exists.
-    fn capture(&self) -> Result<String, String> {
+    /// jpg and return its bytes. Synchronous: on Ok the frame was captured.
+    fn capture_bytes(&self) -> Result<Vec<u8>, String> {
         let nanos = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map(|d| d.as_nanos())
@@ -146,11 +229,24 @@ impl Shadow {
         if bytes.is_empty() {
             return Err("thumbs: empty screenshot".into());
         }
+        Ok(bytes)
+    }
+
+    /// capture_bytes as a data URL, for the web layer's <img src>.
+    fn capture(&self) -> Result<String, String> {
+        let bytes = self.capture_bytes()?;
         use base64::Engine as _;
         Ok(format!(
             "data:image/jpeg;base64,{}",
             base64::engine::general_purpose::STANDARD.encode(&bytes)
         ))
+    }
+
+    fn duration(&self) -> Option<f64> {
+        self.mpv
+            .get_property_string("duration")
+            .and_then(|s| s.parse::<f64>().ok())
+            .filter(|d| d.is_finite() && *d > 0.0)
     }
 }
 
@@ -190,6 +286,8 @@ pub async fn player_thumb(
         inner.shadow = None;
         inner.cache.clear();
         inner.wanted = None;
+        inner.scan = None;
+        inner.scan_requested = false;
         inner.disabled = false;
     }
     if let Some(hit) = inner.cache.get(&bucket) {
@@ -219,31 +317,82 @@ pub async fn player_thumb_stop(state: State<'_, ThumbsState>) -> Result<(), Stri
     inner.shadow = None;
     inner.cache.clear();
     inner.wanted = None;
+    inner.scan = None;
+    inner.scan_requested = false;
     inner.disabled = false;
     Ok(())
+}
+
+/// Scene-cut times (seconds) for `url`, from the shadow's background sweep:
+/// `None` while the sweep runs (poll again), `Some(times)` when done - empty
+/// when the shadow cannot run (no dll / broken stream) so the caller stops
+/// polling.
+#[tauri::command]
+pub async fn player_scene_cuts(
+    state: State<'_, ThumbsState>,
+    url: String,
+) -> Result<Option<Vec<f64>>, String> {
+    validate_url(&url)?;
+    let inner_arc = state.0.clone();
+    let mut inner = inner_arc.lock().map_err(|_| "thumbs: poisoned")?;
+    if inner.url.as_deref() != Some(url.as_str()) {
+        inner.url = Some(url);
+        inner.generation += 1;
+        inner.shadow = None;
+        inner.cache.clear();
+        inner.wanted = None;
+        inner.scan = None;
+        inner.scan_requested = false;
+        inner.disabled = false;
+    }
+    if inner.disabled {
+        return Ok(Some(Vec::new()));
+    }
+    if let Some(result) = inner.scan.as_ref().and_then(|scan| scan.result.clone()) {
+        return Ok(Some(result));
+    }
+    inner.scan_requested = true;
+    if !inner.worker_running {
+        inner.worker_running = true;
+        let arc = inner_arc.clone();
+        std::thread::spawn(move || worker(arc));
+    }
+    Ok(None)
+}
+
+enum Job {
+    /// A hover-thumbnail request (always wins over the scan).
+    Thumb(u32),
+    /// One scene-sweep step (create the Scan first if needed).
+    ScanStep,
 }
 
 fn worker(inner_arc: Arc<Mutex<Inner>>) {
     loop {
         // Take the next job under the lock; NEVER hold the lock while driving
         // mpv (captures take up to seconds and player_thumb must stay instant).
-        let (bucket, url, generation, shadow_missing) = {
+        let (job, url, generation, shadow_missing) = {
             let mut inner = match inner_arc.lock() {
                 Ok(guard) => guard,
                 Err(_) => return,
             };
-            let Some(bucket) = inner.wanted.take() else {
+            let job = if let Some(bucket) = inner.wanted.take() {
+                if inner.cache.contains_key(&bucket) {
+                    continue;
+                }
+                Job::Thumb(bucket)
+            } else if inner.scan_requested &&
+                inner.scan.as_ref().map_or(true, |scan| scan.result.is_none()) {
+                Job::ScanStep
+            } else {
                 inner.worker_running = false;
                 return;
             };
-            if inner.cache.contains_key(&bucket) {
-                continue;
-            }
             let Some(url) = inner.url.clone() else {
                 inner.worker_running = false;
                 return;
             };
-            (bucket, url, inner.generation, inner.shadow.is_none())
+            (job, url, inner.generation, inner.shadow.is_none())
         };
 
         if shadow_missing {
@@ -292,27 +441,99 @@ fn worker(inner_arc: Arc<Mutex<Inner>>) {
             inner.shadow.take()
         };
         let Some(shadow) = taken else { continue };
-        let capture = if shadow.seek_settled(bucket as f64 * BUCKET_SECONDS) {
-            shadow.capture()
-        } else {
-            Err("thumbs: seek did not settle (region not downloaded yet?)".into())
-        };
+        match job {
+            Job::Thumb(bucket) => {
+                let capture = if shadow.seek_settled(bucket as f64 * BUCKET_SECONDS) {
+                    shadow.capture()
+                } else {
+                    Err("thumbs: seek did not settle (region not downloaded yet?)".into())
+                };
 
-        let mut inner = match inner_arc.lock() {
-            Ok(guard) => guard,
-            Err(_) => return,
-        };
-        if inner.generation != generation {
-            // Url changed mid-capture: the shadow and the frame belong to the
-            // old stream; drop both.
-            continue;
-        }
-        inner.shadow = Some(shadow);
-        match capture {
-            Ok(data_url) => {
-                inner.cache.insert(bucket, data_url);
+                let mut inner = match inner_arc.lock() {
+                    Ok(guard) => guard,
+                    Err(_) => return,
+                };
+                if inner.generation != generation {
+                    // Url changed mid-capture: the shadow and the frame belong
+                    // to the old stream; drop both.
+                    continue;
+                }
+                inner.shadow = Some(shadow);
+                match capture {
+                    Ok(data_url) => {
+                        inner.cache.insert(bucket, data_url);
+                    }
+                    Err(e) => tracing::debug!("thumbs: bucket {bucket}: {e}"),
+                }
             }
-            Err(e) => tracing::debug!("thumbs: bucket {bucket}: {e}"),
+            Job::ScanStep => {
+                // Snapshot the scan cursor under the lock, creating the Scan
+                // from the loaded file's duration on the first step.
+                let step = {
+                    let mut inner = match inner_arc.lock() {
+                        Ok(guard) => guard,
+                        Err(_) => return,
+                    };
+                    if inner.generation != generation {
+                        continue;
+                    }
+                    if inner.scan.is_none() {
+                        match shadow.duration() {
+                            Some(duration) => inner.scan = Some(Scan::new(duration)),
+                            None => {
+                                // File header not parsed yet: put the shadow
+                                // back and let the loop retry (a thumbnail
+                                // request may run in between).
+                                inner.shadow = Some(shadow);
+                                std::thread::sleep(Duration::from_millis(200));
+                                continue;
+                            }
+                        }
+                    }
+                    let scan = inner.scan.as_ref().expect("just ensured");
+                    (scan.next, scan.spacing, scan.prev_luma.clone())
+                };
+                let (index, spacing, prev_luma) = step;
+
+                let target = index as f64 * spacing;
+                // An unsettled seek (undownloaded torrent region) skips the
+                // sample rather than stalling the sweep; prev resets so no
+                // false cut spans the hole.
+                let luma = if shadow.seek_settled(target) {
+                    shadow.capture_bytes().ok().and_then(|bytes| luma_grid(&bytes).ok())
+                } else {
+                    None
+                };
+
+                let mut inner = match inner_arc.lock() {
+                    Ok(guard) => guard,
+                    Err(_) => return,
+                };
+                if inner.generation != generation {
+                    continue;
+                }
+                inner.shadow = Some(shadow);
+                if let Some(scan) = inner.scan.as_mut() {
+                    if let (Some(prev), Some(current)) = (prev_luma.as_deref(), luma.as_deref()) {
+                        let diff = luma_diff(prev, current);
+                        if diff > SCENE_CUT_THRESHOLD {
+                            // The cut happened somewhere between the two
+                            // samples; the midpoint is the best guess.
+                            scan.candidates.push((target - spacing / 2.0, diff));
+                        }
+                    }
+                    scan.prev_luma = luma;
+                    scan.next = index + 1;
+                    if scan.next >= scan.total {
+                        scan.select();
+                        tracing::debug!(
+                            "thumbs: scene sweep done: {} cuts from {} candidates",
+                            scan.result.as_ref().map(|r| r.len()).unwrap_or(0),
+                            scan.candidates.len(),
+                        );
+                    }
+                }
+            }
         }
     }
 }
