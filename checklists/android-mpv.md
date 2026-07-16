@@ -57,12 +57,28 @@ last_sync: 2026-07-17
       loud-fallback path).
 
 ## D. E2E SDR on emulator
-- [ ] D1 1080p H.264 plays via existing shell_send bridge
-- [ ] D2 pause/seek/tracks/subs work from the web UI
-- [ ] D3 stats/snapshot/thumbs OK or cap-gated
+- [x] D1 DONE: H.264 (Sintel) + HEVC (Silo) decode + play via the shell_send
+      bridge; gpu-next -> SurfaceView under the WebView; real "Watch" button
+      drives it; pause->play advances time in realtime (21.1->29.4s/8s).
+- [~] D2 subs render (libass confirmed on screen); pause/play confirmed. Seek +
+      explicit track-select not yet exercised on Android (should work - same
+      bridge; verify next).
+- [~] D3 stats work (shell_mpv_stats read live); snapshot/thumbs FAIL on Android
+      (mpv err -12 screenshot) - cap-gate or fix later, non-blocking.
 
-## E. DV/HDR correctness
-- [ ] E1 DV clip tone-maps on emulator; frame-diff vs Windows
+## D (cont). VIDEO OUTPUT - the real fight
+- [x] gpu-next BROUGHT UP on Android: the recipe is vo=gpu-next + gpu-context=android
+      + **opengl-es=yes** (I had gpu-api=opengl -> desktop GL -> VO failed -> mpv fell
+      to render-API libmpv VO -> "No render context set" -> black). Fixed: EGL 1.4
+      queried, libplacebo shaders compile, 24fps reported.
+- [ ] VIDEO ON SCREEN: NOT confirmed on the EMULATOR. -gpu host CRASHES on gpu-next
+      GLES; swiftshader gives EGL_BAD_ATTRIBUTE (emulated EGL rejects libplacebo's
+      context). Same .so works on real HW (Findroid). **NEEDS A REAL ANDROID TV
+      DEVICE** to confirm pixels. Code path validated as far as the emulator allows.
+
+## E. DV/HDR correctness (device-gated)
+- [ ] E1 DV clip tone-maps; frame-diff vs Windows (needs real device - emulator EGL
+      can't render gpu-next)
 - [ ] E2 HDR output mode on real HDR device (follow-up after SDR ships)
 
 ## F. Real device

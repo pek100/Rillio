@@ -422,10 +422,21 @@ impl Controller {
                 tracing::warn!("mpv: option {name}={value} not applied: {e}");
             }
         }
-        // Android: route audio through AudioTrack (the JNI AO; deterministic
-        // rather than relying on the build's AO autodetection order).
+        // Android: route audio through AudioTrack (the JNI AO), and bring up
+        // gpu-next on the EGL/GLES context of the ANativeWindow we passed as
+        // `wid`. The exact mpv-android recipe (is.xyz.mpv MPVView.initOptions):
+        // gpu-context=android + opengl-es=yes. opengl-es=yes is load-bearing -
+        // without it gpu-next tries a DESKTOP GL context (absent on Android), the
+        // android VO fails to open, and mpv falls back to the render-API `libmpv`
+        // VO (which needs an mpv_render_context we don't create) -> the fatal
+        // "No render context set" and a black video plane. (JNI/JavaVM is already
+        // handed to ffmpeg above; the working audiotrack AO proves that part.)
         #[cfg(target_os = "android")]
-        for (name, value) in [("ao", "audiotrack")] {
+        for (name, value) in [
+            ("ao", "audiotrack"),
+            ("gpu-context", "android"),
+            ("opengl-es", "yes"),
+        ] {
             if let Err(e) = mpv.set_option(name, value) {
                 tracing::warn!("mpv: option {name}={value} not applied: {e}");
             }
@@ -455,13 +466,18 @@ impl Controller {
                 }
             }
         }
-        mpv.initialize()?;
         // Only surface mpv's own errors by default (verbose "v" floods the event
-        // loop and lags the UI). Opt into verbose with RILLIO_MPV_VERBOSE.
+        // loop and lags the UI). Opt into verbose with RILLIO_MPV_VERBOSE (env on
+        // desktop; on Android there is no env plumbing, so flip this to "v" and
+        // rebuild to debug the VO/GPU-context path on a real device). Requested
+        // BEFORE initialize() so the VO creation logs (force-window=yes builds the
+        // VO up front) are captured - that init window is where gpu-next's EGL
+        // context on the `wid` Surface is negotiated.
         let log_level = if std::env::var("RILLIO_MPV_VERBOSE").is_ok() { "v" } else { "error" };
         if let Err(e) = mpv.request_log_messages(log_level) {
             tracing::warn!("mpv: request_log_messages failed: {e}");
         }
+        mpv.initialize()?;
         // Observe the extra stats properties ShellVideo doesn't, so the panel can
         // show codec/bitrate/hwdec/etc. (Their changes flow through the same
         // event loop and land in `props`.)
