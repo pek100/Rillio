@@ -42,9 +42,11 @@ common each is:
   target surface, not a hypothetical one.
 - **Honest prevalence.** In-app parser exploits are the rarer threat; most
   malware around media downloads arrives as fake installers and bundled
-  executables from untrustworthy websites. Rillio avoids that class
-  structurally: it never executes downloaded content, it only demuxes media
-  into the player.
+  executables from untrustworthy websites. Like any true media player (Stremio
+  and VLC included), Rillio sidesteps that class by nature: it only demuxes
+  media, it never executes a download. This is not a Rillio differentiator, it
+  is inherent to being a player; the differentiators are the memory-safe
+  engine, write jail, origin-guarded API and signed updates above.
 
 None of this makes any software invulnerable, and this README will not claim
 otherwise. It means the known, shipped attack classes for this category each
