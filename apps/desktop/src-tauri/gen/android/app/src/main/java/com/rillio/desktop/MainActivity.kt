@@ -34,6 +34,14 @@ class MainActivity : TauriActivity(), SurfaceHolder.Callback {
       val frame = FrameLayout(this)
       val match = FrameLayout.LayoutParams.MATCH_PARENT
       val videoSurface = SurfaceView(this)
+      // Promote the video surface to a MEDIA OVERLAY so SurfaceFlinger composites
+      // it ABOVE the window background but BELOW the WebView's (transparent)
+      // surface. Without this, a plain bottom-of-window SurfaceView does not show
+      // through a hardware-accelerated WebView drawn on top - mpv renders to it
+      // but nothing is visible (the exact black-video symptom). The WebView is
+      // made transparent (build_mobile_window .transparent(true)) so its UI
+      // overlays the video.
+      videoSurface.setZOrderMediaOverlay(true)
       videoSurface.holder.addCallback(this)
       frame.addView(videoSurface, FrameLayout.LayoutParams(match, match))
       frame.addView(view, FrameLayout.LayoutParams(match, match))

@@ -160,8 +160,15 @@ pub mod android {
                 tracing::info!("android surface created (wid ready)");
                 *SURFACE.lock().unwrap() = Some(global);
             }
-            Err(e) => tracing::error!("android surface: NewGlobalRef failed: {e}"),
+            Err(e) => {
+                tracing::error!("android surface: NewGlobalRef failed: {e}");
+                return;
+            }
         }
+        // Attach to the live player (if the mpv Controller already exists). If it
+        // doesn't yet, ShellState::ensure attaches the stored surface when it's
+        // created. Attaching post-init here is what lands frames on the surface.
+        crate::shell::android_reattach_surface();
     }
 
     #[no_mangle]

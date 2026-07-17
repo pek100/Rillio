@@ -21,8 +21,10 @@ $ErrorActionPreference = "Stop"
 
 $version = "v1.0.0"
 $url = "https://github.com/jarnedemeulemeester/libmpv-android/releases/download/$version/libmpv-release.aar"
-# arm64 for devices; x86_64 kept available for emulator-native experiments.
-$abis = @("arm64-v8a")
+# arm64-v8a for real devices; x86_64 for the emulator (native, no arm64
+# translation - the arm64 build's GLES calls cross the emulator's translation
+# bridge and gpu-next fails to render, so emulator video needs the x86_64 ABI).
+$abis = @("arm64-v8a", "x86_64")
 $libs = @(
     "libmpv.so", "libavcodec.so", "libavdevice.so", "libavfilter.so",
     "libavformat.so", "libavutil.so", "libswresample.so", "libswscale.so",

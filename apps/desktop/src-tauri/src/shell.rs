@@ -34,6 +34,24 @@ use crate::mpv::{self, Mpv, MpvEvent};
 #[derive(Default)]
 pub struct ShellState(Mutex<Option<NativePlayer>>);
 
+/// Android: a weak handle to the live mpv Controller so the Surface bridge can
+/// re-attach the SurfaceView after init / on every surfaceCreated (see
+/// `Controller::attach_surface`). Weak so a dropped player doesn't leak.
+#[cfg(target_os = "android")]
+static ANDROID_PLAYER: Mutex<Option<std::sync::Weak<Controller>>> = Mutex::new(None);
+
+/// Android JNI-callback entry point (called from `surface::android` on
+/// surfaceCreated): attach the current video Surface to the live player, if any.
+/// No-op before the player exists - `ensure` attaches the stored surface then.
+#[cfg(target_os = "android")]
+pub fn android_reattach_surface() {
+    let Some(wid) = crate::surface::android::current_wid() else { return };
+    let ctrl = ANDROID_PLAYER.lock().unwrap().as_ref().and_then(|w| w.upgrade());
+    if let Some(ctrl) = ctrl {
+        ctrl.attach_surface(wid);
+    }
+}
+
 /// The native player, chosen per device (the factory in [`ShellState::ensure`]
 /// picks the variant at runtime). Windows = embedded libmpv; Android [Phase 2]
 /// = a Media3 bridge forwarding to a Kotlin plugin. The web bridge
@@ -317,6 +335,17 @@ impl ShellState {
         let surface = crate::surface::create();
         let wid = surface.video_wid(app);
         let ctrl = Arc::new(Controller::create(wid)?);
+        // Android: register the live player so a later surfaceCreated re-attaches
+        // its Surface, and attach now if one is already present (the common case -
+        // the SurfaceView exists before the web calls shell_init). Attaching
+        // post-init is what actually lands frames on the SurfaceView.
+        #[cfg(target_os = "android")]
+        {
+            *ANDROID_PLAYER.lock().unwrap() = Some(Arc::downgrade(&ctrl));
+            if let Some(wid) = wid {
+                ctrl.attach_surface(wid);
+            }
+        }
         spawn_event_loop(ctrl.clone(), app.clone());
         // With force-window, mpv's (black) output window exists from startup; push
         // it behind the WebView as soon as it appears so it never covers the UI.
@@ -350,7 +379,13 @@ impl Controller {
         #[cfg(target_os = "android")]
         mpv::set_ffmpeg_java_vm()?;
         // `wid` must be set before initialize(): mpv creates its video output as
-        // a child of this window rather than a standalone one.
+        // a child of this window rather than a standalone one. WINDOWS ONLY:
+        // Android attaches the surface AFTER init (see below and attach_surface) -
+        // setting wid before init there binds gpu-next to a not-yet-laid-out
+        // SurfaceView and frames never post to it (video stays black). This
+        // mirrors mpv-android (is.xyz.mpv): options before init, wid + force-window
+        // in surfaceCreated after init.
+        #[cfg(not(target_os = "android"))]
         if let Some(wid) = wid {
             if let Err(e) = mpv.set_option("wid", &wid.to_string()) {
                 tracing::warn!("mpv: could not set wid={wid}: {e} (falling back to own window)");
@@ -367,6 +402,11 @@ impl Controller {
         // so the transparent WebView reveals BLACK during the buffering gap (before
         // the first frame) instead of the desktop behind the app. Composited to the
         // back immediately (see ensure) so it never covers the UI.
+        // Android forces the window only when the surface is attached post-init
+        // (attach_surface); at init it has no window yet.
+        #[cfg(target_os = "android")]
+        let force_window = "no";
+        #[cfg(not(target_os = "android"))]
         let force_window = if wid.is_some() { "yes" } else { "no" };
         for (name, value) in [
             ("idle", "yes"),
@@ -494,6 +534,24 @@ impl Controller {
             snapshot: Mutex::new(SnapshotCache::default()),
             blur: Mutex::new(BlurState::default()),
         })
+    }
+
+    /// Android: attach (or re-attach) the video Surface to a LIVE mpv, matching
+    /// mpv-android's surfaceCreated -> set `wid` + `force-window=yes` AFTER init.
+    /// Setting wid pre-init binds gpu-next's GLES context to a not-yet-ready
+    /// SurfaceView and frames never post; doing it here (surface laid out and
+    /// visible) is what makes video actually render into the SurfaceView. Called
+    /// once from `ensure` after init and again on every `surfaceCreated`.
+    #[cfg(target_os = "android")]
+    fn attach_surface(&self, wid: isize) {
+        if let Err(e) = self.mpv.set_option("wid", &wid.to_string()) {
+            tracing::warn!("mpv: android attach wid={wid} failed: {e}");
+            return;
+        }
+        if let Err(e) = self.mpv.set_option("force-window", "yes") {
+            tracing::warn!("mpv: android force-window failed: {e}");
+        }
+        tracing::info!("mpv: android surface attached (wid={wid})");
     }
 
     /// The last snapshot, if it is still inside [`SNAPSHOT_MIN_INTERVAL`].
