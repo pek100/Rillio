@@ -73,7 +73,13 @@ jobs:
 
       - name: Install cargo-ndk + tauri-cli
         uses: cargo-bins/cargo-binstall@main
-      - run: cargo binstall -y cargo-ndk tauri-cli
+        # --force: rust-cache (cache-bin: true) restores .crates.toml from the
+        # prior run, so a plain binstall SKIPS the install thinking the tools are
+        # present, but the actual ~/.cargo/bin binaries are not always restored ->
+        # `cargo tauri` then "no such command". Force a real install every run.
+      - run: |
+          cargo binstall -y --force cargo-ndk tauri-cli
+          cargo tauri --version
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
