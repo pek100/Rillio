@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Rillio - terms and add-on policy</title>
+  <meta name="description" content="What Rillio is, what it is not, and where the responsibility line sits." />
+  <link rel="icon" href="/favicon.svg" type="image/svg+xml" sizes="any" />
+  <style>
+    :root {
+      --bg: #020407; --fg: #f3f5f8; --fg-2: #b9c0cb; --fg-3: #7d8590;
+      --accent: #FFA033; --edge: rgba(255, 255, 255, 0.09);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      background: var(--bg); color: var(--fg);
+      font-family: 'Nunito Sans', 'Segoe UI', system-ui, sans-serif;
+      line-height: 1.7; padding: 4rem 1.5rem 5rem;
+    }
+    main { max-width: 44rem; margin: 0 auto; }
+    h1 { font-size: 2rem; font-weight: 900; letter-spacing: -0.02em; margin-bottom: 0.5rem; }
+    .updated { color: var(--fg-3); font-size: 0.9rem; margin-bottom: 2.5rem; }
+    h2 { font-size: 1.15rem; font-weight: 800; margin: 2.2rem 0 0.6rem; }
+    p { color: var(--fg-2); margin-bottom: 0.9rem; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    .back { display: inline-block; margin-bottom: 2.5rem; color: var(--fg-3); font-weight: 600; }
+    .back:hover { color: var(--fg); text-decoration: none; }
+    footer { max-width: 44rem; margin: 3.5rem auto 0; padding-top: 1.5rem; border-top: 1px solid var(--edge); color: var(--fg-3); font-size: 0.88rem; }
+  </style>
+</head>
+
+<body>
+  <main>
+    <a class="back" href="/">&larr; rillio.app</a>
+    <h1>Terms and add-on policy</h1>
+    <p class="updated">Plain language on purpose. Last updated July 2026.</p>
+
+    <h2>What Rillio is</h2>
+    <p>Rillio is a free, open-source media player and library organizer. It ships empty: it hosts no content, indexes no content, and bundles no add-ons. Out of the box it plays your local files, ordinary HTTP streams, and whatever catalogs you choose to connect.</p>
+
+    <h2>Add-ons are yours, not ours</h2>
+    <p>Catalogs, streams and subtitles come from third-party add-ons that you find and install yourself. Add-ons are independent services run by other people; Rillio does not operate, endorse, review or control them. A link to a community directory is informational, not a recommendation of anything listed there.</p>
+
+    <h2>BitTorrent is a transport</h2>
+    <p>Rillio includes a BitTorrent engine because it is an efficient way to move large files, and plenty of content is distributed over it with the rights holder's blessing - open movies, public-domain films, community releases. That is what the torrent support is for. What you access through any protocol is your choice and your responsibility: stick to sources you have the right to use.</p>
+
+    <h2>Your data</h2>
+    <p>Rillio has no accounts, no tracking and no data business. Your library and history live on your device. Connecting a Stremio account for sync is optional, and disconnecting keeps everything local. Note that BitTorrent, by design, exposes your IP address to peers.</p>
+
+    <h2>Problems and takedowns</h2>
+    <p>Rillio operates no servers and cannot remove a third-party add-on from the internet. If something on this website or in the project's own materials infringes your rights, open an issue or contact the maintainer on <a href="https://github.com/pek100/rillio">GitHub</a> and it will be addressed.</p>
+
+    <h2>No warranty</h2>
+    <p>Rillio is free software under the GPL, provided as-is, without warranty of any kind. The <a href="https://github.com/pek100/rillio">source</a> is public; read it, build it, verify it.</p>
+
+    <footer>
+      Screenshots on this site feature <a href="https://peach.blender.org/">Big Buck Bunny</a> (2008) by the Blender Foundation, licensed under <a href="https://creativecommons.org/licenses/by/3.0/">CC BY 3.0</a>.
+    </footer>
+  </main>
+</body>
+
+</html>
