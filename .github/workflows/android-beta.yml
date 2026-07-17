@@ -87,18 +87,31 @@ jobs:
       - name: Fetch libmpv (Android)
         run: bash scripts/fetch-libmpv-android.sh
 
-      # Debug APK (self-signed, sideloadable). --target aarch64 = real-device ABI.
+      # Release APK (--target aarch64 = real-device ABI). Release strips the
+      # ~278MB cdylib debuginfo -> ~54MB vs ~309MB debug.
       - name: Build Android APK
         working-directory: apps/desktop/src-tauri
-        run: cargo tauri android build --debug --apk --target aarch64
+        run: cargo tauri android build --apk --target aarch64
 
-      - name: Collect APK
+      # The release APK is unsigned; zipalign + sign it with a throwaway debug
+      # keystore so it sideloads. (A real upload keystore in repo secrets is the
+      # follow-up for a Play/stable channel - swap the keytool line for a secret.)
+      - name: Sign APK
         id: apk
         run: |
-          apk="$(find apps/desktop/src-tauri/gen/android/app/build/outputs/apk -name '*.apk' | head -n1)"
-          if [ -z "$apk" ]; then echo "no APK produced" >&2; exit 1; fi
+          bt="$(ls -d "$ANDROID_SDK_ROOT"/build-tools/* | sort -V | tail -n1)"
+          unsigned="$(find apps/desktop/src-tauri/gen/android/app/build/outputs/apk -name '*-release-unsigned.apk' | head -n1)"
+          if [ -z "$unsigned" ]; then echo "no release APK produced" >&2; exit 1; fi
+          ks="$RUNNER_TEMP/debug.keystore"
+          keytool -genkeypair -keystore "$ks" -storepass android -keypass android \
+            -alias androiddebugkey -keyalg RSA -keysize 2048 -validity 10000 \
+            -dname "CN=Android Debug,O=Android,C=US"
+          aligned="$RUNNER_TEMP/aligned.apk"
+          "$bt/zipalign" -f -p 4 "$unsigned" "$aligned"
           out="Rillio-AndroidTV-${GITHUB_REF_NAME}.apk"
-          cp "$apk" "$out"
+          "$bt/apksigner" sign --ks "$ks" --ks-pass pass:android --key-pass pass:android \
+            --ks-key-alias androiddebugkey --out "$out" "$aligned"
+          "$bt/apksigner" verify "$out"
           echo "path=$out" >> "$GITHUB_OUTPUT"
           ls -lh "$out"
 
