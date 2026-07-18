@@ -3,7 +3,9 @@ import { Play, Info, Trash2, X } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toPath } from 'rillio-router';
 import { useCore } from 'rillio/core';
-import { Button, IconButton, ModalRoute, cn } from 'rillio/components/ui';
+import { useProfile } from 'rillio/common';
+import { fetchStreamingModeEnabled, postStreamingModeEnabled } from 'rillio/common/streamingMode';
+import { Button, IconButton, ModalRoute, Switch, cn } from 'rillio/components/ui';
 import AnimatedPercentage from 'rillio/components/ui/animated-percentage';
 import SpeedChart from 'rillio/components/ui/speed-chart';
 import useCachedTorrents, { CacheEntry } from './useCachedTorrents';
@@ -152,6 +154,34 @@ const useLibraryLinksByInfoHash = (): Record<string, LibraryLinks> => {
     return links;
 };
 
+// The server-side streaming-mode toggle (auto-clean watched streams), read
+// once per mount and posted optimistically on change. `null` while unknown
+// (loading, or no reachable server) - the switch hides and the copy stays
+// neutral rather than claiming a state we have not confirmed.
+const useStreamingModeSetting = () => {
+    const profile = useProfile();
+    const serverUrl = profile.settings.streamingServerUrl;
+    const [enabled, setEnabled] = useState<boolean | null>(null);
+    useEffect(() => {
+        if (typeof serverUrl !== 'string') return;
+        let cancelled = false;
+        fetchStreamingModeEnabled(serverUrl)
+            .then((value) => { if (!cancelled) setEnabled(value); })
+            .catch(() => { /* stays null: no switch, neutral copy */ });
+        return () => { cancelled = true; };
+    }, [serverUrl]);
+    const toggle = useCallback((next: boolean) => {
+        if (typeof serverUrl !== 'string') return;
+        setEnabled(next);
+        postStreamingModeEnabled(serverUrl, next)
+            .catch((error) => {
+                console.error('Cached: persisting streaming mode failed', error);
+                setEnabled(!next);
+            });
+    }, [serverUrl]);
+    return { enabled, toggle };
+};
+
 // Speed telemetry for the hero: samples the byte delta between cache polls
 // (~3s apart). A poll that brings no new bytes records an honest 0 so the
 // chart shows stalls instead of freezing on the last good bar.
@@ -208,12 +238,14 @@ const GLASS_BTN = 'h-9 shrink-0 rounded-full border border-white/15 bg-white/10 
  * hydralauncher/hydra's downloads hero (MIT) rebuilt on the house tokens, with
  * metahub artwork standing in for their game art.
  */
-const HeroDownload = ({ entry, links, onPlay, onMoreInfo, onSetPaused, onDelete }: {
+const HeroDownload = ({ entry, links, streamingMode, onPlay, onMoreInfo, onSetPaused, onSetPinned, onDelete }: {
     entry: CacheEntry,
     links: LibraryLinks | undefined,
+    streamingMode: boolean | null,
     onPlay: (entry: CacheEntry) => void,
     onMoreInfo: (link: string) => void,
     onSetPaused: (infoHash: string, paused: boolean) => void,
+    onSetPinned: (infoHash: string, pinned: boolean) => void,
     onDelete: (infoHash: string) => void,
 }) => {
     const { speeds, peak, speed } = useSpeedHistory(entry);
@@ -275,6 +307,22 @@ const HeroDownload = ({ entry, links, onPlay, onMoreInfo, onSetPaused, onDelete 
                         </div>
                     </div>
                     <div className="flex items-center gap-2">
+                        {
+                            // Keep only matters while auto-clean can delete things;
+                            // with streaming mode off nothing is ever cleaned up, so
+                            // the control would be a no-op and reads as noise.
+                            streamingMode === true ?
+                                <Button
+                                    variant="ghost"
+                                    className={cn(GLASS_BTN, entry.pinned && 'border-accent/40 bg-accent/20 text-accent')}
+                                    onClick={() => onSetPinned(entry.infoHash, !entry.pinned)}
+                                    title={entry.pinned ? 'Kept: never cleaned up automatically. Click to allow cleanup' : 'Keep this title in the cache (never cleaned up automatically)'}
+                                >
+                                    {entry.pinned ? 'Kept' : 'Keep'}
+                                </Button>
+                                :
+                                null
+                        }
                         <Button variant="ghost" className={GLASS_BTN} onClick={() => onSetPaused(entry.infoHash, !paused)} title={paused ? 'Resume this download' : 'Pause this download'}>
                             {paused ? 'Resume' : 'Pause'}
                         </Button>
@@ -327,12 +375,14 @@ const HeroDownload = ({ entry, links, onPlay, onMoreInfo, onSetPaused, onDelete 
     );
 };
 
-const Row = ({ entry, metaLink, onPlay, onMoreInfo, onSetPaused, onDelete }: {
+const Row = ({ entry, metaLink, streamingMode, onPlay, onMoreInfo, onSetPaused, onSetPinned, onDelete }: {
     entry: CacheEntry,
     metaLink: string | null,
+    streamingMode: boolean | null,
     onPlay: (entry: CacheEntry) => void,
     onMoreInfo: (link: string) => void,
     onSetPaused: (infoHash: string, paused: boolean) => void,
+    onSetPinned: (infoHash: string, pinned: boolean) => void,
     onDelete: (infoHash: string) => void,
 }) => {
     const progress = entry.total > 0 ? Math.min(1, entry.downloaded / entry.total) : 0;
@@ -378,6 +428,14 @@ const Row = ({ entry, metaLink, onPlay, onMoreInfo, onSetPaused, onDelete }: {
                     <span className="text-fg-subtle">{' · '}</span>
                     {stateLabel(entry)}
                     {entry.fileCount > 1 ? <><span className="text-fg-subtle">{' · '}</span>{`${entry.fileCount} files`}</> : null}
+                    {
+                        // Honest about the pending cleanup: with streaming mode on, a
+                        // watched un-kept stream is on the sweeper's list.
+                        streamingMode === true && entry.watched && !entry.pinned ?
+                            <><span className="text-fg-subtle">{' · '}</span>Watched, cleans up soon</>
+                            :
+                            null
+                    }
                 </div>
                 {
                     !complete && !preparing && entry.total > 0 ?
@@ -388,6 +446,30 @@ const Row = ({ entry, metaLink, onPlay, onMoreInfo, onSetPaused, onDelete }: {
                         null
                 }
             </div>
+            {/* Same labeled-pill treatment as Pause. Kept state stays visible
+                (it is standing information, not just an action); the un-kept
+                affordance appears on hover like Info/Delete. Hidden entirely
+                while auto-clean is off: nothing deletes, so Keep is a no-op. */}
+            {
+                streamingMode === true ?
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => onSetPinned(entry.infoHash, !entry.pinned)}
+                        title={entry.pinned ? 'Kept: never cleaned up automatically. Click to allow cleanup' : 'Keep this title in the cache (never cleaned up automatically)'}
+                        className={cn(
+                            'shrink-0 bg-surface px-3.5',
+                            entry.pinned ?
+                                'border-accent/40 text-accent opacity-100 hover:brightness-110'
+                                :
+                                'text-fg-muted opacity-0 hover:text-fg group-hover:opacity-100',
+                        )}
+                    >
+                        {entry.pinned ? 'Kept' : 'Keep'}
+                    </Button>
+                    :
+                    null
+            }
             {
                 // A labeled pill (not an icon): a pause/resume TRIANGLE would be
                 // confusable with the media Play button, and inline status text
@@ -452,8 +534,9 @@ const Cached = ({ onClose }: Props) => {
     const closeCached = onClose;
     const navigate = useNavigate();
     const core = useCore();
-    const { entries, failed, setPaused, remove } = useCachedTorrents();
+    const { entries, failed, setPinned, setPaused, remove } = useCachedTorrents();
     const libraryLinks = useLibraryLinksByInfoHash();
+    const streamingMode = useStreamingModeSetting();
 
     // Prefer the FULL player deep link mined from continue watching (stream +
     // transport urls + type/id/videoId): it restores the title logo on the
@@ -511,7 +594,7 @@ const Cached = ({ onClose }: Props) => {
         <ModalRoute
             open
             onClose={closeCached}
-            title="Cached"
+            title="Cache"
             hideHeader
             showClose={false}
             className="flex h-[min(42rem,calc(100vh-6rem))] w-[min(52rem,calc(100vw-4rem))] max-w-[min(52rem,calc(100vw-4rem))] flex-col gap-0 overflow-hidden border border-line p-0"
@@ -519,7 +602,7 @@ const Cached = ({ onClose }: Props) => {
             <div className="flex items-start gap-3 px-6 pb-3 pt-5">
                 <div className="min-w-0">
                     <div className="flex items-baseline gap-3">
-                        <h1 className="text-xl font-semibold text-fg">Cached</h1>
+                        <h1 className="text-xl font-semibold text-fg">Cache</h1>
                         {
                             entries !== null && entries.length > 0 ?
                                 <div className="text-sm tabular-nums text-fg-muted">{formatBytes(totalBytes)} on disk</div>
@@ -528,13 +611,33 @@ const Cached = ({ onClose }: Props) => {
                         }
                     </div>
                     <div className="mt-1 text-xs text-fg-subtle">
-                        Everything the player keeps on disk. Nothing is deleted automatically.
+                        {
+                            streamingMode.enabled === true ?
+                                'Streams are cleaned up a while after you watch them. Kept titles stay until you delete them.'
+                                :
+                                'Everything the player keeps on disk. Nothing is deleted automatically.'
+                        }
                     </div>
                 </div>
+                {
+                    // Streaming mode lives right where its effect is visible. Hidden
+                    // until the server confirms a state (no reachable server = no
+                    // switch to flip into the void).
+                    streamingMode.enabled !== null ?
+                        <label className="ml-auto flex shrink-0 cursor-pointer items-center gap-2.5 pt-1">
+                            <span className="text-xs font-medium text-fg-muted">Auto-clean watched</span>
+                            <Switch
+                                checked={streamingMode.enabled}
+                                onCheckedChange={streamingMode.toggle}
+                            />
+                        </label>
+                        :
+                        null
+                }
                 <IconButton
                     onClick={closeCached}
                     title="Close"
-                    className="ml-auto size-9 text-fg-muted"
+                    className={cn('size-9 text-fg-muted', streamingMode.enabled === null && 'ml-auto')}
                 >
                     <X className="size-5" />
                 </IconButton>
@@ -560,9 +663,11 @@ const Cached = ({ onClose }: Props) => {
                                             <HeroDownload
                                                 entry={heroEntry}
                                                 links={libraryLinks[heroEntry.infoHash]}
+                                                streamingMode={streamingMode.enabled}
                                                 onPlay={play}
                                                 onMoreInfo={openMetaDetails}
                                                 onSetPaused={setPaused}
+                                                onSetPinned={setPinned}
                                                 onDelete={remove}
                                             />
                                             :
@@ -574,9 +679,11 @@ const Cached = ({ onClose }: Props) => {
                                                 key={entry.infoHash}
                                                 entry={entry}
                                                 metaLink={libraryLinks[entry.infoHash]?.metaLink ?? null}
+                                                streamingMode={streamingMode.enabled}
                                                 onPlay={play}
                                                 onMoreInfo={openMetaDetails}
                                                 onSetPaused={setPaused}
+                                                onSetPinned={setPinned}
                                                 onDelete={remove}
                                             />
                                         ))}

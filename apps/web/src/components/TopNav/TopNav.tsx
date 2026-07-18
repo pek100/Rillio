@@ -125,7 +125,7 @@ const TopNav = ({ className, route }: Props) => {
                 <button
                     type="button"
                     onClick={() => openModal('cached')}
-                    title={'Cached'}
+                    title={'Cache'}
                     tabIndex={-1}
                     className={cn(ICON_BUTTON_BARE, route === 'cached' ? 'text-accent' : 'text-fg-muted hover:bg-surface-hover hover:text-fg')}
                 >

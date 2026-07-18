@@ -30,6 +30,7 @@ import usePlayer from './usePlayer';
 import useStatistics from './useStatistics';
 import useSlowDownload from './useSlowDownload';
 import useNextEpisodePreload from './useNextEpisodePreload';
+import useStreamingModeWatched from './useStreamingModeWatched';
 import NextEpisodePreloadPrompt from './NextEpisodePreloadPrompt';
 import { useSkipSegments, activeSegment } from './skipIntro';
 import SkipPill from './SkipPill/SkipPill';
@@ -195,6 +196,15 @@ const Player = () => {
     // Next-episode preload: prompt scheduling, per-series dismissal, the
     // /cache/download trigger, and the start-next-paused handoff after ended.
     const nextEpisodePreload = useNextEpisodePreload({ player, video });
+
+    // Streaming mode: report a torrent stream watched at >= 90% so the local
+    // server can clean its cache entry up later (un-kept entries only).
+    useStreamingModeWatched({
+        infoHash: statistics.infoHash ?? null,
+        serverUrl: typeof profile.settings.streamingServerUrl === 'string' ? profile.settings.streamingServerUrl : null,
+        time: video.state.time,
+        duration: video.state.duration,
+    });
 
     // Skip intro/outro: known segments for this video (file chapters + the
     // AniSkip/TheIntroDB community databases), and whichever one the playhead

@@ -47,7 +47,7 @@ const useCacheDownload = () => {
                 toast.show({
                     type: 'success',
                     title: 'Downloading to cache',
-                    message: 'Track progress on the Cached page.',
+                    message: 'Track progress on the Cache page.',
                     timeout: 4000,
                 });
                 // A new download is live: light the top-nav dot now rather than on

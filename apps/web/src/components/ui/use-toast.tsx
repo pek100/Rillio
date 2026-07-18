@@ -150,6 +150,14 @@ const toastApi = {
 
 export type ToastApi = typeof toastApi;
 
+// Debug handle: the production bundle is a single chunk with no webpack global,
+// so a CDP session has no way to reach module exports. This is the supported
+// hatch for firing/inspecting toasts in the running shell (page context is
+// already fully trusted; this adds no new capability to it).
+if (typeof window !== 'undefined') {
+    (window as unknown as { __rillioToast?: ToastApi }).__rillioToast = toastApi;
+}
+
 /** Drop-in replacement for the legacy useToast() hook (returns a stable facade). */
 export function useToast(): ToastApi {
     return toastApi;

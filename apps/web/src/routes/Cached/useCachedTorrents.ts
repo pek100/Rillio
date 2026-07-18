@@ -11,6 +11,9 @@ export type CacheEntry = {
     state: string,
     error?: string,
     pinned: boolean,
+    // The player marked this stream watched: with streaming mode on, an
+    // un-pinned watched entry cleans up automatically about an hour later.
+    watched: boolean,
     fileCount: number,
     // The single selected file's index when the entry is one playable file,
     // absent for multi-file selections. Powers the row's play button.

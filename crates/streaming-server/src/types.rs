@@ -105,6 +105,26 @@ impl Success {
 #[serde(rename_all = "camelCase")]
 pub struct TorrentSettings {
     pub listen_enabled: bool,
+    /// Streaming mode: watched, un-kept streams are cleaned up from the cache
+    /// automatically (the ephemeral sweeper in engine.rs). Defaults ON, which is
+    /// why the serde default exists - a settings file written before this field
+    /// must read as enabled, same as a fresh install.
+    #[serde(default = "default_streaming_mode")]
+    pub streaming_mode: bool,
+}
+
+pub fn default_streaming_mode() -> bool {
+    true
+}
+
+/// `POST /torrent-settings` body: every field optional so a caller updating one
+/// toggle cannot silently reset the other to its default (the web's
+/// faster-downloads toggle posts `{listenEnabled}` alone).
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TorrentSettingsPatch {
+    pub listen_enabled: Option<bool>,
+    pub streaming_mode: Option<bool>,
 }
 
 // ---------------------------------------------------------------------------

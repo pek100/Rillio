@@ -272,7 +272,7 @@ const useNextEpisodePreload = ({ player, video }: UseNextEpisodePreloadArgs) => 
                 toast.show({
                     type: 'error',
                     title: 'Could not cancel the preload',
-                    message: 'It may still be downloading; the Cached page can stop it.',
+                    message: 'It may still be downloading; the Cache page can stop it.',
                     timeout: 4000,
                 });
             });

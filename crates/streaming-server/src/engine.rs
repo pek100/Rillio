@@ -66,23 +66,35 @@ const DEFAULT_TRACKERS: &[&str] = &[
 /// once at [`Engine::new`].
 const TORRENT_PREFS_FILE: &str = "torrent-settings.json";
 
-/// Read the persisted "inbound listen port + UPnP" preference from the cache
-/// root. Absent / unreadable / malformed ⇒ `false` (quiet default).
-pub fn read_listen_pref(cache_dir: &Path) -> bool {
+/// Read the persisted torrent preferences from the cache root. Absent /
+/// unreadable / malformed ⇒ defaults (listen off, streaming mode on).
+pub fn read_torrent_settings(cache_dir: &Path) -> types::TorrentSettings {
     std::fs::read(cache_dir.join(TORRENT_PREFS_FILE))
         .ok()
         .and_then(|bytes| serde_json::from_slice::<types::TorrentSettings>(&bytes).ok())
-        .map(|s| s.listen_enabled)
-        .unwrap_or(false)
+        .unwrap_or(types::TorrentSettings {
+            listen_enabled: false,
+            streaming_mode: types::default_streaming_mode(),
+        })
 }
 
-/// Persist the "inbound listen port + UPnP" preference. Takes effect on the next
-/// [`Engine::new`] (i.e. next server start), since librqbit fixes the listener
-/// at session construction.
-pub fn write_listen_pref(cache_dir: &Path, listen_enabled: bool) -> std::io::Result<()> {
-    let body = serde_json::to_vec(&types::TorrentSettings { listen_enabled })
-        .expect("TorrentSettings serializes");
+/// Persist the torrent preferences.
+pub fn write_torrent_settings(cache_dir: &Path, settings: &types::TorrentSettings) -> std::io::Result<()> {
+    let body = serde_json::to_vec(settings).expect("TorrentSettings serializes");
     std::fs::write(cache_dir.join(TORRENT_PREFS_FILE), body)
+}
+
+/// The "inbound listen port + UPnP" preference. Takes effect at [`Engine::new`]
+/// (librqbit fixes the listener at session construction).
+pub fn read_listen_pref(cache_dir: &Path) -> bool {
+    read_torrent_settings(cache_dir).listen_enabled
+}
+
+/// Persist the listen preference, keeping the other settings intact.
+pub fn write_listen_pref(cache_dir: &Path, listen_enabled: bool) -> std::io::Result<()> {
+    let mut settings = read_torrent_settings(cache_dir);
+    settings.listen_enabled = listen_enabled;
+    write_torrent_settings(cache_dir, &settings)
 }
 
 /// Parse a KiB/s rate limit from an env var into librqbit's bytes-per-second
@@ -226,6 +238,12 @@ pub struct Engine {
     /// the cache-cap sweeper never evicts these. Persisted to
     /// [`PINS_FILE`] in the cache root, loaded at [`Engine::new`].
     pinned: Arc<Mutex<HashSet<String>>>,
+    /// Lowercase hex infohash -> unix time (seconds) the player reported the
+    /// stream WATCHED (>= ~90% through). Streaming mode's ephemeral sweeper
+    /// deletes un-pinned entries a while after this mark; pinned ("kept")
+    /// entries are never touched. Persisted to [`WATCHED_FILE`] so a watched
+    /// stream still cleans up after a restart.
+    watched: Arc<Mutex<HashMap<String, u64>>>,
 }
 
 /// Filename of the persisted pin set, under the cache root.
@@ -248,6 +266,27 @@ fn write_pins(cache_dir: &std::path::Path, pins: &HashSet<String>) {
     let body = serde_json::to_vec(&list).expect("pin list serializes");
     if let Err(e) = std::fs::write(cache_dir.join(PINS_FILE), body) {
         tracing::error!("pins: persisting {PINS_FILE} failed: {e}");
+    }
+}
+
+/// Filename of the persisted watched map, under the cache root.
+const WATCHED_FILE: &str = "watched.json";
+
+/// Read the persisted watched map. Absent/unreadable/malformed => empty -
+/// watched marks are cleanup hints, not integrity data.
+fn read_watched(cache_dir: &std::path::Path) -> HashMap<String, u64> {
+    std::fs::read(cache_dir.join(WATCHED_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<HashMap<String, u64>>(&bytes).ok())
+        .unwrap_or_default()
+}
+
+/// Persist the watched map. Loud on failure: a lost mark means a watched stream
+/// silently never cleans up (the failure direction is at least data-safe).
+fn write_watched(cache_dir: &std::path::Path, watched: &HashMap<String, u64>) {
+    let body = serde_json::to_vec(watched).expect("watched map serializes");
+    if let Err(e) = std::fs::write(cache_dir.join(WATCHED_FILE), body) {
+        tracing::error!("watched: persisting {WATCHED_FILE} failed: {e}");
     }
 }
 
@@ -570,6 +609,7 @@ impl Engine {
         invalidate_stale_fastresume(&cache_dir.join("session"));
         let session = Session::new_with_opts(cache_dir, opts).await?;
         let pinned = read_pins(&cache_root);
+        let watched = read_watched(&cache_root);
         Ok(Self {
             session,
             cache_root: Arc::new(cache_root),
@@ -577,6 +617,7 @@ impl Engine {
             prefetched: Arc::new(Mutex::new(HashSet::new())),
             bt: Arc::new(Mutex::new(BtProfile::ULTRA_FAST)),
             pinned: Arc::new(Mutex::new(pinned)),
+            watched: Arc::new(Mutex::new(watched)),
         })
     }
 
@@ -598,6 +639,78 @@ impl Engine {
             };
             if changed {
                 write_pins(&self.cache_root, &p);
+            }
+        }
+    }
+
+    /// Whether the player marked this torrent watched (streaming mode).
+    pub fn is_watched(&self, info_hash: &str) -> bool {
+        self.watched
+            .lock()
+            .map(|w| w.contains_key(info_hash))
+            .unwrap_or(false)
+    }
+
+    /// Mark or unmark a torrent watched; persists immediately. Marking stamps
+    /// the current unix time - the ephemeral sweeper's grace clock starts here.
+    pub fn set_watched(&self, info_hash: &str, watched: bool) {
+        if let Ok(mut w) = self.watched.lock() {
+            let changed = if watched {
+                let now = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .map(|d| d.as_secs())
+                    .unwrap_or(0);
+                w.insert(info_hash.to_owned(), now).is_none()
+            } else {
+                w.remove(info_hash).is_some()
+            };
+            if changed {
+                write_watched(&self.cache_root, &w);
+            }
+        }
+    }
+
+    /// Streaming mode's ephemeral sweep: delete torrents the player marked
+    /// watched, once the mark is at least `ttl` old - late enough that
+    /// "rewatch that scene" and the previous-episode-while-the-next-plays cases
+    /// survive. Never touches pinned ("kept") torrents, anything streamed or
+    /// queried within `grace` (active playback), and does nothing at all while
+    /// streaming mode is off (checked from the settings file each sweep, so
+    /// flipping the toggle applies live). Watched marks whose torrent is gone
+    /// (deleted manually) are pruned so the map cannot grow stale entries.
+    pub async fn sweep_watched(&self, ttl: Duration, grace: Duration) {
+        if !read_torrent_settings(&self.cache_root).streaming_mode {
+            return;
+        }
+        let watched = self.watched.lock().map(|w| w.clone()).unwrap_or_default();
+        if watched.is_empty() {
+            return;
+        }
+        let now = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_secs())
+            .unwrap_or(0);
+        let managed: HashSet<String> = self.all().iter().map(Self::info_hash_hex).collect();
+        let last = self.last_access.lock().map(|m| m.clone()).unwrap_or_default();
+        for (ih, marked_at) in watched {
+            if !managed.contains(&ih) {
+                self.set_watched(&ih, false);
+                continue;
+            }
+            if self.is_pinned(&ih) {
+                continue;
+            }
+            if now.saturating_sub(marked_at) < ttl.as_secs() {
+                continue;
+            }
+            if last.get(&ih).is_some_and(|t| t.elapsed() < grace) {
+                continue;
+            }
+            if self.remove(&ih).await {
+                if let Ok(mut m) = self.last_access.lock() {
+                    m.remove(&ih);
+                }
+                tracing::info!("streaming-mode: cleaned up watched stream {ih}");
             }
         }
     }
@@ -858,8 +971,11 @@ impl Engine {
         if let Some(id) = target {
             let _ = self.session.delete(id.into(), Self::DELETE_FILES_ON_REMOVE).await;
             // A deleted torrent must not leave a stale pin behind (it would
-            // shield a future re-add of the same infohash from eviction).
+            // shield a future re-add of the same infohash from eviction), nor a
+            // stale watched mark (it would schedule a future re-add for
+            // cleanup the moment it appears).
             self.set_pinned(info_hash, false);
+            self.set_watched(info_hash, false);
             true
         } else {
             false

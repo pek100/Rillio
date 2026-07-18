@@ -92,6 +92,7 @@ pub fn router(config: Config, engine: Engine) -> Router {
         .route("/cache/download", post(cache_api::download))
         .route("/cache/pin", post(cache_api::pin))
         .route("/cache/pause", post(cache_api::pause))
+        .route("/cache/watched", post(cache_api::watched))
         .route("/cache/delete", post(cache_api::delete))
         // M2 stats family (static segments; win over the {idx} stream param).
         .route("/stats.json", get(stats::stats_aggregate))
@@ -159,6 +160,7 @@ pub async fn serve(config: Config) -> std::io::Result<()> {
         .await
         .map_err(|e| std::io::Error::other(e.to_string()))?;
     spawn_cache_sweeper(&config, engine.clone());
+    spawn_ephemeral_sweeper(engine.clone());
     let app = router(config, engine);
     let listener = tokio::net::TcpListener::bind(bind).await?;
     tracing::info!(%bind, "streaming server listening");
@@ -170,6 +172,30 @@ const CACHE_SWEEP_INTERVAL: Duration = Duration::from_secs(30);
 /// A torrent touched (streamed/queried) within this window is never evicted, so
 /// whatever is currently playing is protected from the cache cap.
 const CACHE_EVICT_GRACE: Duration = Duration::from_secs(120);
+
+/// How long after the player marks a stream watched before streaming mode may
+/// delete it. Long enough that "rewatch that scene" and finishing an episode
+/// while the next one plays both survive; the mark also persists across
+/// restarts, so a missed window just cleans up on a later sweep.
+const EPHEMERAL_TTL: Duration = Duration::from_secs(60 * 60);
+/// How often the ephemeral sweeper looks for watched streams to clean up.
+const EPHEMERAL_SWEEP_INTERVAL: Duration = Duration::from_secs(60);
+
+/// Streaming mode's cleanup loop: delete watched, un-kept streams once their
+/// watched mark is [`EPHEMERAL_TTL`] old. Always spawned (unlike the cache-cap
+/// sweeper, which needs a configured cap) - whether it acts is decided per
+/// sweep by the persisted `streaming_mode` toggle, so flipping the setting in
+/// the UI applies without a restart. Pinned torrents and anything recently
+/// streamed are never touched (see [`Engine::sweep_watched`]).
+fn spawn_ephemeral_sweeper(engine: Engine) {
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(EPHEMERAL_SWEEP_INTERVAL);
+        loop {
+            tick.tick().await;
+            engine.sweep_watched(EPHEMERAL_TTL, CACHE_EVICT_GRACE).await;
+        }
+    });
+}
 
 /// Enforce `config.cache_size` (S7): periodically evict the least-recently-used
 /// idle torrents when the cache exceeds the cap. `None` cacheSize = unlimited (no

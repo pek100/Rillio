@@ -36,6 +36,9 @@ pub(crate) struct CacheEntry {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
     pub pinned: bool,
+    /// Whether the player marked this stream watched (streaming mode): an
+    /// un-pinned watched entry is scheduled for automatic cleanup.
+    pub watched: bool,
     /// Number of selected files.
     pub file_count: usize,
     /// The single selected file's index in the torrent when exactly one file
@@ -100,6 +103,7 @@ pub(crate) async fn list(State(engine): State<Engine>) -> Json<Vec<CacheEntry>> 
             };
             CacheEntry {
                 pinned: engine.is_pinned(&info_hash),
+                watched: engine.is_watched(&info_hash),
                 info_hash,
                 name,
                 downloaded,
@@ -174,6 +178,25 @@ pub(crate) async fn pin(State(engine): State<Engine>, Json(body): Json<PinBody>)
         return StatusCode::BAD_REQUEST.into_response();
     }
     engine.set_pinned(&body.info_hash.to_lowercase(), body.pinned);
+    Json(serde_json::json!({ "success": true })).into_response()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct WatchedBody {
+    info_hash: String,
+    watched: bool,
+}
+
+/// `POST /cache/watched` - the player reporting a stream watched (>= ~90%
+/// through). In streaming mode the ephemeral sweeper deletes un-pinned watched
+/// torrents after a grace period; a pinned ("kept") torrent keeps the mark but
+/// is never deleted.
+pub(crate) async fn watched(State(engine): State<Engine>, Json(body): Json<WatchedBody>) -> Response {
+    if !is_valid_infohash(&body.info_hash) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    engine.set_watched(&body.info_hash.to_lowercase(), body.watched);
     Json(serde_json::json!({ "success": true })).into_response()
 }
 

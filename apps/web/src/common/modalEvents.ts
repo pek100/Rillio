@@ -63,3 +63,10 @@ const subscribe = (onStoreChange: () => void): (() => void) => {
 const getSnapshot = (): ModalState => state;
 
 export const useModalState = (): ModalState => useSyncExternalStore(subscribe, getSnapshot);
+
+// Debug handle for CDP sessions (see the matching note in ui/use-toast): the
+// single-chunk bundle exposes no module graph, so this is the supported hatch
+// for driving the modal bus from a devtools session.
+if (typeof window !== 'undefined') {
+    (window as unknown as { __rillioOpenModal?: typeof openModal }).__rillioOpenModal = openModal;
+}

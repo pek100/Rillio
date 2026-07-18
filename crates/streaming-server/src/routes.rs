@@ -105,9 +105,7 @@ pub async fn post_settings(State(engine): State<Engine>, body: axum::body::Bytes
 /// port + UPnP) preference. Rillio-specific; the UI reflects this toggle and
 /// notes that a change applies on the next app start.
 pub async fn get_torrent_settings(State(cfg): State<Config>) -> Json<TorrentSettings> {
-    Json(TorrentSettings {
-        listen_enabled: engine::read_listen_pref(&cfg.cache_root),
-    })
+    Json(engine::read_torrent_settings(&cfg.cache_root))
 }
 
 /// POST `/torrent-settings` - persist the toggle. Written to the cache root the
@@ -115,9 +113,20 @@ pub async fn get_torrent_settings(State(cfg): State<Config>) -> Json<TorrentSett
 /// fixes the listener at construction), so it takes effect on the next launch.
 pub async fn post_torrent_settings(
     State(cfg): State<Config>,
-    Json(body): Json<TorrentSettings>,
+    Json(patch): Json<crate::types::TorrentSettingsPatch>,
 ) -> impl IntoResponse {
-    match engine::write_listen_pref(&cfg.cache_root, body.listen_enabled) {
+    // Merge over the persisted settings so a one-field POST (the web posts each
+    // toggle alone) cannot reset the others. Streaming mode applies live (the
+    // ephemeral sweeper re-reads the file each sweep); the listen preference
+    // still takes effect on the next launch.
+    let mut settings = engine::read_torrent_settings(&cfg.cache_root);
+    if let Some(listen_enabled) = patch.listen_enabled {
+        settings.listen_enabled = listen_enabled;
+    }
+    if let Some(streaming_mode) = patch.streaming_mode {
+        settings.streaming_mode = streaming_mode;
+    }
+    match engine::write_torrent_settings(&cfg.cache_root, &settings) {
         Ok(()) => (StatusCode::OK, Json(Success::ok())),
         Err(e) => {
             tracing::error!("failed to persist torrent settings: {e}");
