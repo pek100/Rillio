@@ -357,6 +357,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             open_external,
             install_update,
+            check_for_update,
             shell::shell_init,
             shell::shell_send,
             shell::shell_mpv_stats,
@@ -641,9 +642,41 @@ fn spawn_update_check(app: tauri::AppHandle) {
     });
 }
 
+/// Ask the updater whether a newer build exists, ON DEMAND (Settings ->
+/// "Check for updates"). [`spawn_update_check`] only runs at launch and only
+/// speaks through a toast, which is easy to miss and impossible to summon
+/// again without restarting - this is the deliberate path.
+///
+/// Returns the available version, or `None` when up to date. Errors are
+/// returned rather than swallowed: a user who explicitly asked has to be told
+/// that the check itself failed (offline, no release yet), otherwise "nothing
+/// happened" reads as "up to date".
+#[tauri::command]
+async fn check_for_update(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    // Same shape as install_update: one entry in the handler list, desktop-only
+    // body (Android takes updates from the app store).
+    #[cfg(not(desktop))]
+    {
+        let _ = app;
+        return Ok(None);
+    }
+    #[cfg(desktop)]
+    {
+        use tauri_plugin_updater::UpdaterExt;
+
+        let update = app
+            .updater()
+            .map_err(|e| e.to_string())?
+            .check()
+            .await
+            .map_err(|e| e.to_string())?;
+        Ok(update.map(|update| update.version.clone()))
+    }
+}
+
 /// Download, verify (minisign) and install the pending update, then relaunch.
-/// Invoked from the web UI's update toast. Re-checks so it never installs a
-/// stale handle.
+/// Invoked from the web UI's update toast and from Settings. Re-checks so it
+/// never installs a stale handle.
 ///
 /// INCIDENT (2026-07-13, the 0.1.16 -> 0.1.17 auto-update WIPED a user's
 /// profile/library/settings): tauri-plugin-updater's install step launches the

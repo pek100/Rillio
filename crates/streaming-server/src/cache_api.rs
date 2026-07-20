@@ -39,12 +39,17 @@ pub(crate) struct CacheEntry {
     /// Whether the player marked this stream watched (streaming mode): an
     /// un-pinned watched entry is scheduled for automatic cleanup.
     pub watched: bool,
+    /// The addon metadata this torrent was matched to (title, artwork ids,
+    /// the meta/video ids for a deep link), or absent when it has not been
+    /// identified yet. Opaque to the server; see engine::CacheMeta.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub meta: Option<crate::engine::CacheMeta>,
     /// Number of selected files.
     pub file_count: usize,
-    /// The playable file's index in the torrent, when the selection contains
-    /// exactly ONE video file; omitted for a season pack (ambiguous) or a
-    /// selection with no video at all. Lets the Cached page build a player
-    /// deep link for the entry.
+    /// The playable file's index in the torrent: the selection's only video,
+    /// or its dominant one (see [`main_feature`]). Omitted for a season pack,
+    /// where "Play" has no single meaning, and for a selection with no video.
+    /// Lets the Cached page build a player deep link for the entry.
     ///
     /// Deliberately NOT "exactly one selected file": scene releases routinely
     /// ship an .nfo/.txt/.jpg next to the video, and requiring a lone file made
@@ -64,6 +69,33 @@ const VIDEO_EXTENSIONS: &[&str] = &[
 fn is_video(name: &str) -> bool {
     name.rsplit_once('.')
         .is_some_and(|(_, ext)| VIDEO_EXTENSIONS.contains(&ext.to_lowercase().as_str()))
+}
+
+/// How much bigger the main feature must be than the next video for us to call
+/// it unambiguous. A movie beside a trailer/sample/behind-the-scenes clip is a
+/// landslide; two episodes of a season pack are within a factor of two of each
+/// other, which is exactly the case we must NOT guess at.
+const MAIN_FEATURE_RATIO: u64 = 3;
+
+/// Which video (if any) "the Play button" should mean, given the video file
+/// indices and their sizes.
+fn main_feature(videos: &[usize], length: impl Fn(usize) -> u64) -> Option<usize> {
+    match videos.len() {
+        0 => None,
+        1 => Some(videos[0]),
+        _ => {
+            let mut by_size: Vec<(usize, u64)> = videos.iter().map(|&i| (i, length(i))).collect();
+            by_size.sort_by(|a, b| b.1.cmp(&a.1));
+            let (biggest, biggest_len) = by_size[0];
+            let runner_up = by_size[1].1;
+            // Guard the multiply against a pathological 0-length runner-up.
+            if runner_up == 0 || biggest_len / runner_up.max(1) >= MAIN_FEATURE_RATIO {
+                Some(biggest)
+            } else {
+                None
+            }
+        }
+    }
 }
 
 /// `GET /cache/list` - every torrent the engine manages (the session persists
@@ -114,15 +146,13 @@ pub(crate) async fn list(State(engine): State<Engine>) -> Json<Vec<CacheEntry>> 
                     }
                 }
             };
-            // The playable file: the lone video among the selected files. A
-            // season pack (many videos) stays ambiguous, and a selection with
-            // no video at all is not playable.
+            // The playable file among the selected ones (see `file_idx`).
             let videos: Vec<usize> = selected
                 .iter()
                 .copied()
                 .filter(|&i| is_video(&files[i].name))
                 .collect();
-            let playable = if videos.len() == 1 { Some(videos[0]) } else { None };
+            let playable = main_feature(&videos, |i| files[i].length);
             let name = match playable {
                 Some(idx) => files[idx].name.clone(),
                 None => handle.name().unwrap_or_default(),
@@ -130,6 +160,7 @@ pub(crate) async fn list(State(engine): State<Engine>) -> Json<Vec<CacheEntry>> 
             CacheEntry {
                 pinned: engine.is_pinned(&info_hash),
                 watched: engine.is_watched(&info_hash),
+                meta: engine.meta(&info_hash),
                 info_hash,
                 name,
                 downloaded,
@@ -201,6 +232,136 @@ pub(crate) async fn pin(State(engine): State<Engine>, Json(body): Json<PinBody>)
     }
     engine.set_pinned(&body.info_hash.to_lowercase(), body.pinned);
     Json(serde_json::json!({ "success": true })).into_response()
+}
+
+/// One file inside a cached torrent, as the Cache page's file browser renders
+/// it. Covers EVERY file in the torrent, not just the downloading selection:
+/// the point of the browser is to see (and fetch) what else is in there.
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TorrentFile {
+    /// Index in the torrent, which is what selection and streaming address.
+    pub index: usize,
+    /// Full relative path (forward slashes), so nested release folders read
+    /// correctly in a list.
+    pub path: String,
+    pub length: u64,
+    /// Bytes held on disk for this file. 0 for a file nobody selected.
+    pub downloaded: u64,
+    /// Whether this file is part of the download selection.
+    pub selected: bool,
+    /// Whether the player can open it (drives the per-file Play button).
+    pub video: bool,
+}
+
+/// `GET /cache/files/{info_hash}` - the whole torrent's contents.
+pub(crate) async fn files(
+    State(engine): State<Engine>,
+    axum::extract::Path(info_hash): axum::extract::Path<String>,
+) -> Response {
+    if !is_valid_infohash(&info_hash) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let Some(handle) = engine.get(&info_hash.to_lowercase()) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let all = Engine::files(&handle);
+    let stats = handle.stats();
+    let selected: Vec<usize> = match handle.only_files() {
+        Some(only) => only.into_iter().filter(|&i| i < all.len()).collect(),
+        None => (0..all.len()).collect(),
+    };
+    let out: Vec<TorrentFile> = all
+        .iter()
+        .enumerate()
+        .map(|(index, file)| TorrentFile {
+            index,
+            // Per-file have-bytes only exist once the chunk tracker does; an
+            // initializing torrent honestly reports 0 (see the note in `list`).
+            downloaded: stats.file_progress.get(index).copied().unwrap_or(0),
+            selected: selected.contains(&index),
+            video: is_video(&file.name),
+            path: file.path.clone(),
+            length: file.length,
+        })
+        .collect();
+    Json(out).into_response()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct MetaBody {
+    info_hash: String,
+    /// The matched metadata, or null to forget a wrong match.
+    meta: Option<crate::engine::CacheMeta>,
+}
+
+/// `POST /cache/meta` - record what media a torrent actually is.
+///
+/// The web posts this when playback starts from a known title (it already has
+/// the metadata) and after matching an orphan torrent's release name against
+/// the installed addons. Stored verbatim and handed back on `/cache/list`, so
+/// the Cache page can show real titles and artwork instead of scene filenames.
+pub(crate) async fn meta(State(engine): State<Engine>, Json(body): Json<MetaBody>) -> Response {
+    if !is_valid_infohash(&body.info_hash) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    engine.set_meta(&body.info_hash.to_lowercase(), body.meta);
+    Json(serde_json::json!({ "success": true })).into_response()
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct SelectBody {
+    info_hash: String,
+    file_idx: usize,
+    selected: bool,
+}
+
+/// `POST /cache/select` - add a file to the download selection, or drop it.
+///
+/// Adding is how the Cache page's file browser fetches "the other stuff" in a
+/// torrent (extras, a bundled subtitle, the second episode of a double bill).
+pub(crate) async fn select(State(engine): State<Engine>, Json(body): Json<SelectBody>) -> Response {
+    if !is_valid_infohash(&body.info_hash) {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let info_hash = body.info_hash.to_lowercase();
+    let Some(handle) = engine.get(&info_hash) else {
+        return StatusCode::NOT_FOUND.into_response();
+    };
+    let count = Engine::files(&handle).len();
+    if body.file_idx >= count {
+        return StatusCode::BAD_REQUEST.into_response();
+    }
+    let mut selected: Vec<usize> = match handle.only_files() {
+        Some(only) => only.into_iter().filter(|&i| i < count).collect(),
+        None => (0..count).collect(),
+    };
+    if body.selected {
+        if !selected.contains(&body.file_idx) {
+            selected.push(body.file_idx);
+            selected.sort_unstable();
+        }
+    } else {
+        selected.retain(|&i| i != body.file_idx);
+    }
+    match engine.set_selected_files(&handle, &selected).await {
+        Ok(()) => {
+            engine.touch(&info_hash);
+            Json(serde_json::json!({ "success": true })).into_response()
+        }
+        // Deselecting the last file is a request the engine refuses, not a
+        // server fault: 409, same as a refused pause.
+        Err(e) => {
+            tracing::warn!("cache/select {info_hash} idx={}: {e:#}", body.file_idx);
+            (
+                StatusCode::CONFLICT,
+                Json(serde_json::json!({ "error": format!("{e:#}") })),
+            )
+                .into_response()
+        }
+    }
 }
 
 #[derive(Deserialize)]

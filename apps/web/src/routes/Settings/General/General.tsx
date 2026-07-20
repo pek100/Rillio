@@ -7,6 +7,7 @@ import { Trakt, Discord } from 'rillio/components/ui/brand-icons';
 import { Section, Option, Link, SettingsSwitch } from '../components';
 import User from './User';
 import useDataExport from './useDataExport';
+import useUpdateCheck from './useUpdateCheck';
 
 // CJS require, matching how the rest of the app consumes usePlayUrl (it is an
 // `export =` module).
@@ -24,6 +25,14 @@ const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
     const discord = useDiscord();
     const [dataExport, loadDataExport] = useDataExport();
     const { handlePlayUrl } = usePlayUrl();
+    const update = useUpdateCheck();
+    // The SHELL's version, not process.env.VERSION: that one is the web bundle's
+    // (still upstream's 5.0.0-beta.x) and showing it next to an updater that
+    // ships Rillio 0.1.x reads as a different app entirely.
+    const appVersion = typeof platform.shell.state.version === 'string' ?
+        platform.shell.state.version
+        :
+        process.env.VERSION;
 
     const [traktAuthStarted, setTraktAuthStarted] = useState(false);
 
@@ -122,6 +131,44 @@ const General = forwardRef<HTMLDivElement, Props>(({ profile }: Props, ref) => {
         <Section ref={ref}>
             <User profile={profile} />
         </Section>
+
+        {
+            // Right under the account block, because until now the launch-time
+            // toast was the ONLY way to take an update: miss it and there was
+            // no in-app path at all. Desktop shell only (browser and Android
+            // have no in-app updater).
+            update.available ?
+                <Section>
+                    <Option label={'Updates'}>
+                        <div className="flex w-full items-center gap-4">
+                            <Button
+                                variant="ghost"
+                                onClick={update.status.phase === 'available' ? update.install : update.check}
+                                disabled={update.status.phase === 'checking' || update.status.phase === 'installing'}
+                                tabIndex={-1}
+                                className="h-14 shrink-0 bg-surface-hover px-8 font-medium text-fg hover:brightness-110 active:scale-[0.97] disabled:opacity-60"
+                            >
+                                {
+                                    update.status.phase === 'checking' ? 'Checking...' :
+                                        update.status.phase === 'installing' ? 'Installing...' :
+                                            update.status.phase === 'available' ? 'Install and restart' :
+                                                'Check for updates'
+                                }
+                            </Button>
+                            <div className="min-w-0 text-sm text-fg-muted">
+                                {
+                                    update.status.phase === 'available' ? `Rillio ${update.status.version} is available` :
+                                        update.status.phase === 'up-to-date' ? `Rillio ${appVersion} is up to date` :
+                                            update.status.phase === 'failed' ? <span className="text-danger">Could not check for updates</span> :
+                                                `Version ${appVersion}`
+                                }
+                            </div>
+                        </div>
+                    </Option>
+                </Section>
+                :
+                null
+        }
 
         <Section>
             {/* Play URL/Magnet came from the account menu, which is the account and

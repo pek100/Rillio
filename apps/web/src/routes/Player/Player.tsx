@@ -31,6 +31,7 @@ import useStatistics from './useStatistics';
 import useSlowDownload from './useSlowDownload';
 import useNextEpisodePreload from './useNextEpisodePreload';
 import useStreamingModeWatched from './useStreamingModeWatched';
+import useCacheMetadata from './useCacheMetadata';
 import NextEpisodePreloadPrompt from './NextEpisodePreloadPrompt';
 import { useSkipSegments, activeSegment } from './skipIntro';
 import SkipPill from './SkipPill/SkipPill';
@@ -196,6 +197,14 @@ const Player = () => {
     // Next-episode preload: prompt scheduling, per-series dismissal, the
     // /cache/download trigger, and the start-next-paused handoff after ended.
     const nextEpisodePreload = useNextEpisodePreload({ player, video });
+
+    // Correlate this torrent with the title it is playing, while we hold the
+    // full metadata: the Cache page shows real artwork instead of a filename.
+    useCacheMetadata({
+        infoHash: statistics.infoHash ?? null,
+        serverUrl: typeof profile.settings.streamingServerUrl === 'string' ? profile.settings.streamingServerUrl : null,
+        player,
+    });
 
     // Streaming mode: report a torrent stream watched at >= 90% so the local
     // server can clean its cache entry up later (un-kept entries only).

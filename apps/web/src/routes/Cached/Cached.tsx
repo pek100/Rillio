@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Info, Trash2, X } from 'lucide-react';
+import { Play, Info, Trash2, X, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toPath } from 'rillio-router';
 import { useCore } from 'rillio/core';
@@ -9,6 +9,29 @@ import { Button, IconButton, ModalRoute, Switch, cn } from 'rillio/components/ui
 import AnimatedPercentage from 'rillio/components/ui/animated-percentage';
 import SpeedChart from 'rillio/components/ui/speed-chart';
 import useCachedTorrents, { CacheEntry } from './useCachedTorrents';
+import TorrentFiles from './TorrentFiles';
+import useMetadataMatcher from './useMetadataMatcher';
+
+// What to call an entry: the matched title (with the episode tag for a series)
+// when the torrent has been identified, otherwise the scene filename it came
+// with. See common/cacheMetadata.
+const displayName = (entry: CacheEntry): string => {
+    const meta = entry.meta;
+    if (meta === undefined) return entry.name || entry.infoHash;
+    const episode = typeof meta.season === 'number' && typeof meta.episode === 'number' ?
+        ` S${String(meta.season).padStart(2, '0')}E${String(meta.episode).padStart(2, '0')}`
+        :
+        '';
+    return `${meta.name}${episode}`;
+};
+
+// Identified entries can deep link to their title directly, no continue-watching
+// lookup needed.
+const metaDetailsLink = (entry: CacheEntry): string | null =>
+    entry.meta !== undefined ?
+        `#/metadetails/${encodeURIComponent(entry.meta.type)}/${encodeURIComponent(entry.meta.metaId)}`
+        :
+        null;
 
 // Same parser the stream cards use: quality/HDR/languages are encoded in the
 // entry name (the selected file's name for single-file selections, e.g. an
@@ -238,26 +261,33 @@ const GLASS_BTN = 'h-9 shrink-0 rounded-full border border-white/15 bg-white/10 
  * hydralauncher/hydra's downloads hero (MIT) rebuilt on the house tokens, with
  * metahub artwork standing in for their game art.
  */
-const HeroDownload = ({ entry, links, streamingMode, onPlay, onMoreInfo, onSetPaused, onSetPinned, onDelete }: {
+const HeroDownload = ({ entry, links, metaLink, streamingMode, onPlay, onPlayFile, onMoreInfo, onSetPaused, onSetPinned, onSetFileSelected, onDelete }: {
     entry: CacheEntry,
     links: LibraryLinks | undefined,
+    metaLink: string | null,
     streamingMode: boolean | null,
     onPlay: (entry: CacheEntry) => void,
+    onPlayFile: (infoHash: string, fileIdx: number, name: string) => void,
     onMoreInfo: (link: string) => void,
     onSetPaused: (infoHash: string, paused: boolean) => void,
     onSetPinned: (infoHash: string, pinned: boolean) => void,
+    onSetFileSelected: (infoHash: string, fileIdx: number, selected: boolean) => Promise<void> | void,
     onDelete: (infoHash: string) => void,
 }) => {
     const { speeds, peak, speed } = useSpeedHistory(entry);
+    const [filesOpen, setFilesOpen] = useState(false);
     const paused = entry.state === 'paused';
     const progress = entry.total > 0 ? Math.min(1, entry.downloaded / entry.total) : 0;
     const pct = Math.floor(progress * 100);
     const etaSeconds = speed > 0 ? (entry.total - entry.downloaded) / speed : NaN;
 
-    const metaId = links?.metaId ?? null;
-    const title = links?.itemName ?? entry.name;
-    const backgroundUrl = metahubBackground(metaId);
-    const logoUrl = metahubLogo(metaId);
+    // The matched metadata is the best source (it carries the addon's own
+    // artwork urls and works for any identified torrent); the continue-watching
+    // bridge + metahub stay as the fallback for anything not yet identified.
+    const metaId = entry.meta?.metaId ?? links?.metaId ?? null;
+    const title = entry.meta !== undefined ? displayName(entry) : (links?.itemName ?? entry.name);
+    const backgroundUrl = entry.meta?.background ?? metahubBackground(metaId);
+    const logoUrl = entry.meta?.logo ?? metahubLogo(metaId);
     const [backgroundFailed, setBackgroundFailed] = useState(false);
     const [logoFailed, setLogoFailed] = useState(false);
     useEffect(() => { setBackgroundFailed(false); setLogoFailed(false); }, [metaId]);
@@ -327,16 +357,27 @@ const HeroDownload = ({ entry, links, streamingMode, onPlay, onMoreInfo, onSetPa
                             {paused ? 'Resume' : 'Pause'}
                         </Button>
                         {
+                            // Streaming DURING the download is the point of a streaming
+                            // server, so Play is offered as soon as there is a file to
+                            // play. When the torrent holds several videos there is no
+                            // single answer, so the Files button below is the way in.
                             typeof entry.fileIdx === 'number' ?
-                                <IconButton onClick={() => onPlay(entry)} title="Play" className="size-9 text-accent hover:brightness-110">
+                                <IconButton onClick={() => onPlay(entry)} title="Play (streams while it downloads)" className="size-9 text-accent hover:brightness-110">
                                     <Play className="size-5" />
                                 </IconButton>
                                 :
-                                null
+                                <Button
+                                    variant="ghost"
+                                    className={cn(GLASS_BTN, filesOpen && 'bg-white/20')}
+                                    onClick={() => setFilesOpen((open) => !open)}
+                                    title="Show the files in this torrent"
+                                >
+                                    Files
+                                </Button>
                         }
                         {
-                            typeof links?.metaLink === 'string' ?
-                                <IconButton onClick={() => onMoreInfo(links.metaLink as string)} title="More info" className="size-9 text-white/70 hover:text-white">
+                            typeof metaLink === 'string' ?
+                                <IconButton onClick={() => onMoreInfo(metaLink)} title="More info" className="size-9 text-white/70 hover:text-white">
                                     <Info className="size-5" />
                                 </IconButton>
                                 :
@@ -352,39 +393,60 @@ const HeroDownload = ({ entry, links, streamingMode, onPlay, onMoreInfo, onSetPa
                     <div className="h-full rounded-full bg-accent transition-[width] duration-700" style={{ width: `${Math.round(progress * 100)}%` }} />
                 </div>
 
-                <div className="flex flex-col gap-2.5 rounded-xl border border-white/10 bg-white/5 px-4 py-3 backdrop-blur-md">
-                    <SpeedChart speeds={speeds} peakSpeed={peak} height={48} />
-                    <div className="flex items-baseline justify-between text-[0.8rem] tabular-nums">
-                        <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-white/50">Speed</span>
-                        <span className="font-semibold text-white/90">{formatSpeed(speed)}</span>
-                    </div>
-                    <div className="flex items-baseline justify-between text-[0.8rem] tabular-nums">
-                        <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-white/50">Downloaded</span>
-                        <span className="font-semibold text-white/90">
-                            {formatBytes(entry.downloaded)}
+                {/* Same glass-and-bars treatment, a third of the height: the chart
+                    keeps its own row (the accent bars ARE the look) but a short one,
+                    and the three stats sit on ONE line instead of stacking. */}
+                <div className="flex flex-col gap-1.5 rounded-xl border border-white/10 bg-white/5 px-4 py-2.5 backdrop-blur-md">
+                    <SpeedChart speeds={speeds} peakSpeed={peak} height={26} />
+                    <div className="flex items-baseline justify-between gap-4 text-[0.8rem] tabular-nums">
+                        <span className="text-white/90">
+                            <span className="mr-1.5 text-[0.6rem] font-semibold uppercase tracking-wider text-white/50">Speed</span>
+                            <span className="font-semibold">{formatSpeed(speed)}</span>
+                        </span>
+                        <span className="text-white/90">
+                            <span className="mr-1.5 text-[0.6rem] font-semibold uppercase tracking-wider text-white/50">Done</span>
+                            <span className="font-semibold">{formatBytes(entry.downloaded)}</span>
                             <span className="text-white/45">{` / ${formatBytes(entry.total)}`}</span>
                         </span>
-                    </div>
-                    <div className="flex items-baseline justify-between text-[0.8rem] tabular-nums">
-                        <span className="text-[0.65rem] font-semibold uppercase tracking-wider text-white/50">Time left</span>
-                        <span className="font-semibold text-white/90">{paused ? '-' : formatEta(etaSeconds)}</span>
+                        <span className="text-white/90">
+                            <span className="mr-1.5 text-[0.6rem] font-semibold uppercase tracking-wider text-white/50">Left</span>
+                            <span className="font-semibold">{paused ? '-' : formatEta(etaSeconds)}</span>
+                        </span>
                     </div>
                 </div>
             </div>
+            {
+                // A pack's episodes each get their own Play here, which is how you
+                // start watching one before the whole thing has finished.
+                filesOpen ?
+                    <div className="relative">
+                        <TorrentFiles
+                            infoHash={entry.infoHash}
+                            initializing={entry.state === 'initializing'}
+                            onPlayFile={onPlayFile}
+                            onSetFileSelected={onSetFileSelected}
+                        />
+                    </div>
+                    :
+                    null
+            }
         </div>
     );
 };
 
-const Row = ({ entry, metaLink, streamingMode, onPlay, onMoreInfo, onSetPaused, onSetPinned, onDelete }: {
+const Row = ({ entry, metaLink, streamingMode, onPlay, onPlayFile, onMoreInfo, onSetPaused, onSetPinned, onSetFileSelected, onDelete }: {
     entry: CacheEntry,
     metaLink: string | null,
     streamingMode: boolean | null,
     onPlay: (entry: CacheEntry) => void,
+    onPlayFile: (infoHash: string, fileIdx: number, name: string) => void,
     onMoreInfo: (link: string) => void,
     onSetPaused: (infoHash: string, paused: boolean) => void,
     onSetPinned: (infoHash: string, pinned: boolean) => void,
+    onSetFileSelected: (infoHash: string, fileIdx: number, selected: boolean) => Promise<void> | void,
     onDelete: (infoHash: string) => void,
 }) => {
+    const [filesOpen, setFilesOpen] = useState(false);
     const progress = entry.total > 0 ? Math.min(1, entry.downloaded / entry.total) : 0;
     const complete = entry.total > 0 && entry.downloaded >= entry.total;
     const paused = entry.state === 'paused';
@@ -400,11 +462,22 @@ const Row = ({ entry, metaLink, streamingMode, onPlay, onMoreInfo, onSetPaused, 
     // that reported success and did nothing. Delete still works there.
     const pausable = !complete && (entry.state === 'live' || paused);
     return (
+        <div>
         <div className="group flex items-center gap-4 px-6 py-4 transition hover:bg-white/5">
+            {/* The advanced affordance: a torrent is a directory, and this opens it.
+                Quiet by default (a chevron, not a button) so the row still reads as
+                one title, which is what it is for almost everyone. */}
+            <IconButton
+                onClick={() => setFilesOpen((open) => !open)}
+                title={filesOpen ? 'Hide the files in this torrent' : 'Show all files in this torrent'}
+                className="-ml-2 size-6 shrink-0 text-fg-subtle hover:text-fg"
+            >
+                <ChevronRight className={cn('size-4 transition-transform', filesOpen && 'rotate-90')} />
+            </IconButton>
             <div className="min-w-0 flex-1">
                 <div className="flex min-w-0 items-center gap-2.5">
                     <div className="truncate text-sm font-medium text-fg" title={entry.name}>
-                        {entry.name || entry.infoHash}
+                        {displayName(entry)}
                     </div>
                     <QualityBadges name={entry.name} />
                 </div>
@@ -527,6 +600,18 @@ const Row = ({ entry, metaLink, streamingMode, onPlay, onMoreInfo, onSetPaused, 
                 <Trash2 className="size-5" />
             </IconButton>
         </div>
+        {
+            filesOpen ?
+                <TorrentFiles
+                    infoHash={entry.infoHash}
+                    initializing={preparing}
+                    onPlayFile={onPlayFile}
+                    onSetFileSelected={onSetFileSelected}
+                />
+                :
+                null
+        }
+        </div>
     );
 };
 
@@ -542,9 +627,11 @@ const Cached = ({ onClose }: Props) => {
     const closeCached = onClose;
     const navigate = useNavigate();
     const core = useCore();
-    const { entries, failed, setPinned, setPaused, remove } = useCachedTorrents();
+    const { entries, failed, refresh, setPinned, setPaused, setFileSelected, remove } = useCachedTorrents();
     const libraryLinks = useLibraryLinksByInfoHash();
     const streamingMode = useStreamingModeSetting();
+    // Identify anything the Player never got to write metadata for.
+    useMetadataMatcher(entries, refresh);
 
     // Prefer the FULL player deep link mined from continue watching (stream +
     // transport urls + type/id/videoId): it restores the title logo on the
@@ -577,6 +664,22 @@ const Cached = ({ onClose }: Props) => {
             })
             .catch((error) => console.error('Cached: encoding the stream failed', error));
     }, [navigate, libraryLinks, closeCached]);
+
+    // Play one specific file out of the torrent (the file browser). Always the
+    // stream-only path: the library deep link points at the title's own file,
+    // which is precisely not what was clicked here.
+    const playFile = useCallback((infoHash: string, fileIdx: number, name: string) => {
+        core.transport.encodeStream({ name, description: '', infoHash, fileIdx })
+            .then((encoded) => {
+                if (typeof encoded === 'string') {
+                    closeCached();
+                    navigate(`/player/${encodeURIComponent(encoded)}`);
+                } else {
+                    console.error('Cached: the core could not encode a stream for', infoHash, fileIdx);
+                }
+            })
+            .catch((error) => console.error('Cached: encoding the file stream failed', error));
+    }, [navigate, closeCached]);
 
     const openMetaDetails = useCallback((link: string) => {
         closeCached();
@@ -671,11 +774,14 @@ const Cached = ({ onClose }: Props) => {
                                             <HeroDownload
                                                 entry={heroEntry}
                                                 links={libraryLinks[heroEntry.infoHash]}
+                                                metaLink={metaDetailsLink(heroEntry) ?? libraryLinks[heroEntry.infoHash]?.metaLink ?? null}
                                                 streamingMode={streamingMode.enabled}
                                                 onPlay={play}
+                                                onPlayFile={playFile}
                                                 onMoreInfo={openMetaDetails}
                                                 onSetPaused={setPaused}
                                                 onSetPinned={setPinned}
+                                                onSetFileSelected={setFileSelected}
                                                 onDelete={remove}
                                             />
                                             :
@@ -686,12 +792,14 @@ const Cached = ({ onClose }: Props) => {
                                             <Row
                                                 key={entry.infoHash}
                                                 entry={entry}
-                                                metaLink={libraryLinks[entry.infoHash]?.metaLink ?? null}
+                                                metaLink={metaDetailsLink(entry) ?? libraryLinks[entry.infoHash]?.metaLink ?? null}
                                                 streamingMode={streamingMode.enabled}
                                                 onPlay={play}
+                                                onPlayFile={playFile}
                                                 onMoreInfo={openMetaDetails}
                                                 onSetPaused={setPaused}
                                                 onSetPinned={setPinned}
+                                                onSetFileSelected={setFileSelected}
                                                 onDelete={remove}
                                             />
                                         ))}

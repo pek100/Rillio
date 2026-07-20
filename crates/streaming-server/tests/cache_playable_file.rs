@@ -18,7 +18,13 @@ fn make_multi_torrent(name: &str, files: &[(&str, u64)]) -> Vec<u8> {
     let mut info = Vec::new();
     info.extend_from_slice(b"d5:filesl");
     for (fname, len) in files {
-        info.extend_from_slice(format!("d6:lengthi{len}e4:pathl{}:{fname}ee", fname.len()).as_bytes());
+        // `path` is a LIST of components: a nested file is ["extras", "clip.mp4"],
+        // never one string with a slash in it (librqbit rejects that torrent).
+        let components: String = fname
+            .split('/')
+            .map(|part| format!("{}:{part}", part.len()))
+            .collect();
+        info.extend_from_slice(format!("d6:lengthi{len}e4:pathl{components}ee").as_bytes());
     }
     info.extend_from_slice(b"e");
     info.extend_from_slice(format!("4:name{}:{name}", name.len()).as_bytes());
@@ -90,6 +96,25 @@ async fn movie_with_an_nfo_beside_it_is_still_playable() {
     assert_eq!(entry["fileIdx"], 0, "the .mkv must be the playable file");
     // The row names the movie, not the torrent/folder.
     assert_eq!(entry["name"], "Some.Movie.2026.1080p.mkv");
+}
+
+#[tokio::test]
+async fn a_movie_beside_its_extras_still_plays_the_feature() {
+    let (base, c) = spawn("extras").await;
+    add(
+        &c,
+        &base,
+        make_multi_torrent(
+            "Some.Movie.2026",
+            &[("Some.Movie.2026.mkv", 4_000_000), ("extras/behind.the.scenes.mp4", 900_000)],
+        ),
+    )
+    .await;
+
+    let entry = only_entry(&c, &base).await;
+    // Two videos, but not a coin flip: the feature dwarfs the extra.
+    assert_eq!(entry["fileIdx"], 0);
+    assert_eq!(entry["name"], "Some.Movie.2026.mkv");
 }
 
 #[tokio::test]

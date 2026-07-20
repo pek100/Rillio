@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProfile } from 'rillio/common';
 import useToast from 'rillio/common/Toast/useToast';
 import { notifyCacheChanged } from 'rillio/common/cacheEvents';
+import type { CacheMeta } from 'rillio/common/cacheMetadata';
 
 export type CacheEntry = {
     infoHash: string,
@@ -14,6 +15,9 @@ export type CacheEntry = {
     // The player marked this stream watched: with streaming mode on, an
     // un-pinned watched entry cleans up automatically about an hour later.
     watched: boolean,
+    // The addon metadata this torrent was matched to (see common/cacheMetadata),
+    // absent until it is identified.
+    meta?: CacheMeta,
     fileCount: number,
     // The single selected file's index when the entry is one playable file,
     // absent for multi-file selections. Powers the row's play button.
@@ -118,6 +122,19 @@ const useCachedTorrents = () => {
         mutate('cache/pause', { infoHash, paused }, paused ? 'Could not pause this download' : 'Could not resume this download');
     }, [serverUrl, mutate]);
 
+    // File-browser mutation: add a file in the torrent to the download
+    // selection, or drop it. No optimistic update here - the browser re-fetches
+    // its own list when this settles, and a half-applied selection is exactly
+    // the state we must not draw.
+    const setFileSelected = useCallback((infoHash: string, fileIdx: number, selected: boolean) => {
+        if (typeof serverUrl !== 'string') return Promise.resolve();
+        return mutate(
+            'cache/select',
+            { infoHash, fileIdx, selected },
+            selected ? 'Could not download this file' : 'Could not stop downloading this file',
+        );
+    }, [serverUrl, mutate]);
+
     const remove = useCallback((infoHash: string) => {
         if (typeof serverUrl !== 'string') return;
         hidden.current.add(infoHash);
@@ -131,7 +148,7 @@ const useCachedTorrents = () => {
         });
     }, [serverUrl, mutate]);
 
-    return { entries, failed, setPinned, setPaused, remove };
+    return { entries, failed, refresh, setPinned, setPaused, setFileSelected, remove };
 };
 
 export default useCachedTorrents;

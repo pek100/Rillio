@@ -244,6 +244,10 @@ pub struct Engine {
     /// entries are never touched. Persisted to [`WATCHED_FILE`] so a watched
     /// stream still cleans up after a restart.
     watched: Arc<Mutex<HashMap<String, u64>>>,
+    /// Lowercase hex infohash -> the addon metadata the media was matched to
+    /// (see [`CacheMeta`]). Persisted to [`META_FILE`] so a title identified
+    /// once stays identified across restarts.
+    meta: Arc<Mutex<HashMap<String, CacheMeta>>>,
 }
 
 /// Filename of the persisted pin set, under the cache root.
@@ -266,6 +270,37 @@ fn write_pins(cache_dir: &std::path::Path, pins: &HashSet<String>) {
     let body = serde_json::to_vec(&list).expect("pin list serializes");
     if let Err(e) = std::fs::write(cache_dir.join(PINS_FILE), body) {
         tracing::error!("pins: persisting {PINS_FILE} failed: {e}");
+    }
+}
+
+/// Filename of the persisted per-torrent metadata sidecar, under the cache root.
+const META_FILE: &str = "cache-meta.json";
+
+/// What the app knows about the media inside a torrent: the addon metadata it
+/// was matched to. Written either when playback starts from a real title in the
+/// app (we already have all of this) or, for a torrent that arrived without
+/// context, after searching the installed addons by its release name.
+///
+/// Deliberately opaque here: the server does not interpret these fields, it
+/// stores and returns them, so the web can evolve the shape (extra art, a
+/// release year, an episode label) without a server change. Only the sidecar's
+/// map shape is the server's business.
+pub type CacheMeta = serde_json::Value;
+
+fn read_meta(cache_dir: &std::path::Path) -> HashMap<String, CacheMeta> {
+    std::fs::read(cache_dir.join(META_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<HashMap<String, CacheMeta>>(&bytes).ok())
+        .unwrap_or_default()
+}
+
+/// Persist the metadata sidecar. Loud on failure: losing it means the Cache
+/// page falls back to scene filenames, which is exactly the state this exists
+/// to fix.
+fn write_meta(cache_dir: &std::path::Path, meta: &HashMap<String, CacheMeta>) {
+    let body = serde_json::to_vec(meta).expect("cache metadata serializes");
+    if let Err(e) = std::fs::write(cache_dir.join(META_FILE), body) {
+        tracing::error!("cache-meta: persisting {META_FILE} failed: {e}");
     }
 }
 
@@ -610,6 +645,7 @@ impl Engine {
         let session = Session::new_with_opts(cache_dir, opts).await?;
         let pinned = read_pins(&cache_root);
         let watched = read_watched(&cache_root);
+        let meta = read_meta(&cache_root);
         Ok(Self {
             session,
             cache_root: Arc::new(cache_root),
@@ -618,7 +654,33 @@ impl Engine {
             bt: Arc::new(Mutex::new(BtProfile::ULTRA_FAST)),
             pinned: Arc::new(Mutex::new(pinned)),
             watched: Arc::new(Mutex::new(watched)),
+            meta: Arc::new(Mutex::new(meta)),
         })
+    }
+
+    /// The stored metadata for a torrent, if it has been identified.
+    pub fn meta(&self, info_hash: &str) -> Option<CacheMeta> {
+        self.meta.lock().ok().and_then(|m| m.get(info_hash).cloned())
+    }
+
+    /// Store (or clear) a torrent's metadata; persists immediately.
+    pub fn set_meta(&self, info_hash: &str, meta: Option<CacheMeta>) {
+        if let Ok(mut m) = self.meta.lock() {
+            match meta {
+                Some(value) => {
+                    if m.get(info_hash) == Some(&value) {
+                        return;
+                    }
+                    m.insert(info_hash.to_owned(), value);
+                }
+                None => {
+                    if m.remove(info_hash).is_none() {
+                        return;
+                    }
+                }
+            }
+            write_meta(&self.cache_root, &m);
+        }
     }
 
     /// Whether the user pinned this torrent ("download to cache").
@@ -753,6 +815,22 @@ impl Engine {
                 }
             }
         }
+    }
+
+    /// Set the exact download selection (the Cache page's per-file toggles).
+    ///
+    /// Unlike [`Engine::select_file`] this can also REMOVE files, so it is the
+    /// path for "stop downloading that extra". Refuses an empty selection:
+    /// librqbit treats "no files" as a torrent that can never finish, and the
+    /// UI's delete button is the honest way to want nothing.
+    pub async fn set_selected_files(&self, handle: &Handle, files: &[usize]) -> anyhow::Result<()> {
+        if files.is_empty() {
+            anyhow::bail!("a torrent must keep at least one selected file; delete it instead");
+        }
+        self.session
+            .update_only_files(handle, &files.iter().copied().collect())
+            .await
+            .context("updating the file selection failed")
     }
 
     /// The current BitTorrent profile (for `GET /settings` and the stats echo).
@@ -976,6 +1054,7 @@ impl Engine {
             // cleanup the moment it appears).
             self.set_pinned(info_hash, false);
             self.set_watched(info_hash, false);
+            self.set_meta(info_hash, None);
             true
         } else {
             false

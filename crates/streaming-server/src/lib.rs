@@ -93,6 +93,11 @@ pub fn router(config: Config, engine: Engine) -> Router {
         .route("/cache/pin", post(cache_api::pin))
         .route("/cache/pause", post(cache_api::pause))
         .route("/cache/watched", post(cache_api::watched))
+        // The file browser: what else is inside a cached torrent, and fetching it.
+        .route("/cache/files/{info_hash}", get(cache_api::files))
+        .route("/cache/select", post(cache_api::select))
+        // What media a cached torrent actually is (addon metadata sidecar).
+        .route("/cache/meta", post(cache_api::meta))
         .route("/cache/delete", post(cache_api::delete))
         // M2 stats family (static segments; win over the {idx} stream param).
         .route("/stats.json", get(stats::stats_aggregate))
