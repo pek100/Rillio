@@ -236,7 +236,7 @@ const Row = ({ entry }: { entry: any }) => {
     );
 };
 
-const CuratedStreams = ({ streams }: { streams: any[] }) => {
+const CuratedStreams = ({ streams, leading }: { streams: any[]; leading?: React.ReactNode }) => {
     const core = useCore();
     const profile = useProfile();
     const screen = useScreenCapability();
@@ -351,8 +351,13 @@ const CuratedStreams = ({ streams }: { streams: any[] }) => {
                 <LanguagePicker value={lang} options={langOptions} onSelect={setLang} />
             </div>
 
-            {/* The picks: a horizontal carousel of invisible tiles, centered. */}
+            {/* The picks: a horizontal carousel of invisible tiles, centered.
+                `leading` holds copies already on this device (CachedStreams):
+                they belong in this row because they are sources you can play,
+                just ones that need no downloading - separated by a wider gap
+                rather than by living in their own band. */}
             <div className="mx-auto flex w-fit max-w-full gap-1 overflow-x-auto pb-1 [scrollbar-width:thin]">
+                {leading}
                 {tiles.map((p) => (
                     <Tile key={p.tierKey} label={p.label} entry={p.entry} highlighted={p.highlighted} />
                 ))}

@@ -118,6 +118,9 @@ const StreamsList = ({ className, video, type, metaId, videoId, libraryItem, onE
     // to do with whether the file is already here, and "no streams" while the
     // movie sits fully downloaded was the worst version of that.
     const cachedStreams = useCachedStreams(metaId ?? null, videoId ?? null);
+    // Whether the curated carousel will render (it is the preferred home for
+    // the on-device tiles; see the fallback below).
+    const hasCuratedStreams = filteredStreams.length > 0;
 
     return (
         <div className={cn('flex flex-col', className)}>
@@ -159,11 +162,17 @@ const StreamsList = ({ className, video, type, metaId, videoId, libraryItem, onE
                         null
                 }
             </div>
-            <CachedStreams
-                streams={cachedStreams}
-                libraryItem={libraryItem}
-                videoId={videoId ?? null}
-            />
+            {
+                // Fallback placement: with no curated carousel to sit in (no
+                // addons, or every one of them errored) the on-device copy still
+                // has to be reachable - that case is exactly when it matters most.
+                cachedStreams.length > 0 && !hasCuratedStreams ?
+                    <div className="flex flex-wrap justify-center gap-1 px-4 pt-2">
+                        <CachedStreams streams={cachedStreams} libraryItem={libraryItem} videoId={videoId ?? null} />
+                    </div>
+                    :
+                    null
+            }
             {
                 props.streams.length === 0 ?
                     <div className="flex flex-col items-center self-stretch overflow-y-auto p-4">
@@ -213,7 +222,16 @@ const StreamsList = ({ className, video, type, metaId, videoId, libraryItem, onE
                             :
                             <React.Fragment>
                                 <div className="mt-4 flex flex-1 flex-col self-stretch overflow-y-auto" ref={streamsContainerRef}>
-                                    <CuratedStreams streams={filteredStreams} />
+                                    <CuratedStreams
+                                        streams={filteredStreams}
+                                        leading={
+                                            <CachedStreams
+                                                streams={cachedStreams}
+                                                libraryItem={libraryItem}
+                                                videoId={videoId ?? null}
+                                            />
+                                        }
+                                    />
                                     {
                                         // Streams exist, so addons are already installed: a quiet
                                         // little link, not the yellow call-to-action.

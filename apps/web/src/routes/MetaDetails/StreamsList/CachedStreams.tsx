@@ -92,13 +92,13 @@ const CachedStreams = ({ streams, libraryItem, videoId }: Props) => {
         return null;
     }
 
-    // Same tile as the curated streams carousel (w-44 rounded-xl, label / source
-    // / stats), because this IS one of the sources you can play - it just
-    // happens to already be here. Set apart by the accent ring and the extra
-    // bottom margin rather than by a different shape.
+    // Bare tiles, no wrapper: these are rendered INSIDE the curated carousel
+    // (CuratedStreams' `leading`) so an on-device copy sits with the other
+    // sources rather than in a band of its own. Set apart by the accent ring
+    // and the wider right margin on the last one.
     return (
-        <div className="mb-5 flex flex-wrap justify-center gap-2.5 px-4">
-            {streams.map((entry) => {
+        <>
+            {streams.map((entry, index) => {
                 const complete = entry.total > 0 && entry.downloaded >= entry.total;
                 const pct = entry.total > 0 ? Math.min(100, Math.round((entry.downloaded / entry.total) * 100)) : 0;
                 const playable = fileIdxFor(entry) !== undefined;
@@ -116,6 +116,8 @@ const CachedStreams = ({ streams, libraryItem, videoId }: Props) => {
                         className={cn(
                             'group flex h-auto w-44 shrink-0 flex-col items-stretch justify-start gap-1 whitespace-normal rounded-xl px-3.5 py-3 text-left font-normal',
                             'bg-accent/10 ring-1 ring-inset ring-accent/30 hover:bg-accent/15',
+                            // Breathing room before the addon tiles start.
+                            index === streams.length - 1 && 'mr-4',
                         )}
                     >
                         <div className="flex items-center gap-1.5">
@@ -174,7 +176,7 @@ const CachedStreams = ({ streams, libraryItem, videoId }: Props) => {
                     </Button>
                 );
             })}
-        </div>
+        </>
     );
 };
 
