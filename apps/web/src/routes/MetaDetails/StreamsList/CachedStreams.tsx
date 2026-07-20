@@ -12,9 +12,10 @@
  */
 
 import React from 'react';
-import { Play, HardDriveDownload } from 'lucide-react';
+import { Play, HardDrive, FolderOpen } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { useCore } from 'rillio/core';
+import { openModal } from 'rillio/common/modalEvents';
 import { Button } from 'rillio/components/ui/button';
 import { cn } from 'rillio/components/ui/cn';
 import { playerDeepLink } from 'rillio/common/cacheMetadata';
@@ -91,71 +92,86 @@ const CachedStreams = ({ streams, libraryItem, videoId }: Props) => {
         return null;
     }
 
+    // Same tile as the curated streams carousel (w-44 rounded-xl, label / source
+    // / stats), because this IS one of the sources you can play - it just
+    // happens to already be here. Set apart by the accent ring and the extra
+    // bottom margin rather than by a different shape.
     return (
-        <div className="mb-3 flex flex-col gap-1.5 px-4">
-            <div className="flex items-center gap-2 text-[0.65rem] font-semibold uppercase tracking-wider text-fg-subtle">
-                <HardDriveDownload className="size-3.5" />
-                On this device
-            </div>
+        <div className="mb-5 flex flex-wrap justify-center gap-2.5 px-4">
             {streams.map((entry) => {
                 const complete = entry.total > 0 && entry.downloaded >= entry.total;
                 const pct = entry.total > 0 ? Math.min(100, Math.round((entry.downloaded / entry.total) * 100)) : 0;
                 const playable = fileIdxFor(entry) !== undefined;
                 return (
-                    <div
+                    <Button
                         key={entry.infoHash}
-                        className="group flex items-center gap-3 rounded-lg bg-accent/10 px-3 py-2.5 transition hover:bg-accent/15"
+                        variant="ghost"
+                        onClick={playable ? () => play(entry) : undefined}
+                        title={
+                            playable ?
+                                (complete ? 'Play from this device' : 'Play (streams while it downloads)')
+                                :
+                                'This torrent holds several videos; open it in Cache to pick one'
+                        }
+                        className={cn(
+                            'group flex h-auto w-44 shrink-0 flex-col items-stretch justify-start gap-1 whitespace-normal rounded-xl px-3.5 py-3 text-left font-normal',
+                            'bg-accent/10 ring-1 ring-inset ring-accent/30 hover:bg-accent/15',
+                        )}
                     >
-                        <div className="min-w-0 flex-1">
-                            <div className="truncate text-sm font-medium text-fg" title={entry.name}>
-                                {complete ? 'Downloaded' : 'Downloading'}
-                                <span className="ml-2 text-xs font-normal text-fg-muted">
-                                    {
-                                        complete ?
-                                            formatBytes(entry.downloaded)
-                                            :
-                                            `${pct}% of ${formatBytes(entry.total)}`
-                                    }
-                                </span>
-                            </div>
-                            <div className="mt-0.5 truncate text-[0.6875rem] text-fg-subtle" title={entry.name}>
-                                {
-                                    resumeMs !== null ?
-                                        <>
-                                            <span className="text-accent">{formatOffset(resumeMs)}</span>
-                                            {duration > 0 ? ` of ${formatOffset(duration).replace(' in', '')}` : null}
-                                            <span>{' · '}</span>
-                                        </>
-                                        :
-                                        null
-                                }
-                                {entry.name}
-                            </div>
+                        <div className="flex items-center gap-1.5">
+                            <HardDrive className="size-3.5 shrink-0 text-accent" />
+                            <span className="text-sm font-semibold text-accent">
+                                {complete ? 'Downloaded' : `${pct}%`}
+                            </span>
                             {
-                                !complete && entry.total > 0 ?
-                                    <div className="mt-1.5 h-0.5 w-full overflow-hidden rounded-full bg-surface">
-                                        <div className="h-full rounded-full bg-accent transition-[width] duration-700" style={{ width: `${pct}%` }} />
-                                    </div>
+                                playable ?
+                                    <Play className="size-3.5 shrink-0 text-accent" />
+                                    :
+                                    null
+                            }
+                            {/* Nested control, same idiom as the carousel's
+                                download-to-cache button: it must not trigger the
+                                card's own play. */}
+                            <Button
+                                variant="ghost"
+                                tabIndex={-1}
+                                title="Open in Cache"
+                                onClick={(event: React.MouseEvent) => {
+                                    event.preventDefault();
+                                    event.stopPropagation();
+                                    openModal('cached');
+                                }}
+                                className="ml-auto size-6 shrink-0 p-0 text-fg-subtle opacity-0 transition hover:bg-white/10 hover:text-fg group-hover:opacity-100"
+                            >
+                                <FolderOpen className="size-3.5" />
+                            </Button>
+                        </div>
+                        <div className="truncate text-xs text-fg-muted">
+                            {
+                                resumeMs !== null ?
+                                    `Stopped ${formatOffset(resumeMs)}`
+                                    :
+                                    complete ? 'On this device' : 'Downloading now'
+                            }
+                        </div>
+                        <div className="flex items-center gap-2 text-[11px] tabular-nums text-fg-subtle">
+                            <span>{complete ? formatBytes(entry.downloaded) : `${formatBytes(entry.downloaded)} of ${formatBytes(entry.total)}`}</span>
+                            {
+                                resumeMs !== null && duration > 0 ?
+                                    <span>{formatOffset(duration).replace(' in', '')}</span>
                                     :
                                     null
                             }
                         </div>
                         {
-                            // Streams while it downloads, so an incomplete entry is
-                            // still worth pressing.
-                            playable ?
-                                <Button
-                                    onClick={() => play(entry)}
-                                    title={complete ? 'Play from this device' : 'Play (streams while it downloads)'}
-                                    className={cn('h-9 shrink-0 gap-2 px-4 text-sm font-semibold')}
-                                >
-                                    <Play className="size-4" />
-                                    {resumeMs !== null ? 'Resume' : 'Play'}
-                                </Button>
+                            !complete && entry.total > 0 ?
+                                <div className="mt-1 h-0.5 w-full overflow-hidden rounded-full bg-black/30">
+                                    <div className="h-full rounded-full bg-accent transition-[width] duration-700" style={{ width: `${pct}%` }} />
+                                </div>
                                 :
                                 null
                         }
-                    </div>
+                    </Button>
                 );
             })}
         </div>
