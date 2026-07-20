@@ -286,6 +286,9 @@ pub fn run() {
     // leftover is stale.
     #[cfg(desktop)]
     let _ = std::fs::remove_file(update_window::progress_path());
+    // ...and the staged updater copy that ran the splash (see update_window).
+    #[cfg(desktop)]
+    update_window::cleanup_updater_copy();
 
     if platform::PlatformCaps::current().webview2_cache {
         clear_stale_webview_cache(

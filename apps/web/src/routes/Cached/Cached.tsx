@@ -5,6 +5,7 @@ import { toPath } from 'rillio-router';
 import { useCore } from 'rillio/core';
 import { useProfile } from 'rillio/common';
 import { fetchStreamingModeEnabled, postStreamingModeEnabled } from 'rillio/common/streamingMode';
+import { playerDeepLink } from 'rillio/common/cacheMetadata';
 import { Button, IconButton, ModalRoute, Switch, cn } from 'rillio/components/ui';
 import AnimatedPercentage from 'rillio/components/ui/animated-percentage';
 import SpeedChart from 'rillio/components/ui/speed-chart';
@@ -657,7 +658,10 @@ const Cached = ({ onClose }: Props) => {
             .then((encoded) => {
                 if (typeof encoded === 'string') {
                     closeCached();
-                    navigate(`/player/${encodeURIComponent(encoded)}`);
+                    // With saved metadata this is the SAME deep link a catalog
+                    // play produces (meta + library progress + next episode);
+                    // without it, the bare stream as before.
+                    navigate(playerDeepLink(encoded, entry.meta));
                 } else {
                     console.error('Cached: the core could not encode a stream for', entry.infoHash);
                 }

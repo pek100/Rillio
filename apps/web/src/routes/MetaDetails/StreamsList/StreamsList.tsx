@@ -23,6 +23,8 @@ import { Button } from 'rillio/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from 'rillio/components/ui/select';
 import { cn } from 'rillio/components/ui/cn';
 import CuratedStreams from './CuratedStreams';
+import CachedStreams from './CachedStreams';
+import useCachedStreams from './useCachedStreams';
 import StreamPlaceholder from './StreamPlaceholder';
 import SeasonEpisodePicker from '../EpisodePicker';
 
@@ -37,10 +39,15 @@ type Props = {
     streams: any[];
     video?: any;
     type?: string;
+    // Identity of what is on screen, so already-downloaded copies of THIS title
+    // can be surfaced above the addon streams (see CachedStreams).
+    metaId?: string | null;
+    videoId?: string | null;
+    libraryItem?: any;
     onEpisodeSearch?: (season: number, episode: number) => void;
 };
 
-const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Props) => {
+const StreamsList = ({ className, video, type, metaId, videoId, libraryItem, onEpisodeSearch, ...props }: Props) => {
     const { t } = useTranslation();
     const platform = usePlatform();
     const profile = useProfile();
@@ -106,6 +113,12 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Prop
         onEpisodeSearch?.(season, episode);
     }, [onEpisodeSearch]);
 
+    // Copies of this title already on disk. Rendered OUTSIDE the addon-state
+    // branches below: whether addons are loading, empty or erroring has nothing
+    // to do with whether the file is already here, and "no streams" while the
+    // movie sits fully downloaded was the worst version of that.
+    const cachedStreams = useCachedStreams(metaId ?? null, videoId ?? null);
+
     return (
         <div className={cn('flex flex-col', className)}>
             <div className="z-[2] mx-4 mt-4 flex items-center gap-x-2">
@@ -146,6 +159,11 @@ const StreamsList = ({ className, video, type, onEpisodeSearch, ...props }: Prop
                         null
                 }
             </div>
+            <CachedStreams
+                streams={cachedStreams}
+                libraryItem={libraryItem}
+                videoId={videoId ?? null}
+            />
             {
                 props.streams.length === 0 ?
                     <div className="flex flex-col items-center self-stretch overflow-y-auto p-4">

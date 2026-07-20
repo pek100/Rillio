@@ -45,6 +45,14 @@ const useCacheMetadata = ({ infoHash, serverUrl, player }: Args) => {
             videoId: typeof videoId === 'string' && videoId !== metaId ? videoId : null,
             season: player.seriesInfo?.season ?? null,
             episode: player.seriesInfo?.episode ?? null,
+            // The exact addons the core resolved this playback through - the
+            // authoritative values, so replaying from the cache reproduces this
+            // session rather than guessing at an addon.
+            metaTransportUrl: player.selected?.metaRequest?.base ?? null,
+            streamTransportUrl: player.selected?.streamRequest?.base ?? null,
+            // The file actually being played, which for a season pack is the
+            // only way to know which episode is which.
+            fileIdx: typeof player.selected?.stream?.fileIdx === 'number' ? player.selected.stream.fileIdx : null,
         };
 
         saveCacheMeta(serverUrl, infoHash, meta)

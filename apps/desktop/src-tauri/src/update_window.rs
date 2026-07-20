@@ -46,17 +46,58 @@ pub fn write_progress(progress: &UpdateProgress) {
     }
 }
 
-/// Spawn the detached update-window process (the same exe, `--update-window`).
-/// Called by `install_update` before it hides the main window.
+/// Where the splash runs from: a COPY of this exe under a DIFFERENT NAME.
+///
+/// ★ This is not a detail, it is the whole reason updates work. The NSIS
+/// installer runs SILENTLY (`installMode: quiet` -> `/S /R`) and starts by
+/// looking for a running process literally named `rillio-desktop.exe`
+/// (`CheckIfAppIsRunning` in tauri-bundler's utils.nsh). Running the splash
+/// from the installed binary meant the installer found "the app" still running
+/// AND could not overwrite the locked exe - and its silent-mode failure path
+/// writes a red line to a console a windowed installer does not have and then
+/// `Abort`s, installing NOTHING and reporting NOTHING. The user was relaunched
+/// onto the OLD version by the backstop below, so a failed update looked like a
+/// successful one (v0.1.24 -> v0.1.25, 2026-07-21).
+///
+/// A copy under another name is invisible to that check and holds no lock on
+/// the install directory, so the installer can replace every file while the
+/// splash keeps showing progress - which is the point of having a splash.
+fn updater_copy_path() -> std::path::PathBuf {
+    std::env::temp_dir().join("rillio-updater.exe")
+}
+
+/// Delete a leftover updater copy (called on normal boot). Best-effort: it may
+/// still be running for a moment after the relaunch, and temp is self-cleaning.
+pub fn cleanup_updater_copy() {
+    let _ = std::fs::remove_file(updater_copy_path());
+}
+
+/// Spawn the detached update-window process. Called by `install_update` before
+/// it hides the main window.
+///
+/// The splash is presentation only: every failure here degrades to "no splash",
+/// never to "no update".
 pub fn spawn_update_window() {
     let Ok(exe) = std::env::current_exe() else {
         tracing::warn!("update-window: current_exe unavailable, skipping the splash");
         return;
     };
-    match std::process::Command::new(exe).arg("--update-window").spawn() {
-        Ok(_) => tracing::info!("update-window: splash process spawned"),
-        // The splash is presentation only: an update must never fail because
-        // the pretty window could not start.
+    // Run from a renamed copy (see updater_copy_path). If the copy fails we do
+    // NOT fall back to launching the installed exe: that is the exact collision
+    // that silently breaks the install. No splash is strictly better.
+    let splash = updater_copy_path();
+    if let Err(e) = std::fs::copy(&exe, &splash) {
+        tracing::warn!("update-window: could not stage the splash copy ({e}); continuing without it");
+        return;
+    }
+    // The app's real path rides along: the copy cannot use current_exe() to
+    // relaunch Rillio (that would relaunch the updater, forever).
+    match std::process::Command::new(&splash)
+        .arg("--update-window")
+        .arg(&exe)
+        .spawn()
+    {
+        Ok(_) => tracing::info!("update-window: splash process spawned from {}", splash.display()),
         Err(e) => tracing::warn!("update-window: could not spawn the splash: {e}"),
     }
 }
@@ -65,8 +106,15 @@ pub fn spawn_update_window() {
 /// server, no state) with one small frameless window on its OWN WebView2
 /// profile, polling the progress file until the update finishes.
 pub fn run(ctx: tauri::Context<tauri::Wry>) {
+    // The installed app's path, handed over by spawn_update_window. This
+    // process is a renamed COPY, so current_exe() would relaunch the updater
+    // rather than Rillio.
+    let app_exe: Option<std::path::PathBuf> = std::env::args_os()
+        .skip_while(|arg| arg != "--update-window")
+        .nth(1)
+        .map(std::path::PathBuf::from);
     let result = tauri::Builder::default()
-        .setup(|app| {
+        .setup(move |app| {
             let mut builder = tauri::WebviewWindowBuilder::new(
                 app,
                 "update",
@@ -129,15 +177,28 @@ pub fn run(ctx: tauri::Context<tauri::Wry>) {
                                 last_payload = raw.clone();
                                 let _ = window.eval(&format!("window.__updateState({raw})"));
                             }
-                            // Backstop: NSIS quiet mode should relaunch the app
-                            // itself; if the install phase drags on far beyond any
-                            // sane install time, relaunch manually so the user is
-                            // never stranded (single-instance makes a duplicate
-                            // launch harmless: it just focuses the running app).
+                            // ★ The install did NOT complete.
+                            //
+                            // Success deletes this file (the relaunched new app
+                            // clears it on boot), so still being here after a
+                            // generous install window means the installer failed
+                            // or aborted - and NSIS aborts SILENTLY in quiet mode
+                            // (see updater_copy_path). This used to just relaunch
+                            // the app and exit, which presented a failed update as
+                            // a successful one: the user got the old version back
+                            // with no error at all. Say it plainly instead, then
+                            // put them back in the working app they had.
                             if let Some(t0) = installing_since {
-                                if t0.elapsed() > Duration::from_secs(90) {
-                                    if let Ok(exe) = std::env::current_exe() {
-                                        let _ = std::process::Command::new(exe).spawn();
+                                if t0.elapsed() > Duration::from_secs(120) {
+                                    tracing::error!("update-window: install did not complete; reporting failure");
+                                    let payload = serde_json::json!({
+                                        "phase": "error",
+                                        "message": "The update could not be installed. Rillio will reopen on the current version; you can download the latest installer from rillio.app.",
+                                    });
+                                    let _ = window.eval(&format!("window.__updateState({payload})"));
+                                    std::thread::sleep(Duration::from_secs(8));
+                                    if let Some(app_exe) = app_exe.as_ref() {
+                                        let _ = std::process::Command::new(app_exe).spawn();
                                     }
                                     std::process::exit(0);
                                 }

@@ -248,6 +248,9 @@ const MetaDetails = () => {
                                 streams={metaDetails.streams}
                                 video={video}
                                 type={streamPath.type}
+                                metaId={metaPath?.id ?? streamPath.id}
+                                videoId={streamPath.id}
+                                libraryItem={metaDetails.libraryItem}
                                 onEpisodeSearch={handleEpisodeSearch}
                             />
                             :

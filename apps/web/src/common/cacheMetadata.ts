@@ -37,6 +37,38 @@ export type CacheMeta = {
     videoId?: string | null,
     season?: number | null,
     episode?: number | null,
+    // The addons this title resolves through. Kept so playing from the cache can
+    // build the FULL player deep link (`/player/:stream/:streamTransportUrl?
+    // /:metaTransportUrl?/:type?/:id?/:videoId?`) and therefore load exactly the
+    // way a catalog play does: real metadata, library progress, next episode.
+    // Without them the player only ever gets a bare stream.
+    metaTransportUrl?: string | null,
+    streamTransportUrl?: string | null,
+    // Which file inside the torrent this title/episode is. A season pack has no
+    // single playable file (`fileIdx` on the cache entry is absent by design),
+    // but on ONE episode's page we know exactly which one is wanted - this is
+    // how that page can still offer Play.
+    fileIdx?: number | null,
+};
+
+/**
+ * The full player deep link for an identified cached torrent, or null when we
+ * only know the stream. `encodedStream` comes from core.transport.encodeStream.
+ *
+ * Mirrors the route's positional shape, so a missing streamTransportUrl still
+ * has to occupy its slot - the meta addon stands in, which is what the core
+ * itself does for a stream that came from a title's own addon.
+ */
+export const playerDeepLink = (encodedStream: string, meta: CacheMeta | undefined): string => {
+    const stream = encodeURIComponent(encodedStream);
+    const metaUrl = meta?.metaTransportUrl;
+    if (meta === undefined || typeof metaUrl !== 'string' || metaUrl.length === 0) {
+        return `/player/${stream}`;
+    }
+    const streamUrl = meta.streamTransportUrl ?? metaUrl;
+    const videoId = meta.videoId ?? meta.metaId;
+    return `/player/${stream}/${encodeURIComponent(streamUrl)}/${encodeURIComponent(metaUrl)}` +
+        `/${encodeURIComponent(meta.type)}/${encodeURIComponent(meta.metaId)}/${encodeURIComponent(videoId)}`;
 };
 
 export const saveCacheMeta = (serverUrl: string, infoHash: string, meta: CacheMeta | null): Promise<void> =>
@@ -110,7 +142,7 @@ export type AddonLike = {
     },
 };
 
-type SearchableCatalog = { base: string, type: string, id: string };
+type SearchableCatalog = { base: string, type: string, id: string, transportUrl: string };
 
 /** Installed catalogs that accept a `search` extra, for the types we care about. */
 const searchableCatalogs = (addons: AddonLike[], type: string): SearchableCatalog[] =>
@@ -124,7 +156,7 @@ const searchableCatalogs = (addons: AddonLike[], type: string): SearchableCatalo
                 const supported = catalog.extraSupported ?? (catalog.extra ?? []).map((extra) => extra?.name);
                 return Array.isArray(supported) && supported.includes('search');
             })
-            .map((catalog) => ({ base, type, id: catalog.id as string }));
+            .map((catalog) => ({ base, type, id: catalog.id as string, transportUrl }));
     });
 
 type MetaPreviewLike = {
@@ -146,7 +178,11 @@ const normalizeTitle = (title: string): string =>
 
 const REQUEST_TIMEOUT_MS = 8000;
 
-const fetchCatalogSearch = (catalog: SearchableCatalog, query: string): Promise<MetaPreviewLike[]> => {
+/** A search hit, tagged with the addon that returned it (see CacheMeta's
+ *  transport urls: that addon is also where the title's meta comes from). */
+type SearchHit = { meta: MetaPreviewLike, transportUrl: string };
+
+const fetchCatalogSearch = (catalog: SearchableCatalog, query: string): Promise<SearchHit[]> => {
     const url = `${catalog.base}/catalog/${encodeURIComponent(catalog.type)}/${encodeURIComponent(catalog.id)}/search=${encodeURIComponent(query)}.json`;
     // A dead or slow addon must not hang the matcher: every addon in the
     // profile is contacted, and one of them being down is routine.
@@ -154,8 +190,8 @@ const fetchCatalogSearch = (catalog: SearchableCatalog, query: string): Promise<
     const timer = setTimeout(() => abort.abort(), REQUEST_TIMEOUT_MS);
     return fetch(url, { signal: abort.signal })
         .then((resp) => (resp.ok ? resp.json() : Promise.reject(new Error(String(resp.status)))))
-        .then((body: { metas?: MetaPreviewLike[] }) => body?.metas ?? [])
-        .catch(() => [])
+        .then((body: { metas?: MetaPreviewLike[] }) => (body?.metas ?? []).map((meta) => ({ meta, transportUrl: catalog.transportUrl })))
+        .catch((): SearchHit[] => [])
         .finally(() => clearTimeout(timer));
 };
 
@@ -176,13 +212,14 @@ export const matchRelease = async (addons: AddonLike[], parsed: ParsedRelease): 
         const catalogs = searchableCatalogs(addons, type);
         if (catalogs.length === 0) continue;
         const results = (await Promise.all(catalogs.map((catalog) => fetchCatalogSearch(catalog, parsed.title)))).flat();
-        const candidates = results.filter((meta) => str(meta.id) !== null && normalizeTitle(String(meta.name ?? '')) === wanted);
+        const candidates = results.filter((r) => str(r.meta.id) !== null && normalizeTitle(String(r.meta.name ?? '')) === wanted);
         if (candidates.length === 0) continue;
         // Prefer the candidate whose year matches the release's, when both are known.
-        const best = (parsed.year !== null ?
-            candidates.find((meta) => str(meta.releaseInfo)?.startsWith(parsed.year as string))
+        const hit = (parsed.year !== null ?
+            candidates.find((c) => str(c.meta.releaseInfo)?.startsWith(parsed.year as string))
             :
             undefined) ?? candidates[0];
+        const best = hit.meta;
         return {
             metaId: String(best.id),
             type: str(best.type) ?? type,
@@ -197,6 +234,10 @@ export const matchRelease = async (addons: AddonLike[], parsed: ParsedRelease): 
                 `${String(best.id)}:${parsed.season}:${parsed.episode}`
                 :
                 null,
+            // The addon that knew this title also serves its meta, so playing
+            // from the cache can load it natively.
+            metaTransportUrl: hit.transportUrl,
+            streamTransportUrl: null,
         };
     }
     return null;
