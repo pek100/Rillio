@@ -18,9 +18,13 @@ const Info = ({ streamingServer }: Props) => {
 
     return (
         <Section className="hidden max-[1000px]:flex">
+            {/* Rillio's OWN version. process.env.VERSION is the web bundle's,
+                still carrying upstream's 5.0.0-beta.x, which read as a different
+                app entirely next to an updater that ships 0.1.x. The shell knows
+                the real one; the browser build has no shell, so it falls back. */}
             <Option label={t('SETTINGS_APP_VERSION')}>
                 <div className="w-full truncate text-fg">
-                    {process.env.VERSION}
+                    {typeof shell.state.version === 'string' ? shell.state.version : process.env.VERSION}
                 </div>
             </Option>
             <Option label={t('SETTINGS_BUILD_VERSION')}>
@@ -36,14 +40,7 @@ const Info = ({ streamingServer }: Props) => {
                         </div>
                     </Option>
             }
-            {
-                typeof shell.state.version === 'string' &&
-                    <Option label={t('SETTINGS_SHELL_VERSION')}>
-                        <div className="w-full truncate text-fg">
-                            {shell.state.version}
-                        </div>
-                    </Option>
-            }
+            {/* No separate "Shell version" row: it is the app version above. */}
         </Section>
     );
 };
