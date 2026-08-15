@@ -34,6 +34,71 @@ type MpvRequestLogMessages = unsafe extern "C" fn(*mut c_void, *const c_char) ->
 type MpvGetPropertyString = unsafe extern "C" fn(*mut c_void, *const c_char) -> *mut c_char;
 type MpvFree = unsafe extern "C" fn(*mut c_void);
 
+// ---------------------------------------------------------------------------
+// stream_cb: custom read-only protocols (mpv/stream_cb.h)
+// ---------------------------------------------------------------------------
+//
+// Lets us hand mpv the bytes directly instead of going through a loopback HTTP
+// socket. mpv calls these SYNCHRONOUSLY from its demuxer/stream threads, and
+// blocking in them is expected (that is exactly how a network stream behaves).
+//
+// Contract (mpv/stream_cb.h), reproduced here because we hand-declare the ABI:
+//   open_fn(user_data, uri, info) -> 0 on success, a negative mpv error
+//     (MPV_ERROR_LOADING_FAILED) otherwise. `uri` is the FULL url including the
+//     `scheme://` prefix. On success the callee fills `info` (cookie + fn ptrs).
+//   read_fn(cookie, buf, nbytes) -> bytes read; 0 means EOF; negative = error.
+//   seek_fn(cookie, offset) -> the new absolute position, or a negative error
+//     (MPV_ERROR_UNSUPPORTED for a non-seekable stream).
+//   size_fn(cookie) -> the stream length, or MPV_ERROR_UNSUPPORTED if unknown.
+//   close_fn(cookie) -> release the cookie. mpv_terminate_destroy calls this for
+//     every still-open stream, so the cookie must stay valid until then.
+//   cancel_fn(cookie) -> called from ANOTHER thread to abort a blocked read or
+//     seek. Optional; NULL means "not cancellable".
+
+/// `mpv_stream_cb_read_fn`.
+pub type MpvStreamCbReadFn = unsafe extern "C" fn(*mut c_void, *mut c_char, u64) -> i64;
+/// `mpv_stream_cb_seek_fn` (absolute offset).
+pub type MpvStreamCbSeekFn = unsafe extern "C" fn(*mut c_void, i64) -> i64;
+/// `mpv_stream_cb_size_fn`.
+pub type MpvStreamCbSizeFn = unsafe extern "C" fn(*mut c_void) -> i64;
+/// `mpv_stream_cb_close_fn`.
+pub type MpvStreamCbCloseFn = unsafe extern "C" fn(*mut c_void);
+/// `mpv_stream_cb_cancel_fn`.
+pub type MpvStreamCbCancelFn = unsafe extern "C" fn(*mut c_void);
+/// `mpv_stream_cb_open_ro_fn`.
+pub type MpvStreamCbOpenRoFn =
+    unsafe extern "C" fn(*mut c_void, *mut c_char, *mut MpvStreamCbInfo) -> c_int;
+
+/// `mpv_stream_cb_info` - what `open_fn` fills in. Every function pointer is
+/// declared `Option<..>` so a NULL (unsupported) entry is expressible; mpv reads
+/// NULL as "this operation is not available".
+#[repr(C)]
+pub struct MpvStreamCbInfo {
+    pub cookie: *mut c_void,
+    pub read_fn: Option<MpvStreamCbReadFn>,
+    pub seek_fn: Option<MpvStreamCbSeekFn>,
+    pub size_fn: Option<MpvStreamCbSizeFn>,
+    pub close_fn: Option<MpvStreamCbCloseFn>,
+    pub cancel_fn: Option<MpvStreamCbCancelFn>,
+}
+
+type MpvStreamCbAddRo =
+    unsafe extern "C" fn(*mut c_void, *const c_char, *mut c_void, MpvStreamCbOpenRoFn) -> c_int;
+
+/// `MPV_ERROR_UNSUPPORTED` - the documented return for a stream that cannot
+/// seek or cannot report its size.
+pub const MPV_ERROR_UNSUPPORTED: i64 = -18;
+/// `MPV_ERROR_LOADING_FAILED` - the documented `open_fn` failure code.
+pub const MPV_ERROR_LOADING_FAILED: c_int = -13;
+/// `MPV_ERROR_GENERIC`.
+pub const MPV_ERROR_GENERIC: i64 = -20;
+
+/// The client API version that introduced `mpv_stream_cb_add_ro` (mpv 0.24,
+/// client API 1.24). Shipped libmpv-2 builds are 2.x, so this is a floor, not a
+/// realistic gate; it exists so an ancient DLL degrades to the HTTP path instead
+/// of calling a symbol whose ABI predates the one declared above.
+pub const MPV_CLIENT_API_STREAM_CB: c_ulong = (1 << 16) | 24;
+
 // mpv_format values (mpv/client.h). We observe every property as NODE so the
 // event carries a self-describing value we can map straight to JSON.
 const MPV_FORMAT_STRING: c_int = 1;
@@ -129,6 +194,18 @@ struct Api {
     request_log_messages: MpvRequestLogMessages,
     get_property_string: MpvGetPropertyString,
     free: MpvFree,
+    /// OPTIONAL - a libmpv that predates stream_cb (or a stripped build) simply
+    /// does not export this. Loading must NOT fail in that case: the caller
+    /// falls back to the HTTP stream URL. Every symbol above stays mandatory.
+    stream_cb_add_ro: Option<MpvStreamCbAddRo>,
+}
+
+/// A `user_data` block handed to `mpv_stream_cb_add_ro`, plus the function that
+/// frees it. mpv keeps the pointer for the lifetime of the mpv core, so we free
+/// these only after `mpv_terminate_destroy` has returned.
+struct StreamCbUserData {
+    ptr: *mut c_void,
+    free: unsafe extern "C" fn(*mut c_void),
 }
 
 /// A loaded mpv instance. `Drop` destroys it. Not `Sync`; drive it from one
@@ -136,6 +213,9 @@ struct Api {
 pub struct Mpv {
     api: Api,
     ctx: *mut c_void,
+    /// Registered stream_cb `user_data` blocks, freed in `Drop` after
+    /// `mpv_terminate_destroy` (which itself closes any still-open stream).
+    stream_cb_user_data: std::sync::Mutex<Vec<StreamCbUserData>>,
     // The Library must outlive every function pointer above; dropped last.
     _lib: Library,
 }
@@ -163,6 +243,18 @@ impl Mpv {
                     *s
                 }};
             }
+            // Optional symbol: absent DLL => None => HTTP fallback, never a
+            // load failure. Deliberately NOT the `sym!` macro, which hard-fails.
+            let stream_cb_add_ro = lib
+                .get::<MpvStreamCbAddRo>(b"mpv_stream_cb_add_ro\0")
+                .map(|s| *s)
+                .ok();
+            if stream_cb_add_ro.is_none() {
+                tracing::warn!(
+                    "mpv: {dll_path:?} does not export mpv_stream_cb_add_ro; \
+                     in-process streaming is unavailable (HTTP fallback)"
+                );
+            }
             let api = Api {
                 client_api_version: sym!("mpv_client_api_version", MpvClientApiVersion),
                 create: sym!("mpv_create", MpvCreate),
@@ -177,13 +269,70 @@ impl Mpv {
                 request_log_messages: sym!("mpv_request_log_messages", MpvRequestLogMessages),
                 get_property_string: sym!("mpv_get_property_string", MpvGetPropertyString),
                 free: sym!("mpv_free", MpvFree),
+                stream_cb_add_ro,
             };
             let ctx = (api.create)();
             if ctx.is_null() {
                 return Err("mpv_create returned null".into());
             }
-            Ok(Self { api, ctx, _lib: lib })
+            Ok(Self {
+                api,
+                ctx,
+                stream_cb_user_data: std::sync::Mutex::new(Vec::new()),
+                _lib: lib,
+            })
         }
+    }
+
+    /// Whether this DLL can serve a custom protocol in-process: the optional
+    /// `mpv_stream_cb_add_ro` symbol is present AND the client API is new enough
+    /// for the ABI declared above. `false` means the caller must keep using the
+    /// HTTP stream URL.
+    pub fn supports_stream_cb(&self) -> bool {
+        self.api.stream_cb_add_ro.is_some()
+            && self.client_api_version() >= MPV_CLIENT_API_STREAM_CB
+    }
+
+    /// Register a custom read-only protocol (`mpv_stream_cb_add_ro`).
+    ///
+    /// `protocol` is the bare scheme (`"rillio"` for `rillio://...`). `open_fn`
+    /// is invoked by mpv with `user_data` and the FULL uri whenever a matching
+    /// url is loaded.
+    ///
+    /// Returns `Err` when the symbol is missing or the client API is too old
+    /// (see [`supports_stream_cb`](Self::supports_stream_cb)); the caller then
+    /// falls back to HTTP. Call this BEFORE [`initialize`](Self::initialize).
+    ///
+    /// # Safety
+    /// `user_data` must stay valid until this `Mpv` is dropped; on success this
+    /// instance takes ownership and calls `free_user_data` after
+    /// `mpv_terminate_destroy`. On `Err` ownership stays with the caller.
+    /// `open_fn` must be unwind-safe (never let a Rust panic cross into mpv).
+    pub unsafe fn add_stream_protocol(
+        &self,
+        protocol: &str,
+        user_data: *mut c_void,
+        open_fn: MpvStreamCbOpenRoFn,
+        free_user_data: unsafe extern "C" fn(*mut c_void),
+    ) -> Result<(), String> {
+        let Some(add_ro) = self.api.stream_cb_add_ro else {
+            return Err("libmpv does not export mpv_stream_cb_add_ro".into());
+        };
+        let version = self.client_api_version();
+        if version < MPV_CLIENT_API_STREAM_CB {
+            return Err(format!(
+                "libmpv client API {:#x} is older than the stream_cb ABI {:#x}",
+                version, MPV_CLIENT_API_STREAM_CB
+            ));
+        }
+        let p = cstr(protocol)?;
+        self.check(add_ro(self.ctx, p.as_ptr(), user_data, open_fn))?;
+        // Only registered blocks are owned; a failed add leaves the caller's.
+        match self.stream_cb_user_data.lock() {
+            Ok(mut v) => v.push(StreamCbUserData { ptr: user_data, free: free_user_data }),
+            Err(e) => return Err(format!("stream_cb registry lock poisoned: {e}")),
+        }
+        Ok(())
     }
 
     /// The libmpv client API version the loaded DLL reports (sanity check).
@@ -320,7 +469,14 @@ impl Mpv {
 
 impl Drop for Mpv {
     fn drop(&mut self) {
+        // terminate_destroy calls close_fn for every still-open stream, so the
+        // stream_cb user_data blocks must only be freed AFTER it returns.
         unsafe { (self.api.terminate_destroy)(self.ctx) }
+        if let Ok(mut blocks) = self.stream_cb_user_data.lock() {
+            for b in blocks.drain(..) {
+                unsafe { (b.free)(b.ptr) }
+            }
+        }
     }
 }
 
@@ -504,5 +660,37 @@ mod tests {
         mpv.initialize().expect("mpv_initialize");
         // A benign runtime property set proves the live handle works.
         mpv.set_property("volume", "100").expect("set volume");
+    }
+
+    /// The stream_cb symbol is OPTIONAL: an absent one must degrade to "no
+    /// in-process byte plane", never to a failed [`Mpv::load`]. Proven on the
+    /// mechanism (the same libloading probe, against a name no DLL exports)
+    /// plus the fact that load succeeds either way.
+    #[test]
+    fn optional_stream_cb_symbol_never_fails_load() {
+        let Some(dll) = dev_dll() else {
+            eprintln!("[skip] no libmpv-2.dll found");
+            return;
+        };
+        let mpv = Mpv::load(&dll).expect("load libmpv");
+        unsafe {
+            let lib = Library::new(&dll).expect("reopen libmpv");
+            let absent = lib
+                .get::<MpvStreamCbAddRo>(b"mpv_stream_cb_add_ro_not_a_real_symbol\0")
+                .map(|s| *s)
+                .ok();
+            assert!(absent.is_none(), "a missing symbol must probe as None");
+            let present = lib
+                .get::<MpvStreamCbAddRo>(b"mpv_stream_cb_add_ro\0")
+                .map(|s| *s)
+                .ok();
+            eprintln!(
+                "[stream_cb] {dll:?}: exports mpv_stream_cb_add_ro = {}, api = {:#x}",
+                present.is_some(),
+                mpv.client_api_version()
+            );
+        }
+        // Whatever the DLL exports, load itself succeeded.
+        assert!(mpv.client_api_version() >= (2 << 16));
     }
 }

@@ -6,6 +6,8 @@ import { useSearchParams } from 'react-router-dom';
 import debounce from 'lodash.debounce';
 import { useTranslation } from 'react-i18next';
 import useRouteFocused from 'rillio/common/useRouteFocused';
+import { serverFetch } from 'rillio/common/serverFetch';
+import { rewriteServerUrl } from 'rillio/common/serverAddress';
 import { useCore } from 'rillio/core';
 import { useServices, useGamepad } from 'rillio/services';
 import { useContentGamepadNavigation } from 'rillio/services/GamepadNavigation';
@@ -367,7 +369,7 @@ const Player = () => {
             const stream = player.selected !== null ? player.selected.stream : null;
             const serverUrl = profile.settings.streamingServerUrl;
             if (stream !== null && typeof stream.infoHash === 'string' && typeof serverUrl === 'string') {
-                fetch(new URL(`${stream.infoHash}/stats.json`, serverUrl))
+                serverFetch(new URL(`${stream.infoHash}/stats.json`, serverUrl))
                     .then((resp) => resp.json())
                     .then((stats) => {
                         if (stats !== null && typeof stats.engineError === 'string' && stats.engineError.length > 0) {
@@ -1198,7 +1200,14 @@ const Player = () => {
                 metaItem={player.metaItem}
                 nextVideo={player.nextVideo}
                 stream={player.selected !== null ? player.selected.stream : null}
-                thumbStreamUrl={typeof video.state.stream?.url === 'string' ? video.state.stream.url : null}
+                thumbStreamUrl={
+                    // rewriteServerUrl: the core serializes stream urls with the
+                    // SYMBOLIC server port; on a fallback-port boot the trickplay
+                    // shadow must be handed the bound one or every preview request
+                    // dies on a dead socket (playback itself rides rillio:// and
+                    // never sees this url).
+                    typeof video.state.stream?.url === 'string' ? rewriteServerUrl(video.state.stream.url) : null
+                }
                 chapters={timelineChapters}
                 onPlayRequested={onPlayRequested}
                 onPauseRequested={onPauseRequested}

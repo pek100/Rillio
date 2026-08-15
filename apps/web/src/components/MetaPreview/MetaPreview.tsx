@@ -16,6 +16,7 @@
 
 import React from 'react';
 import { useTranslation } from 'react-i18next';
+import { usePlatform } from 'rillio/common';
 import { Bookmark, BookmarkCheck, Eye, EyeOff, Share2, Play } from 'lucide-react';
 import { Imdb } from 'rillio/components/ui/brand-icons';
 import Image from 'rillio/components/Image';
@@ -108,6 +109,7 @@ const MetaPreview = React.forwardRef<HTMLDivElement, Props>(({
     deepLinks, links, inLibrary, toggleInLibrary, watched, toggleWatched, ratingInfo,
 }, ref) => {
     const { t } = useTranslation();
+    const platform = usePlatform();
     const [shareModalOpen, openShareModal, closeShareModal] = useBinaryState(false);
 
     const linksGroups = React.useMemo(() => {
@@ -117,11 +119,13 @@ const MetaPreview = React.forwardRef<HTMLDivElement, Props>(({
                 .reduce((linksGroups: Map<string, any>, { category, name, url }: Link) => {
                     const { protocol, path, pathname, hostname } = UrlUtils.parse(url as string);
                     if (category === CONSTANTS.IMDB_LINK_CATEGORY) {
-                        if (hostname === 'imdb.com') {
-                            linksGroups.set(category, {
-                                label: name,
-                                href: `https://www.stremio.com/warning#${encodeURIComponent(url as string)}`,
-                            });
+                        // Raw IMDb url, not upstream's stremio.com/warning interstitial:
+                        // the shell swallows in-webview navigation to foreign origins, so
+                        // the wrapped href made the badge a dead click. openExternal (the
+                        // click handler below) is the shell's sanctioned way out, and it
+                        // applies its own browser-side whitelist.
+                        if (hostname === 'imdb.com' || hostname === 'www.imdb.com') {
+                            linksGroups.set(category, { label: name, href: url });
                         }
                     } else if (category === CONSTANTS.SHARE_LINK_CATEGORY) {
                         linksGroups.set(category, { label: name, href: url });
@@ -236,6 +240,14 @@ const MetaPreview = React.forwardRef<HTMLDivElement, Props>(({
                                         href={linksGroups.get(CONSTANTS.IMDB_LINK_CATEGORY).href}
                                         target={'_blank'}
                                         tabIndex={0}
+                                        onClick={(event: React.MouseEvent) => {
+                                            // The shell blocks foreign-origin navigation from the
+                                            // webview; route through openExternal (system browser)
+                                            // instead. preventDefault so the browser build does not
+                                            // navigate twice.
+                                            event.preventDefault();
+                                            platform.openExternal(linksGroups.get(CONSTANTS.IMDB_LINK_CATEGORY).href);
+                                        }}
                                     >
                                         <div className={S.imdbLabel}>{linksGroups.get(CONSTANTS.IMDB_LINK_CATEGORY).label}</div>
                                         <Imdb className={S.imdbIcon} />

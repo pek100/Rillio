@@ -24,6 +24,122 @@ extern "C" {
     async fn local_storage_set_item(key: String, value: String) -> Result<(), JsValue>;
     #[wasm_bindgen(catch, js_namespace = ["self"])]
     async fn local_storage_remove_item(key: String) -> Result<(), JsValue>;
+    /// The streaming server's REAL address, or null until the shell has
+    /// reported one. Defined at worker.js module scope, so it is always
+    /// callable; see the comment there.
+    #[wasm_bindgen(js_namespace = ["self"])]
+    fn rillio_streaming_server_url() -> JsValue;
+}
+
+/// The symbolic streaming-server origin. Profile settings hold this (never a
+/// dynamic port), so every server url the core builds starts with it.
+const DEFAULT_STREAMING_SERVER_ORIGIN: &str = "http://127.0.0.1:11470";
+
+/// Point a url built from the symbolic origin at wherever the server actually
+/// bound. Anything else - a user-configured remote server, an addon, the
+/// Stremio API - is left exactly as the core produced it. `actual` is None
+/// until the shell has reported an address, in which case the symbolic default
+/// stands, which is the right answer on every boot that got the port it asked
+/// for.
+fn rewrite_origin(url: String, actual: Option<String>) -> String {
+    if !url.starts_with(DEFAULT_STREAMING_SERVER_ORIGIN) {
+        return url;
+    }
+    // Only a path, query or fragment may follow the origin: a host that merely
+    // starts the same way is a different host.
+    let rest = &url[DEFAULT_STREAMING_SERVER_ORIGIN.len()..];
+    if !(rest.is_empty() || rest.starts_with('/') || rest.starts_with('?') || rest.starts_with('#'))
+    {
+        return url;
+    }
+    match actual {
+        Some(actual) => {
+            let actual = actual.trim_end_matches('/');
+            if actual.is_empty() || actual == DEFAULT_STREAMING_SERVER_ORIGIN {
+                url
+            } else {
+                format!("{actual}{rest}")
+            }
+        }
+        None => url,
+    }
+}
+
+fn rewrite_streaming_server_url(url: String) -> String {
+    let actual = rillio_streaming_server_url().as_string();
+    rewrite_origin(url, actual)
+}
+
+#[cfg(test)]
+mod rewrite_origin_tests {
+    use super::rewrite_origin;
+
+    fn actual() -> Option<String> {
+        Some("http://127.0.0.1:54321".to_owned())
+    }
+
+    #[test]
+    fn rewrites_a_symbolic_server_url() {
+        assert_eq!(
+            rewrite_origin("http://127.0.0.1:11470/settings".to_owned(), actual()),
+            "http://127.0.0.1:54321/settings"
+        );
+    }
+
+    #[test]
+    fn rewrites_the_bare_origin_and_a_query() {
+        assert_eq!(
+            rewrite_origin("http://127.0.0.1:11470".to_owned(), actual()),
+            "http://127.0.0.1:54321"
+        );
+        assert_eq!(
+            rewrite_origin("http://127.0.0.1:11470/ab/0?tr=x".to_owned(), actual()),
+            "http://127.0.0.1:54321/ab/0?tr=x"
+        );
+    }
+
+    #[test]
+    fn tolerates_a_trailing_slash_on_the_actual_url() {
+        assert_eq!(
+            rewrite_origin(
+                "http://127.0.0.1:11470/settings".to_owned(),
+                Some("http://127.0.0.1:54321/".to_owned())
+            ),
+            "http://127.0.0.1:54321/settings"
+        );
+    }
+
+    #[test]
+    fn leaves_everything_else_alone() {
+        // No address reported yet.
+        assert_eq!(
+            rewrite_origin("http://127.0.0.1:11470/settings".to_owned(), None),
+            "http://127.0.0.1:11470/settings"
+        );
+        // A user-configured remote server.
+        assert_eq!(
+            rewrite_origin("http://192.168.1.5:11470/settings".to_owned(), actual()),
+            "http://192.168.1.5:11470/settings"
+        );
+        // An addon.
+        assert_eq!(
+            rewrite_origin("https://v3-cinemeta.strem.io/manifest.json".to_owned(), actual()),
+            "https://v3-cinemeta.strem.io/manifest.json"
+        );
+        // A longer host that merely starts the same way.
+        assert_eq!(
+            rewrite_origin("http://127.0.0.1:114700/x".to_owned(), actual()),
+            "http://127.0.0.1:114700/x"
+        );
+        // The server did get the port it asked for.
+        assert_eq!(
+            rewrite_origin(
+                "http://127.0.0.1:11470/settings".to_owned(),
+                Some("http://127.0.0.1:11470".to_owned())
+            ),
+            "http://127.0.0.1:11470/settings"
+        );
+    }
 }
 
 pub enum WebEnv {}
@@ -44,7 +160,7 @@ impl Env for WebEnv {
         for<'de> OUT: Deserialize<'de> + 'static,
     {
         let (parts, body) = request.into_parts();
-        let url = parts.uri.to_string();
+        let url = rewrite_streaming_server_url(parts.uri.to_string());
         let method = parts.method.as_str();
         let headers = {
             let mut headers = HashMap::new();

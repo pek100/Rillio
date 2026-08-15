@@ -2,6 +2,23 @@ const Bridge = require('./bridge');
 
 const bridge = new Bridge(self, self);
 
+// Where the local streaming server really is.
+//
+// The shell binds it on whatever port it can get, but the core's profile
+// settings stay SYMBOLIC (the default http://127.0.0.1:11470) - a dynamic port
+// must never be persisted. So the main thread pushes the real address here as
+// soon as its handshake with the shell resolves (apps/web core/createTransport)
+// and WebEnv::fetch reads it back through the getter to rewrite every outgoing
+// request whose origin is the symbolic one (see src/env.rs).
+//
+// Both live at module scope rather than inside init(): the push must not have
+// to wait for, or race with, core startup.
+let streamingServerUrl = null;
+self.rillio_streaming_server_url = () => streamingServerUrl;
+self.setStreamingServerUrl = async (url) => {
+    streamingServerUrl = typeof url === 'string' && url.length > 0 ? url : null;
+};
+
 self.init = async () => {
     // TODO remove the document shim when this PR is merged
     // https://github.com/cfware/babel-plugin-bundled-import-meta/pull/26

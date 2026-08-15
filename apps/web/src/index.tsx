@@ -8,6 +8,10 @@ import { HashRouter } from 'react-router-dom';
 import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import stremioTranslations from 'rillio-translations';
+// Side effect only: gives packages/video the streaming-server address resolver
+// and transport (see common/videoServerContext). Sits ahead of the app graph so
+// it cannot lose a race with the first video load.
+import './common/videoServerContext';
 import App from './App';
 import { CoreProvider } from './core';
 import { FileDropProvider, PlatformProvider } from './common';

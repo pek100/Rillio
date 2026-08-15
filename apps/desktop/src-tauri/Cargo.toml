@@ -16,6 +16,12 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
 
+[dev-dependencies]
+# The stream_cb cancellation / worker-guard tests stand up their own
+# multi-threaded runtime (the flavor production uses); the library itself only
+# needs a `runtime::Handle`, so this stays out of [dependencies].
+tokio = { version = "1", features = ["rt-multi-thread"] }
+
 [dependencies]
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
@@ -36,6 +42,11 @@ image = { version = "0.25", default-features = false, features = ["png", "jpeg"]
 # The snapshot crosses the Tauri IPC as a `data:image/jpeg;base64,...` URL, which
 # the web layer can drop straight into an <img src>.
 base64 = "0.22"
+# The mpv stream_cb byte plane (src/stream_cb.rs) drives a librqbit FileStream
+# synchronously from mpv's demuxer threads: it needs a `runtime::Handle` to
+# block_on, the AsyncRead/AsyncSeek extension traits, Notify for cancellation
+# and `time::timeout` for the tail prefetch. Same tokio Tauri already pulls in.
+tokio = { version = "1", features = ["rt", "io-util", "sync", "macros", "time"] }
 
 # Desktop-only Tauri plugins. None exist on Android: single-instance is
 # desktop-only; the updater is replaced by the app store; deep links use a

@@ -27,6 +27,15 @@ pub mod types;
 pub use config::Config;
 pub use engine::Engine;
 
+// Re-exported so an embedder can name the [`bind_and_serve`] router type and
+// drive it in-process (`tower::ServiceExt::oneshot`) without declaring its own
+// axum/tower dependency, which would have to match these versions exactly or the
+// types silently stop lining up.
+pub use axum;
+pub use tower;
+
+use std::future::Future;
+use std::net::SocketAddr;
 use std::time::Duration;
 
 use axum::extract::FromRef;
@@ -156,20 +165,109 @@ async fn log_request(req: axum::extract::Request, next: axum::middleware::Next) 
     next.run(req).await
 }
 
-/// Bind `config.bind` and serve until the process is signalled. Builds the
-/// engine from `config.cache_root`. Embedders build their own [`Engine`],
-/// call [`router`], and drive their own server.
-pub async fn serve(config: Config) -> std::io::Result<()> {
-    let bind = config.bind;
+/// Bind the socket FIRST, then build everything else around the port we actually
+/// got. Returns the bound address, the [`Engine`], a clone of the [`Router`] (so
+/// an embedder can dispatch requests in-process without a socket) and the future
+/// that serves the listener until it errors.
+///
+/// The order matters. `config.bind` is only a *request*: [`bind_with_fallback`]
+/// may hand back an ephemeral port instead, and two things downstream are derived
+/// from the config rather than from the listener:
+///
+/// - `config.base_url` - the only absolute URL the server advertises
+///   (`/settings.baseUrl`, which the web client uses as a "server is up" gate and
+///   hands to cast devices).
+/// - `config.bind.port()` - the SSRF self-port exception in `support.rs`
+///   (`Policy::AllowSelf`), which is what lets `/opensubHash` and the subtitle
+///   routes re-fetch a URL that points back at our own loopback socket.
+///
+/// Both are patched from `local_addr()` BEFORE [`router`] is called, so a
+/// fallback port propagates everywhere instead of leaving the server advertising
+/// (and self-allowing) a port nothing is listening on. `base_url`'s host is left
+/// alone - it is deliberately independent of `bind` (behind a container the two
+/// differ) - only its port follows the socket.
+///
+/// The two sweepers are spawned exactly as [`serve`] used to spawn them; they
+/// need a tokio runtime, so call this inside one.
+pub async fn bind_and_serve(
+    mut config: Config,
+) -> std::io::Result<(SocketAddr, Engine, Router, impl Future<Output = std::io::Result<()>>)> {
+    let listener = bind_with_fallback(config.bind).await?;
+    let addr = listener.local_addr()?;
+
+    config.bind = addr;
+    if config.base_url.set_port(Some(addr.port())).is_err() {
+        // Cannot-be-a-base URL (mailto:, data:, ...). Fail loud rather than
+        // advertise a base_url pointing at the wrong port.
+        return Err(std::io::Error::other(format!(
+            "base_url {} cannot carry a port",
+            config.base_url
+        )));
+    }
+
     let engine = Engine::new(config.cache_root.clone())
         .await
         .map_err(|e| std::io::Error::other(e.to_string()))?;
     spawn_cache_sweeper(&config, engine.clone());
     spawn_ephemeral_sweeper(engine.clone());
-    let app = router(config, engine);
-    let listener = tokio::net::TcpListener::bind(bind).await?;
-    tracing::info!(%bind, "streaming server listening");
-    axum::serve(listener, app).await
+    let app = router(config, engine.clone());
+    tracing::info!(%addr, "streaming server listening");
+
+    let serving = app.clone();
+    let fut = async move { axum::serve(listener, serving).await };
+    Ok((addr, engine, app, fut))
+}
+
+/// Bind `requested`, falling back to an ephemeral port on the same IP when the
+/// port itself is refused.
+///
+/// Two refusals mean "this port, not this machine": `AddrInUse` (something else
+/// holds it) and `PermissionDenied` - on Windows a port inside a reserved
+/// exclusion range (`netsh interface ipv4 show excludedportrange`, Hyper-V and
+/// friends reserve blocks at boot) fails with WSAEACCES 10013, which Rust maps to
+/// `PermissionDenied`, NOT to `AddrInUse`. Anything else (a bad interface, for
+/// instance) is a real error and propagates.
+///
+/// Both the refusal and the port we settled on are logged at warn level: a
+/// fallback boot changes the URL of every external-player deep link, so it must
+/// be obvious in the log why.
+async fn bind_with_fallback(requested: SocketAddr) -> std::io::Result<tokio::net::TcpListener> {
+    let err = match tokio::net::TcpListener::bind(requested).await {
+        Ok(listener) => return Ok(listener),
+        Err(e) if is_port_refusal(&e) => e,
+        Err(e) => return Err(e),
+    };
+    tracing::warn!(
+        requested = %requested,
+        kind = ?err.kind(),
+        error = %err,
+        "streaming server port refused; retrying on an ephemeral port"
+    );
+    let listener = tokio::net::TcpListener::bind(SocketAddr::new(requested.ip(), 0)).await?;
+    let addr = listener.local_addr()?;
+    tracing::warn!(
+        requested = %requested,
+        fallback = %addr,
+        "streaming server fell back to an ephemeral port"
+    );
+    Ok(listener)
+}
+
+/// Is this bind error about the PORT (retry on :0) rather than the machine?
+fn is_port_refusal(e: &std::io::Error) -> bool {
+    matches!(
+        e.kind(),
+        std::io::ErrorKind::AddrInUse | std::io::ErrorKind::PermissionDenied
+    )
+}
+
+/// Bind `config.bind` and serve until the process is signalled. Builds the
+/// engine from `config.cache_root`. Embedders that need the port, the engine or
+/// the router call [`bind_and_serve`] instead; this is the standalone bin's
+/// convenience wrapper over it.
+pub async fn serve(config: Config) -> std::io::Result<()> {
+    let (_addr, _engine, _router, fut) = bind_and_serve(config).await?;
+    fut.await
 }
 
 /// How often the cache sweeper checks disk usage.

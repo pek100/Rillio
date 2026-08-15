@@ -253,6 +253,13 @@ impl Shadow {
 /// Same rule as the player bridge's stream validation (shell.rs): the web layer
 /// may only point the shadow at http(s), never local paths or mpv's pseudo
 /// protocols (`av://`, `edl://`, ...) - those are exfil/execution vectors.
+///
+/// Deliberately NOT widened to `rillio://` the way shell.rs was. The shadow is a
+/// SECOND mpv instance and the protocol is registered per instance, so the
+/// scheme would not resolve here at all; and a second FileStream on the same
+/// file competes with the player's for piece priority, which is exactly the
+/// stall the HTTP path avoids by serving the shadow from the same cached bytes.
+/// `resolve_shadow_url` maps the byte-plane url back to HTTP before this runs.
 fn validate_url(url: &str) -> Result<(), String> {
     let lower = url.trim().to_ascii_lowercase();
     if lower.starts_with("http://") || lower.starts_with("https://") {
@@ -262,10 +269,94 @@ fn validate_url(url: &str) -> Result<(), String> {
     }
 }
 
+/// The url the SHADOW should open for what the player is playing.
+///
+/// Normally the identity: the web layer hands over `video.state.stream.url`,
+/// which stays the HTTP form even when the player itself loaded `rillio://`.
+/// This exists so the shadow survives a caller that passes the byte-plane url
+/// anyway: `rillio://<ih>/<idx>` maps back to `<base_url>/<ih>/<idx>` on the
+/// port the server really bound. Anything else is returned untouched for
+/// [`validate_url`] to judge.
+fn resolve_shadow_url(app: &tauri::AppHandle, url: &str) -> Result<String, String> {
+    use tauri::Manager;
+
+    if !url.trim().to_ascii_lowercase().starts_with("rillio://") {
+        return Ok(url.to_owned());
+    }
+    let base_url = app.state::<crate::ServerHandle>().get().map(|s| s.base_url.clone());
+    shadow_url_for(url, base_url.as_deref())
+}
+
+/// The pure half of [`resolve_shadow_url`]: `base_url` is whatever the server
+/// bound (`None` while it is still binding).
+fn shadow_url_for(url: &str, base_url: Option<&str>) -> Result<String, String> {
+    let trimmed = url.trim();
+    if !trimmed.to_ascii_lowercase().starts_with("rillio://") {
+        return Ok(url.to_owned());
+    }
+    let (info_hash, file_idx) = crate::stream_cb::parse_url(trimmed)
+        .map_err(|e| format!("thumbs: BLOCKED malformed rillio:// url {url}: {e}"))?;
+    let base_url =
+        base_url.ok_or_else(|| "thumbs: the streaming server has not bound yet".to_string())?;
+    Ok(format!("{}/{info_hash}/{file_idx}", base_url.trim_end_matches('/')))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const IH: &str = "0123456789abcdef0123456789abcdef01234567";
+    const BASE: &str = "http://127.0.0.1:49312/";
+
+    /// The shadow must open the HTTP form of whatever the player loaded, on the
+    /// port the server really got - never `rillio://`, which is registered on
+    /// the PLAYER's mpv instance and not on this one.
+    #[test]
+    fn shadow_maps_the_byte_plane_back_to_http() {
+        assert_eq!(
+            shadow_url_for(&format!("rillio://{IH}/3"), Some(BASE)),
+            Ok(format!("http://127.0.0.1:49312/{IH}/3"))
+        );
+        // No trailing slash on the base, same answer (no doubled separator).
+        assert_eq!(
+            shadow_url_for(&format!("rillio://{IH}/0"), Some("http://127.0.0.1:11470")),
+            Ok(format!("http://127.0.0.1:11470/{IH}/0"))
+        );
+        // The mapped url is exactly what validate_url accepts.
+        let mapped = shadow_url_for(&format!("rillio://{IH}/1"), Some(BASE)).unwrap();
+        validate_url(&mapped).unwrap();
+    }
+
+    /// Everything else passes through untouched for validate_url to judge.
+    #[test]
+    fn shadow_leaves_other_urls_alone() {
+        for url in [
+            format!("http://127.0.0.1:11470/{IH}/0"),
+            "https://cdn.example/a.mkv".to_owned(),
+            "av://lavfi:testsrc".to_owned(),
+        ] {
+            assert_eq!(shadow_url_for(&url, Some(BASE)), Ok(url.clone()), "{url:?}");
+        }
+        // ...and the pass-through still gets rejected by the scheme rule.
+        assert!(validate_url(&shadow_url_for("av://lavfi:testsrc", Some(BASE)).unwrap()).is_err());
+    }
+
+    /// A malformed byte-plane url is refused here too (it never becomes a
+    /// plausible-looking http url), and an unbound server fails loud.
+    #[test]
+    fn shadow_refuses_what_it_cannot_map() {
+        assert!(shadow_url_for(&format!("rillio://{IH}/0/movie.mkv"), Some(BASE)).is_err());
+        assert!(shadow_url_for(&format!("rillio://{IH}/-1"), Some(BASE)).is_err());
+        assert!(shadow_url_for("rillio://evil.com/0", Some(BASE)).is_err());
+        assert!(shadow_url_for(&format!("rillio://{IH}/0"), None).is_err());
+    }
+}
+
 /// One thumbnail request: `Some(dataUrl)` on a cache hit, `None` while the
 /// worker generates (the web layer polls again on its next hover tick).
 #[tauri::command]
 pub async fn player_thumb(
+    app: tauri::AppHandle,
     state: State<'_, ThumbsState>,
     url: String,
     time_sec: f64,
@@ -273,6 +364,7 @@ pub async fn player_thumb(
     if !time_sec.is_finite() || time_sec < 0.0 {
         return Ok(None);
     }
+    let url = resolve_shadow_url(&app, &url)?;
     validate_url(&url)?;
     let bucket = (time_sec / BUCKET_SECONDS).round() as u32;
 
@@ -329,9 +421,11 @@ pub async fn player_thumb_stop(state: State<'_, ThumbsState>) -> Result<(), Stri
 /// polling.
 #[tauri::command]
 pub async fn player_scene_cuts(
+    app: tauri::AppHandle,
     state: State<'_, ThumbsState>,
     url: String,
 ) -> Result<Option<Vec<f64>>, String> {
+    let url = resolve_shadow_url(&app, &url)?;
     validate_url(&url)?;
     let inner_arc = state.0.clone();
     let mut inner = inner_arc.lock().map_err(|_| "thumbs: poisoned")?;

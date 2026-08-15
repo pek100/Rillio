@@ -718,6 +718,8 @@ function withHTMLSubtitles(Video) {
         return Video.canPlayStream(stream);
     };
 
+    VideoWithHTMLSubtitles.canPlayWithoutStreamingServer = Video.canPlayWithoutStreamingServer;
+
     VideoWithHTMLSubtitles.manifest = {
         name: Video.manifest.name + 'WithHTMLSubtitles',
         external: Video.manifest.external,

@@ -13,6 +13,7 @@ import { Download } from 'lucide-react';
 import { Button } from 'rillio/components/ui';
 import { cn } from 'rillio/components/ui';
 import { openModal } from 'rillio/common/modalEvents';
+import { rewriteExternalPlayerUrl } from 'rillio/common/serverAddress';
 
 type Props = {
     className?: string;
@@ -27,8 +28,12 @@ const Error = forwardRef<HTMLDivElement, Props>(function Error({ className, code
     const { t } = useTranslation();
 
     const [playlist, fileName] = useMemo(() => {
+        // The playlist is a base64 m3u data uri with the streaming url inside
+        // it, built by the core from the SYMBOLIC server url. It is handed to
+        // another application, so it has to carry the real address (the helper
+        // decodes, substitutes and re-encodes).
         return [
-            stream?.deepLinks?.externalPlayer?.playlist,
+            rewriteExternalPlayerUrl(stream?.deepLinks?.externalPlayer?.playlist),
             stream?.deepLinks?.externalPlayer?.fileName,
         ];
     }, [stream]);

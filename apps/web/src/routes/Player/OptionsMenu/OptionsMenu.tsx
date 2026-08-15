@@ -18,6 +18,7 @@ import { Vlc } from 'rillio/components/ui/brand-icons';
 import { useCore } from 'rillio/core';
 import { usePlatform, useToast } from 'rillio/common';
 import useCacheDownload from 'rillio/common/useCacheDownload';
+import { rewriteExternalPlayerUrl } from 'rillio/common/serverAddress';
 import { Button } from 'rillio/components/ui';
 import { cn } from 'rillio/components/ui';
 import ShaderBlurRect from '../ShaderBlurRect';
@@ -65,12 +66,17 @@ const OptionsMenu = memo(forwardRef<HTMLDivElement, Props>(function OptionsMenu(
     const platform = usePlatform();
     const toast = useToast();
     const [streamingUrl, downloadUrl, magnetUrl] = useMemo(() => {
+        // The core builds these from the SYMBOLIC server url in profile
+        // settings, and they all leave this process (clipboard, an external
+        // player, a cast device), so the real address has to be substituted
+        // here - there is no fetch edge left to do it for them. The magnet is
+        // not a server url and stays untouched.
         return stream !== null ?
             stream.deepLinks &&
             stream.deepLinks.externalPlayer &&
             [
-                stream.deepLinks.externalPlayer.streaming,
-                stream.deepLinks.externalPlayer.download,
+                rewriteExternalPlayerUrl(stream.deepLinks.externalPlayer.streaming),
+                rewriteExternalPlayerUrl(stream.deepLinks.externalPlayer.download),
                 stream.deepLinks.externalPlayer.magnet,
             ]
             :

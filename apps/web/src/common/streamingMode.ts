@@ -6,9 +6,10 @@
 // nextEpisodePreloadPrefs for why core profile.settings is not an option).
 
 import { getItem, setItem } from 'rillio/common/profileStorage';
+import { serverFetch } from 'rillio/common/serverFetch';
 
 export const fetchStreamingModeEnabled = (serverUrl: string): Promise<boolean> =>
-    fetch(new URL('torrent-settings', serverUrl))
+    serverFetch(new URL('torrent-settings', serverUrl))
         .then((resp) => {
             if (!resp.ok) throw new Error(`torrent-settings responded ${resp.status}`);
             return resp.json();
@@ -16,7 +17,7 @@ export const fetchStreamingModeEnabled = (serverUrl: string): Promise<boolean> =
         .then((body: { streamingMode?: boolean }) => body.streamingMode !== false);
 
 export const postStreamingModeEnabled = (serverUrl: string, enabled: boolean): Promise<void> =>
-    fetch(new URL('torrent-settings', serverUrl), {
+    serverFetch(new URL('torrent-settings', serverUrl), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ streamingMode: enabled }),
@@ -27,7 +28,7 @@ export const postStreamingModeEnabled = (serverUrl: string, enabled: boolean): P
 
 // The player reporting "this stream was watched" (>= ~90% through).
 export const markStreamWatched = (serverUrl: string, infoHash: string): Promise<void> =>
-    fetch(new URL('cache/watched', serverUrl), {
+    serverFetch(new URL('cache/watched', serverUrl), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ infoHash, watched: true }),

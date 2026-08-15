@@ -24,6 +24,8 @@
 // shared with the Search page - driving it from a background matcher would
 // stomp on whatever the user is searching for.
 
+import { serverFetch } from 'rillio/common/serverFetch';
+
 export type CacheMeta = {
     metaId: string,
     type: string,
@@ -72,7 +74,7 @@ export const playerDeepLink = (encodedStream: string, meta: CacheMeta | undefine
 };
 
 export const saveCacheMeta = (serverUrl: string, infoHash: string, meta: CacheMeta | null): Promise<void> =>
-    fetch(new URL('cache/meta', serverUrl), {
+    serverFetch(new URL('cache/meta', serverUrl), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ infoHash, meta }),

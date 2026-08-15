@@ -4,6 +4,7 @@ import * as React from 'react';
 import useProfile from 'rillio/common/useProfile';
 import useToast from 'rillio/common/Toast/useToast';
 import { notifyCacheChanged } from 'rillio/common/cacheEvents';
+import { serverFetch } from 'rillio/common/serverFetch';
 
 // "Download to cache": ask the local streaming server to fetch a torrent
 // stream in the background and PIN it (the cache sweeper never evicts pinned
@@ -35,7 +36,7 @@ const useCacheDownload = () => {
         if (typeof stream.fileIdx === 'number') {
             body.fileIdx = stream.fileIdx;
         }
-        fetch(new URL('cache/download', serverUrl), {
+        serverFetch(new URL('cache/download', serverUrl), {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(body),

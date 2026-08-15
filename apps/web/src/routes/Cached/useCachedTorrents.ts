@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useProfile } from 'rillio/common';
 import useToast from 'rillio/common/Toast/useToast';
 import { notifyCacheChanged } from 'rillio/common/cacheEvents';
+import { serverFetch } from 'rillio/common/serverFetch';
 import type { CacheMeta } from 'rillio/common/cacheMetadata';
 
 export type CacheEntry = {
@@ -49,7 +50,7 @@ const useCachedTorrents = () => {
     const refresh = useCallback(() => {
         if (typeof serverUrl !== 'string') return;
         const seq = mutationSeq.current;
-        fetch(new URL('cache/list', serverUrl))
+        serverFetch(new URL('cache/list', serverUrl))
             .then((resp) => {
                 if (!resp.ok) throw new Error(`cache/list responded ${resp.status}`);
                 return resp.json();
@@ -72,7 +73,7 @@ const useCachedTorrents = () => {
     // as success: say so and re-poll to show the true state, never a silent revert.
     const mutate = useCallback((path: string, body: unknown, failureTitle: string, onFailure?: () => void) => {
         mutationSeq.current += 1;
-        return fetch(new URL(path, serverUrl as string), {
+        return serverFetch(new URL(path, serverUrl as string), {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(body),

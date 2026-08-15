@@ -15,6 +15,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { Play, Download, Loader2, Check, X } from 'lucide-react';
 import { useProfile } from 'rillio/common';
 import { IconButton, cn } from 'rillio/components/ui';
+import { serverFetch } from 'rillio/common/serverFetch';
 
 export type TorrentFile = {
     index: number,
@@ -55,7 +56,7 @@ const TorrentFiles = ({ infoHash, initializing, onPlayFile, onSetFileSelected }:
 
     const load = useCallback(() => {
         if (typeof serverUrl !== 'string') return;
-        fetch(new URL(`cache/files/${infoHash}`, serverUrl))
+        serverFetch(new URL(`cache/files/${infoHash}`, serverUrl))
             .then((resp) => {
                 if (!resp.ok) throw new Error(`cache/files responded ${resp.status}`);
                 return resp.json();

@@ -5,6 +5,7 @@ import useCacheDownload from 'rillio/common/useCacheDownload';
 import useProfile from 'rillio/common/useProfile';
 import useToast from 'rillio/common/Toast/useToast';
 import { notifyCacheChanged } from 'rillio/common/cacheEvents';
+import { serverFetch } from 'rillio/common/serverFetch';
 import { getPreloadPromptEnabled } from 'rillio/common/nextEpisodePreloadPrefs';
 
 // Offers to preload the NEXT episode's torrent into the local cache while the
@@ -252,7 +253,7 @@ const useNextEpisodePreload = ({ player, video }: UseNextEpisodePreloadArgs) => 
         }
         const path = undo.preExisting ? 'cache/pause' : 'cache/delete';
         const body = undo.preExisting ? { infoHash: undo.infoHash, paused: true } : { infoHash: undo.infoHash };
-        fetch(new URL(path, serverUrl), {
+        serverFetch(new URL(path, serverUrl), {
             method: 'POST',
             headers: { 'content-type': 'application/json' },
             body: JSON.stringify(body),
@@ -294,7 +295,7 @@ const useNextEpisodePreload = ({ player, video }: UseNextEpisodePreloadArgs) => 
         // it ourselves - the grace delay below is exactly the room this needs.
         const serverUrl = profile.settings.streamingServerUrl;
         if (typeof serverUrl === 'string' && infoHash !== null) {
-            fetch(new URL('cache/list', serverUrl))
+            serverFetch(new URL('cache/list', serverUrl))
                 .then((resp) => {
                     if (!resp.ok) throw new Error(`cache/list responded ${resp.status}`);
                     return resp.json();

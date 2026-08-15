@@ -7,6 +7,7 @@
 pub mod mpv;
 pub mod platform;
 mod shell;
+pub mod stream_cb;
 mod surface;
 mod thumbs;
 #[cfg(desktop)]
@@ -326,6 +327,10 @@ pub fn run() {
         .manage(shell::ShellState::default())
         .manage(thumbs::ThumbsState::default())
         .manage(DeepLinkState::default())
+        // Filled in once the server binds (see start_streaming_server). Managed
+        // up front so `streaming_server_url` can answer "not yet" instead of
+        // erroring while the web client polls.
+        .manage(ServerHandle::default())
         .setup(|app| {
             // The streaming server is cross-platform (loopback HTTP); runs on
             // every target.
@@ -361,6 +366,8 @@ pub fn run() {
             open_external,
             install_update,
             check_for_update,
+            streaming_server_url,
+            server_request,
             shell::shell_init,
             shell::shell_send,
             shell::shell_mpv_stats,
@@ -1009,8 +1016,260 @@ fn rewrite_session_output_folders(
     }
 }
 
+/// The embedded streaming server, once it has actually bound.
+///
+/// Holding the [`Engine`] and the [`Router`] (not just "a server is running
+/// somewhere on port N") is what makes the socket optional: mpv reads bytes
+/// straight off the engine through `rillio://` (see [`crate::stream_cb`]) and
+/// the web client dispatches control-plane requests into the router in-process
+/// through [`server_request`]. The HTTP listener stays up for the things that
+/// genuinely need a socket - casting, external players, the subtitle routes'
+/// loopback self-fetch - but nothing on the playback or cache path depends on
+/// it any more.
+pub struct ServerState {
+    pub engine: rillio_streaming_server::Engine,
+    /// The SAME router the socket serves, cloned. Dispatching into it is
+    /// indistinguishable from an HTTP request except that no bytes cross a
+    /// socket, so every route, extractor and middleware behaves identically.
+    pub router: rillio_streaming_server::axum::Router,
+    /// What the server advertises to clients, with the port it really got.
+    pub base_url: String,
+    pub port: u16,
+    /// The runtime the engine lives on. The mpv stream callbacks run on mpv's
+    /// own threads and `block_on` through this handle; see `stream_cb`.
+    pub runtime: tokio::runtime::Handle,
+}
+
+/// `None` until the bind completes. Every reader clones the `Arc` out and drops
+/// the lock immediately, so nothing ever holds it across an await.
+#[derive(Default)]
+pub struct ServerHandle(Mutex<Option<std::sync::Arc<ServerState>>>);
+
+impl ServerHandle {
+    pub fn get(&self) -> Option<std::sync::Arc<ServerState>> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).clone()
+    }
+
+    fn set(&self, state: ServerState) {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = Some(std::sync::Arc::new(state));
+    }
+}
+
+/// Where the streaming server actually is, or `None` while it is still binding.
+///
+/// The web client polls this (apps/web/src/common/serverAddress) instead of
+/// assuming the default port: the profile setting stays symbolic, so a boot that
+/// had to fall back to an ephemeral port is invisible to everything persisted.
+#[tauri::command]
+fn streaming_server_url(state: tauri::State<'_, ServerHandle>) -> Option<String> {
+    state.get().map(|s| s.base_url.clone())
+}
+
+/// One in-process streaming-server response, shaped for `new Response(...)` on
+/// the web side.
+#[derive(Debug, serde::Serialize)]
+pub struct ServerResponse {
+    pub status: u16,
+    pub headers: std::collections::HashMap<String, String>,
+    pub body: String,
+}
+
+/// Longest response body the IPC transport will carry. The control plane
+/// answers JSON (the biggest by far is `/cache/list` with its per-torrent
+/// metadata); media bytes never come through here, so anything past this is a
+/// bug and fails loud rather than silently truncating.
+const IPC_BODY_LIMIT: usize = 32 * 1024 * 1024;
+
+/// The web client's control-plane transport: run one request against the
+/// in-process router instead of the socket.
+///
+/// SECURITY. This is a NEW trust boundary - the request never passes through
+/// the network stack, so the browser guarantees the HTTP path relies on (an
+/// unforgeable `Origin`, the CORS preflight) do not apply here. What replaces
+/// them:
+///
+/// - The caller is the app's own webview: this command is only reachable from
+///   the page Tauri itself serves, which is exactly the origin the HTTP guard
+///   allowlists. We stamp that origin on the synthesized request so
+///   `security::origin_guard` sees the same thing either way rather than taking
+///   the no-Origin exemption meant for native media loads.
+/// - Only GET and POST are accepted. Every mutating route is registered POST
+///   only, and dispatching into the real router means those method filters
+///   still decide (a GET at `/cache/delete` is a 405 here as well). Forwarding
+///   an arbitrary method string would hand web content a way to probe methods
+///   no HTTP client of ours ever sends.
+/// - The raw media route is refused outright. It is the one route that streams
+///   unbounded bytes and implements the Range/HEAD contract, none of which
+///   survives a string round trip; playback uses `rillio://` or the socket.
+#[tauri::command]
+async fn server_request(
+    state: tauri::State<'_, ServerHandle>,
+    method: String,
+    path: String,
+    body: Option<String>,
+) -> Result<ServerResponse, String> {
+    // Clone the router out and drop the lock BEFORE awaiting: a std Mutex guard
+    // held across an await would make this future non-Send and can deadlock.
+    let server = state
+        .get()
+        .ok_or_else(|| "server_request: the streaming server has not bound yet".to_string())?;
+    let router = server.router.clone();
+    dispatch_server_request(router, method, path, body).await
+}
+
+/// The body of [`server_request`], separated from Tauri's state extraction so
+/// the boundary rules can be exercised against a real router.
+async fn dispatch_server_request(
+    router: rillio_streaming_server::axum::Router,
+    method: String,
+    path: String,
+    body: Option<String>,
+) -> Result<ServerResponse, String> {
+    use rillio_streaming_server::axum::body::Body;
+    use rillio_streaming_server::axum::http::{header, Request};
+    use rillio_streaming_server::tower::ServiceExt;
+
+    let method = method.to_ascii_uppercase();
+    if method != "GET" && method != "POST" {
+        tracing::error!("server_request: BLOCKED method {method:?} for {path:?}");
+        return Err(format!("server_request: method {method:?} is not allowed"));
+    }
+    if !path.starts_with('/') {
+        return Err(format!("server_request: path {path:?} must start with '/'"));
+    }
+    if let Some(seg) = traversal_segment(&path) {
+        tracing::error!("server_request: BLOCKED path traversal in {path:?}");
+        return Err(format!(
+            "server_request: {path:?} contains a path traversal segment ({seg:?})"
+        ));
+    }
+    if is_raw_stream_path(&path) {
+        tracing::error!("server_request: BLOCKED the raw stream route {path:?}");
+        return Err(format!("server_request: {path:?} is the media stream route, not a control-plane call"));
+    }
+
+    let has_body = body.is_some();
+    let mut req = Request::builder()
+        .method(method.as_str())
+        .uri(&path)
+        // Same origin the webview sends over HTTP, so origin_guard applies the
+        // identical rule to both transports.
+        .header(header::ORIGIN, "http://tauri.localhost");
+    if has_body {
+        // Every payload the web sends this way is JSON (the routes that take a
+        // body all use the Json extractor, which requires the header). Bodies
+        // that are not JSON would have to go over the socket.
+        req = req.header(header::CONTENT_TYPE, "application/json");
+    }
+    let req = req
+        .body(Body::from(body.unwrap_or_default()))
+        .map_err(|e| format!("server_request: building the request failed: {e}"))?;
+
+    let response = router
+        .oneshot(req)
+        .await
+        .map_err(|e| format!("server_request: the router failed: {e}"))?;
+
+    let status = response.status().as_u16();
+    let headers = response
+        .headers()
+        .iter()
+        .filter_map(|(name, value)| {
+            value.to_str().ok().map(|v| (name.as_str().to_owned(), v.to_owned()))
+        })
+        .collect();
+    let bytes = rillio_streaming_server::axum::body::to_bytes(response.into_body(), IPC_BODY_LIMIT)
+        .await
+        .map_err(|e| format!("server_request: reading the {path} body failed: {e}"))?;
+    let body = String::from_utf8(bytes.to_vec())
+        .map_err(|_| format!("server_request: {path} answered bytes that are not utf-8"))?;
+
+    Ok(ServerResponse { status, headers, body })
+}
+
+/// Decode `%XX` escapes in one raw path segment, to BYTES (the router's `Path`
+/// extractor decodes to bytes and only then utf-8-checks). Invalid escapes
+/// pass through literally, matching how axum's decoder treats a lone `%`.
+fn percent_decode_segment(seg: &str) -> Vec<u8> {
+    let bytes = seg.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            let hi = (bytes[i + 1] as char).to_digit(16);
+            let lo = (bytes[i + 2] as char).to_digit(16);
+            if let (Some(hi), Some(lo)) = (hi, lo) {
+                out.push((hi * 16 + lo) as u8);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    out
+}
+
+/// The first path segment whose DECODED form smuggles a `..` component, if
+/// any. axum happily routes `/../settings` into the router (where it 500s),
+/// and an encoded `%2e%2e` or `..%2F` survives raw segment splitting only to
+/// decode into a traversal downstream, so all of it is refused before the
+/// router ever sees the request. Components are re-split on decoded `/` and
+/// `\` precisely so an encoded separator cannot hide the dot-dot; a legit
+/// encoded URL segment (`/tracks/{url}`) decodes to components like `http:`
+/// and passes untouched.
+fn traversal_segment(path: &str) -> Option<String> {
+    let path = path.split(['?', '#']).next().unwrap_or_default();
+    for seg in path.split('/') {
+        let decoded = percent_decode_segment(seg);
+        if decoded
+            .split(|&b| b == b'/' || b == b'\\')
+            .any(|component| component == b"..")
+        {
+            return Some(String::from_utf8_lossy(&decoded).into_owned());
+        }
+    }
+    None
+}
+
+/// Does this path route to the media stream? The stream routes are
+/// `/{info_hash}/{idx}` and `/{info_hash}/{idx}/{*rest}`, but `{idx}` is NOT
+/// only a number: `stream.rs::resolve_index` also resolves it by FILE NAME,
+/// a `?f=` query selects the file regardless of the segment, and the `Path`
+/// extractor percent-decodes what the raw route match let through. So the
+/// rule is by exclusion: ANY path whose first segment decodes to a 40-hex
+/// info hash is the byte plane, EXCEPT the exact non-stream routes registered
+/// under an info hash (verify against the router table in
+/// crates/streaming-server/src/lib.rs):
+///
+///   /{info_hash}/create        (POST, control)
+///   /{info_hash}/remove        (POST, control)
+///   /{info_hash}/stats.json    (GET, metadata)
+///   /{info_hash}/{idx}/stats.json  (GET, metadata)
+///
+/// Those are matched on the RAW segments, exactly as the router matches its
+/// literal segments: an encoded `cre%61te` does not match the literal
+/// `/create` route, it falls through to the stream route, so it must count as
+/// the byte plane here too.
+fn is_raw_stream_path(path: &str) -> bool {
+    let path = path.split(['?', '#']).next().unwrap_or_default();
+    let segments: Vec<&str> = path.split('/').filter(|s| !s.is_empty()).collect();
+    if segments.len() < 2 {
+        return false;
+    }
+    let first = percent_decode_segment(segments[0]);
+    if first.len() != 40 || !first.iter().all(|b| b.is_ascii_hexdigit()) {
+        return false;
+    }
+    !matches!(
+        (segments.len(), segments.get(1).copied(), segments.get(2).copied()),
+        (2, Some("create" | "remove" | "stats.json"), _) | (3, _, Some("stats.json"))
+    )
+}
+
 /// Spawn the embedded streaming server on Tauri's async (tokio) runtime. It
-/// binds 127.0.0.1:11470 and owns the torrent cache (see `default_cache_dir`).
+/// binds 127.0.0.1:11470 (an ephemeral port if that is refused) and owns the
+/// torrent cache (see `default_cache_dir`).
 fn start_streaming_server(app: &tauri::AppHandle) {
     // RILLIO_STREAMING_CACHE_DIR overrides the cache/session root. Use it to run
     // a dev build against an ISOLATED cache so it never opens (or evicts from) the
@@ -1038,17 +1297,54 @@ fn start_streaming_server(app: &tauri::AppHandle) {
         let _ = std::fs::create_dir_all(&cache_dir);
     }
     let config = rillio_streaming_server::Config::local(cache_dir);
+    // `bind_and_serve` patches the config's port from the listener, but keeps
+    // the HOST of base_url (deliberately independent of `bind`), so rebuild the
+    // advertised URL the same way here rather than assuming loopback.
+    let mut advertised = config.base_url.clone();
     let app_handle = app.clone();
     tauri::async_runtime::spawn(async move {
-        if let Err(e) = rillio_streaming_server::serve(config).await {
+        use tauri::Emitter;
+        // Contract: the web app listens for the Tauri event
+        // "streaming-server-error" (payload: the error string) so it can toast
+        // that the local streaming server failed. Without this the failure is
+        // only logged and invisible to the user.
+        let (addr, engine, router, serving) = match rillio_streaming_server::bind_and_serve(config).await {
+            Ok(parts) => parts,
+            Err(e) => {
+                let msg = e.to_string();
+                tracing::error!("embedded streaming server could not start: {msg}");
+                let _ = app_handle.emit("streaming-server-error", msg);
+                return;
+            }
+        };
+        if advertised.set_port(Some(addr.port())).is_err() {
+            tracing::error!("streaming server base url {advertised} cannot carry a port");
+            let _ = app_handle.emit("streaming-server-error", "base url cannot carry a port");
+            return;
+        }
+        let base_url = advertised.to_string();
+        tracing::info!("streaming server bound at {addr} (advertising {base_url})");
+        app_handle.state::<ServerHandle>().set(ServerState {
+            engine,
+            router,
+            base_url,
+            port: addr.port(),
+            // The runtime this task is running on is the one the engine's
+            // background work lives on; the mpv byte plane blocks on it.
+            runtime: tokio::runtime::Handle::current(),
+        });
+
+        // SUPERVISION. The socket dying is no longer fatal: the router still
+        // answers over IPC and mpv still reads bytes off the engine, so
+        // ServerState stays in place and playback plus the cache UI keep
+        // working. Say so loudly (casting and external players DO need the
+        // socket) instead of pretending nothing happened.
+        if let Err(e) = serving.await {
             let msg = e.to_string();
-            tracing::error!("embedded streaming server exited: {msg}");
-            // Contract: the web app listens for the Tauri event
-            // "streaming-server-error" (payload: the error string) so it can toast
-            // that the local streaming server failed, e.g. a bind failure because
-            // port 11470 is already taken. Without this the failure is only logged
-            // and invisible to the user. The web-side listener is out of scope.
-            use tauri::Emitter;
+            tracing::error!(
+                "embedded streaming server's HTTP listener exited: {msg} \
+                 (in-process requests and playback continue)"
+            );
             let _ = app_handle.emit("streaming-server-error", msg);
         }
     });
@@ -1057,6 +1353,229 @@ fn start_streaming_server(app: &tauri::AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    const IH: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    /// The IPC control plane must refuse the media stream route: it is the one
+    /// route that streams unbounded bytes and carries the Range/HEAD contract,
+    /// none of which survives being marshalled through a string.
+    #[test]
+    fn ipc_refuses_the_raw_stream_route() {
+        for path in [
+            format!("/{IH}/0"),
+            format!("/{IH}/12"),
+            format!("/{IH}/-1"),
+            format!("/{IH}/0?tr=http%3A%2F%2Ftracker"),
+            // the {*rest} form (an addon url that appends the filename)
+            format!("/{IH}/0/Some.Movie.2026.mkv"),
+            format!("/{IH}/0/deeper/still.mkv"),
+            // {idx} ALSO resolves by file name (stream.rs resolve_index)
+            format!("/{IH}/Some.Movie.2026.mkv"),
+            // ...and a ?f= selector picks the file regardless of the segment
+            format!("/{IH}/anything?f=mkv"),
+            format!("/{IH}/Some.Movie.2026.mkv?f=mkv"),
+            // a percent-encoded first byte: the raw path dodges a naive hash
+            // check, but the Path extractor decodes it back into a valid hash
+            format!("/%30{}/0", &IH[1..]),
+            format!("/%30{}/anything", &IH[1..]),
+            // uppercase hex reaches the stream route just the same
+            format!("/{}/0", IH.to_ascii_uppercase()),
+            // a fourth segment is never a control route
+            format!("/{IH}/0/stats.json/x"),
+            // an encoded "create" does NOT match the literal /create route;
+            // it falls through to the stream route's {idx}
+            format!("/{IH}/cre%61te"),
+        ] {
+            assert!(is_raw_stream_path(&path), "should refuse {path:?}");
+        }
+    }
+
+    /// Traversal segments, encoded or not, are refused before the router.
+    #[test]
+    fn ipc_rejects_path_traversal() {
+        for path in [
+            "/../settings",
+            "/%2e%2e/settings",
+            "/cache/../settings",
+            "/cache/..%2Fsettings",
+            "/cache/%2e%2e%2fsettings",
+            "/cache/..%5Csettings",
+        ] {
+            assert!(traversal_segment(path).is_some(), "should refuse {path:?}");
+        }
+        for path in [
+            "/settings",
+            "/cache/list",
+            // an encoded URL segment decodes to slashes but no dot-dot
+            "/tracks/http%3A%2F%2Fhost%2Fsub.vtt",
+            // dots that are not a traversal component
+            "/cache/files/some..name",
+            "/{ih}/0/stats.json",
+        ] {
+            assert!(traversal_segment(path).is_none(), "should allow {path:?}");
+        }
+    }
+
+    /// ...and nothing else. Everything the web actually fetches over IPC has to
+    /// get through, including the two routes that live UNDER an info hash.
+    #[test]
+    fn ipc_allows_the_control_plane() {
+        for path in [
+            "/settings".to_owned(),
+            "/torrent-settings".to_owned(),
+            "/cache/list".to_owned(),
+            "/cache/files/".to_owned() + IH,
+            "/stats.json".to_owned(),
+            // static segments that win over the {idx} stream param
+            format!("/{IH}/stats.json"),
+            format!("/{IH}/0/stats.json"),
+            format!("/{IH}/create"),
+            format!("/{IH}/remove"),
+            "/opensubHash?videoUrl=x".to_owned(),
+            "/hlsv2/probe?mediaURL=x".to_owned(),
+            "/".to_owned(),
+        ] {
+            assert!(!is_raw_stream_path(&path), "should allow {path:?}");
+        }
+    }
+
+    /// A real streaming-server router over a throwaway cache dir, plus the
+    /// runtime to drive it. Nothing binds a socket: that is the point.
+    fn test_router() -> (tokio::runtime::Runtime, rillio_streaming_server::axum::Router) {
+        let rt = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .enable_all()
+            .build()
+            .expect("build runtime");
+        let dir = std::env::temp_dir().join(format!("rillio-ipc-test-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).expect("create cache dir");
+        let config = rillio_streaming_server::Config::local(dir);
+        let engine = rt
+            .block_on(rillio_streaming_server::Engine::new(config.cache_root.clone()))
+            .expect("engine");
+        let router = rillio_streaming_server::router(config, engine);
+        (rt, router)
+    }
+
+    /// The IPC transport is a real request against the real router: same
+    /// handlers, same middleware, same status codes as the socket path.
+    #[test]
+    fn ipc_dispatch_answers_the_control_plane() {
+        let (rt, router) = test_router();
+        let resp = rt
+            .block_on(dispatch_server_request(
+                router.clone(),
+                "GET".into(),
+                "/settings".into(),
+                None,
+            ))
+            .expect("GET /settings");
+        eprintln!("[ipc] GET /settings -> {} {}", resp.status, resp.body);
+        assert_eq!(resp.status, 200);
+        let json: serde_json::Value = serde_json::from_str(&resp.body).expect("settings json");
+        // The baseUrl gate the web client keys playback off must still be there.
+        assert!(
+            json["baseUrl"].as_str().is_some_and(|u| !u.is_empty()),
+            "settings must still advertise a baseUrl: {}",
+            resp.body
+        );
+        assert_eq!(
+            resp.headers.get("content-type").map(String::as_str),
+            Some("application/json")
+        );
+
+        // A POST with a JSON body reaches the extractor (which needs the
+        // content-type this transport supplies).
+        let resp = rt
+            .block_on(dispatch_server_request(
+                router,
+                "POST".into(),
+                "/cache/pin".into(),
+                Some(r#"{"infoHash":"0123456789abcdef0123456789abcdef01234567","pinned":true}"#.into()),
+            ))
+            .expect("POST /cache/pin");
+        eprintln!("[ipc] POST /cache/pin -> {} {}", resp.status, resp.body);
+        assert_ne!(
+            resp.status, 415,
+            "the Json extractor rejected the body's content type"
+        );
+        assert_ne!(resp.status, 405, "a POST route must accept POST");
+    }
+
+    /// The POST-only discipline is enforced by the router itself, so it holds
+    /// over IPC exactly as it does over HTTP.
+    #[test]
+    fn ipc_dispatch_keeps_mutations_post_only() {
+        let (rt, router) = test_router();
+        for path in ["/cache/delete", "/cache/pin", "/removeAll"] {
+            let resp = rt
+                .block_on(dispatch_server_request(
+                    router.clone(),
+                    "GET".into(),
+                    path.into(),
+                    None,
+                ))
+                .unwrap_or_else(|e| panic!("GET {path}: {e}"));
+            eprintln!("[ipc] GET {path} -> {}", resp.status);
+            assert_eq!(resp.status, 405, "GET {path} must not mutate");
+        }
+    }
+
+    /// Anything outside GET/POST, a relative path, and the media stream route
+    /// are refused BEFORE the router sees them.
+    #[test]
+    fn ipc_dispatch_refuses_what_the_boundary_forbids() {
+        let (rt, router) = test_router();
+        for method in ["DELETE", "PUT", "HEAD", "OPTIONS", "PATCH", "TRACE"] {
+            let err = rt
+                .block_on(dispatch_server_request(
+                    router.clone(),
+                    method.into(),
+                    "/settings".into(),
+                    None,
+                ))
+                .expect_err("must refuse {method}");
+            assert!(err.contains("is not allowed"), "{method}: {err}");
+        }
+        assert!(rt
+            .block_on(dispatch_server_request(
+                router.clone(),
+                "GET".into(),
+                "settings".into(),
+                None,
+            ))
+            .is_err());
+        for stream_path in [
+            format!("/{IH}/0"),
+            // the review's bypass spellings: file-name idx, ?f= selector,
+            // percent-encoded hash byte
+            format!("/{IH}/Some.Movie.2026.mkv"),
+            format!("/{IH}/anything?f=mkv"),
+            format!("/%30{}/0", &IH[1..]),
+        ] {
+            let err = rt
+                .block_on(dispatch_server_request(
+                    router.clone(),
+                    "GET".into(),
+                    stream_path.clone(),
+                    None,
+                ))
+                .expect_err("the stream route must be refused");
+            eprintln!("[ipc] GET {stream_path} -> {err}");
+            assert!(err.contains("media stream route"), "{err}");
+        }
+        let err = rt
+            .block_on(dispatch_server_request(
+                router,
+                "GET".into(),
+                "/../settings".into(),
+                None,
+            ))
+            .expect_err("a traversal path must be refused");
+        eprintln!("[ipc] GET /../settings -> {err}");
+        assert!(err.contains("traversal"), "{err}");
+    }
 
     /// Every scheme the web client's openExternal / custom-scheme navigations
     /// legitimately produce must be accepted (parsed end-to-end).

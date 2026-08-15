@@ -10,6 +10,38 @@ var ERROR = require('../error');
 var SUBS_SCALE_FACTOR = 0.01;
 var EOF_END_TOLERANCE = 60000;
 
+// How long to wait for the shell's answer to the `rillio://` capability query
+// before assuming "no". A shell that predates the query never answers at all,
+// and an unanswered promise here would park `loadfile` forever (the exact way
+// the mpv-version handshake once broke playback), so this ALWAYS settles.
+var STREAM_CB_QUERY_TIMEOUT = 3000;
+
+// The url that makes the shell player read this torrent's bytes in-process,
+// or null when this stream has no such form.
+//
+// Only a stream carrying an (infoHash, fileIdx) resolved against OUR streaming
+// server gets one (withStreamingServer attaches those two, and only for its own
+// stream route). The shell parses this grammar strictly - 40 lowercase hex and
+// a non-negative integer, nothing else - so anything that does not fit exactly
+// stays on the http url rather than being loaded as something else.
+function bytePlaneUrl(stream) {
+    if (!stream || typeof stream.infoHash !== 'string') {
+        return null;
+    }
+
+    var infoHash = stream.infoHash.toLowerCase();
+    if (!/^[0-9a-f]{40}$/.test(infoHash)) {
+        return null;
+    }
+
+    var fileIdx = stream.fileIdx;
+    if (typeof fileIdx !== 'number' || !isFinite(fileIdx) || fileIdx < 0 || Math.floor(fileIdx) !== fileIdx) {
+        return null;
+    }
+
+    return 'rillio://' + infoHash + '/' + fileIdx;
+}
+
 var stremioToMPVProps = {
     'loaded': 'loaded',
     'stream': null,
@@ -70,6 +102,17 @@ function ShellVideo(options) {
     var waitForMPVVersion = new Promise(function (resolve) {
         resolveMPVVersion = resolve;
     });
+    // Whether this shell can serve `rillio://` (libmpv with stream_cb + the
+    // streaming engine in-process). Asked once per instance, alongside the
+    // property observers below; the answer arrives as a `rillio-stream-cb`
+    // signal. Falls back to false on any shell that does not answer.
+    var resolveStreamCb;
+    var waitForStreamCb = new Promise(function (resolve) {
+        resolveStreamCb = resolve;
+    });
+    setTimeout(function () {
+        resolveStreamCb(false);
+    }, STREAM_CB_QUERY_TIMEOUT);
     command('unload');
 
     ipc.send('mpv-command', ['stop']);
@@ -102,9 +145,17 @@ function ShellVideo(options) {
     ipc.send('mpv-observe-prop', 'mpv-version');
     ipc.send('mpv-observe-prop', 'ffmpeg-version');
 
+    ipc.send('rillio-stream-cb-query');
+
     var events = new EventEmitter();
     var destroyed = false;
     var stream = null;
+    // Armed while the current loadfile went out as rillio://: the same argv
+    // with the stream's http url instead, so a byte-plane refusal (end-file
+    // with error; the shell answers fast for a torrent its engine does not
+    // know) retries ONCE over the server route instead of surfacing a dead
+    // player. Cleared on use, so a failing http load errors out normally.
+    var bytePlaneFallback = null;
 
     var avgDuration = 0;
     var minClipDuration = 30;
@@ -129,6 +180,10 @@ function ShellVideo(options) {
     function embeddedProp(args) {
         return args.data && args.data !== 'no' ? 'EMBEDDED_' + args.data.toString() : null;
     }
+
+    ipc.on('rillio-stream-cb', function(args) {
+        resolveStreamCb(!!(args && args.available));
+    });
 
     var last_time = 0;
     ipc.on('mpv-prop-change', function(args) {
@@ -296,6 +351,15 @@ function ShellVideo(options) {
     ipc.on('mpv-event-ended', function(args) {
         // older shells report 'other' for every non-error reason, including eof
         if (args.error) {
+            if (bytePlaneFallback !== null) {
+                var fallbackArgs = bytePlaneFallback;
+                bytePlaneFallback = null;
+                // eslint-disable-next-line no-console
+                console.warn('ShellVideo: rillio:// load failed (' + String(args.error) + '), retrying over http');
+                ipc.send('mpv-command', fallbackArgs);
+                ipc.send('mpv-set-prop', ['pause', false]);
+                return;
+            }
             // mpv reports a bare string ("loading failed"). Playback cannot
             // continue, so mark it critical: the player then shows its full
             // error screen (and can ask the streaming server for the real
@@ -467,9 +531,23 @@ function ShellVideo(options) {
             case 'load': {
                 command('unload');
                 if (commandArgs && commandArgs.stream && typeof commandArgs.stream.url === 'string') {
-                    waitForMPVVersion.then(function (mpvVersion) {
+                    Promise.all([waitForMPVVersion, waitForStreamCb]).then(function (handshake) {
+                        var mpvVersion = handshake[0];
+                        var streamCbAvailable = handshake[1];
                         stream = commandArgs.stream;
                         onPropChanged('stream');
+
+                        // What mpv opens. `stream.url` (the http form) stays the
+                        // stream's public identity - the thumbnail shadow, the
+                        // subtitle routes and the cast gate all read it - and only
+                        // the loadfile target moves to the in-process byte plane.
+                        var loadURL = stream.url;
+                        if (streamCbAvailable) {
+                            var bytePlane = bytePlaneUrl(stream);
+                            if (bytePlane !== null) {
+                                loadURL = bytePlane;
+                            }
+                        }
 
                         var subAssOverride = commandArgs.assSubtitlesStyling ? 'strip' : 'no';
                         ipc.send('mpv-set-prop', ['sub-ass-override', subAssOverride]);
@@ -496,15 +574,21 @@ function ShellVideo(options) {
                         ipc.send('mpv-set-prop', ['input-vo-keyboard', separateWindow]);
 
                         var startAt = Math.floor(parseInt(commandArgs.time, 10) / 1000) || 0;
+                        var loadfileArgs;
                         if (startAt !== 0) {
                             if (versionGTE(mpvVersion, '0.39')) {
-                                ipc.send('mpv-command', ['loadfile', stream.url, 'replace', '-1', 'start=+' + startAt]);
+                                loadfileArgs = ['loadfile', loadURL, 'replace', '-1', 'start=+' + startAt];
                             } else {
-                                ipc.send('mpv-command', ['loadfile', stream.url, 'replace', 'start=+' + startAt]);
+                                loadfileArgs = ['loadfile', loadURL, 'replace', 'start=+' + startAt];
                             }
                         } else {
-                            ipc.send('mpv-command', ['loadfile', stream.url]);
+                            loadfileArgs = ['loadfile', loadURL];
                         }
+                        bytePlaneFallback = loadURL !== stream.url ?
+                            loadfileArgs.map(function(arg) { return arg === loadURL ? stream.url : arg; })
+                            :
+                            null;
+                        ipc.send('mpv-command', loadfileArgs);
                         ipc.send('mpv-set-prop', ['sid', 'no']);
                         ipc.send('mpv-set-prop', ['pause', false]);
                         ipc.send('mpv-set-prop', ['speed', props.speed]);
@@ -550,6 +634,7 @@ function ShellVideo(options) {
                 };
                 stall = { 'seeking': false, 'paused-for-cache': false };
                 avgDuration = 0;
+                bytePlaneFallback = null;
                 ipc.send('mpv-command', ['stop']);
                 onPropChanged('loaded');
                 onPropChanged('stream');
@@ -611,6 +696,8 @@ function ShellVideo(options) {
 ShellVideo.canPlayStream = function() {
     return Promise.resolve(true);
 };
+
+ShellVideo.canPlayWithoutStreamingServer = true;
 
 ShellVideo.manifest = {
     name: 'ShellVideo',

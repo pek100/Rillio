@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { subscribeCacheChanged } from 'rillio/common/cacheEvents';
+import { serverFetch } from 'rillio/common/serverFetch';
 
 // Direct module require, NOT the 'rillio/common' barrel: this hook loads with
 // TopNav at app startup, before the barrel's circular imports resolve, and the
@@ -27,7 +28,7 @@ const useActiveDownloads = (): boolean => {
         }
         let cancelled = false;
         const poll = () => {
-            fetch(new URL('cache/list', serverUrl))
+            serverFetch(new URL('cache/list', serverUrl))
                 .then((resp) => resp.json())
                 .then((list: ListEntry[]) => {
                     if (cancelled) return;

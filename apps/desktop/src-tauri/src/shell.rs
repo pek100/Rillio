@@ -94,6 +94,13 @@ impl NativePlayer {
             NativePlayer::Mpv(ctrl) => ctrl.mpv.observe_property(name),
         }
     }
+    /// Whether this player can read `rillio://` in-process (see
+    /// [`register_stream_protocol`]).
+    fn stream_cb(&self) -> bool {
+        match self {
+            NativePlayer::Mpv(ctrl) => ctrl.stream_cb,
+        }
+    }
     /// Snapshot of the last-known player properties (the stats panel).
     fn stats(&self) -> serde_json::Map<String, Value> {
         match self {
@@ -128,6 +135,10 @@ impl NativePlayer {
 /// A live mpv instance plus a cache of its latest property values.
 pub struct Controller {
     mpv: Arc<Mpv>,
+    /// Whether `rillio://` is registered on this instance, i.e. whether mpv can
+    /// read torrent bytes in-process. False on a libmpv without
+    /// `mpv_stream_cb_add_ro`; the web client then keeps loading the HTTP URL.
+    stream_cb: bool,
     /// Latest value of every observed mpv property, for the "Stats for nerds"
     /// panel (`shell_mpv_stats`). Updated by the event loop on every change.
     props: Mutex<serde_json::Map<String, Value>>,
@@ -347,7 +358,7 @@ impl ShellState {
         // opens its own window.
         let surface = crate::surface::create();
         let wid = surface.video_wid(app);
-        let ctrl = Arc::new(Controller::create(wid)?);
+        let ctrl = Arc::new(Controller::create(app, wid)?);
         // Android: register the live player so a later surfaceCreated re-attaches
         // its Surface, and attach now if one is already present (the common case -
         // the SurfaceView exists before the web calls shell_init). Attaching
@@ -379,13 +390,54 @@ impl ShellState {
     }
 }
 
+/// Register the `rillio://` protocol on a freshly loaded (NOT yet initialized)
+/// mpv, backed by the streaming server's engine. Returns whether it took.
+///
+/// The engine is looked up PER OPEN rather than captured here: the player is
+/// created when the web client mounts, which can race the server's bind, and
+/// capturing "no engine yet" would disable the byte plane for the whole
+/// session. By the time mpv opens anything the web has already gone through the
+/// router (the create POST), so the lookup always succeeds in practice; a
+/// failure fails the load loudly instead of silently playing from nowhere.
+fn register_stream_protocol(app: &AppHandle, mpv: &Mpv) -> bool {
+    use crate::stream_cb::SourceFactory;
+    use tauri::Manager;
+
+    let app = app.clone();
+    let result = crate::stream_cb::register(mpv, move |info_hash: &str, file_idx: u32| {
+        let server = app
+            .state::<crate::ServerHandle>()
+            .get()
+            .ok_or_else(|| "the streaming server has not bound yet".to_string())?;
+        crate::stream_cb::EngineSources::new(server.engine.clone(), server.runtime.clone())
+            .open(info_hash, file_idx)
+    });
+    match result {
+        Ok(()) => {
+            tracing::info!("mpv: rillio:// registered; torrent bytes stay in-process");
+            true
+        }
+        Err(e) => {
+            tracing::warn!("mpv: rillio:// unavailable ({e}); the player keeps using the HTTP stream url");
+            false
+        }
+    }
+}
+
 impl Controller {
     /// Load libmpv and initialize an idle instance ready for `loadfile`. When
     /// `wid` is set, mpv renders into that window handle (embedded); otherwise it
     /// opens its own output window.
-    fn create(wid: Option<isize>) -> Result<Self, String> {
+    fn create(app: &AppHandle, wid: Option<isize>) -> Result<Self, String> {
         let dll = mpv::default_dll_path();
         let mpv = Mpv::load(&dll)?;
+        // The `rillio://` byte plane. Registered BEFORE initialize() (mpv's
+        // requirement) and BEFORE the streaming server has necessarily bound:
+        // the factory resolves the engine lazily, per open, so a player created
+        // during the bind race still serves every later loadfile. A libmpv
+        // without the symbol simply leaves this false and the web keeps using
+        // the HTTP URL - the documented fallback, never a hard failure.
+        let stream_cb = register_stream_protocol(app, &mpv);
         // ffmpeg's mediacodec hwdec + audiotrack AO and mpv's android VO all
         // reach Java over JNI; hand them the JavaVM before anything initializes.
         // Fail loud: without it they die cryptically at first use instead.
@@ -543,6 +595,7 @@ impl Controller {
         }
         Ok(Self {
             mpv: Arc::new(mpv),
+            stream_cb,
             props: Mutex::new(serde_json::Map::new()),
             snapshot: Mutex::new(SnapshotCache::default()),
             blur: Mutex::new(BlurState::default()),
@@ -1193,6 +1246,22 @@ pub fn shell_send(
         // GPU video processing (mpv shaders) - not wired yet; accept silently so
         // the web client's load sequence isn't interrupted.
         "mpv-set-gpu-video-processing" => Ok(()),
+        // Capability handshake for the `rillio://` byte plane. ShellVideo asks
+        // once per instance, right where it registers its property observers,
+        // and only emits a `rillio://` loadfile once the answer comes back true.
+        //
+        // Answered as a `shell-signal` rather than a return value because that
+        // is the channel ShellVideo already listens on (it never reads
+        // shell_send's result), and it creates the player the same way an
+        // observe does, so the answer reflects the instance that will actually
+        // play. A shell too old to know this method falls through to the
+        // catch-all below, no answer arrives, and ShellVideo's timeout keeps it
+        // on the HTTP url.
+        "rillio-stream-cb-query" => {
+            let available = state.ensure(&app).map(|p| p.stream_cb()).unwrap_or(false);
+            emit(&app, "rillio-stream-cb", serde_json::json!({ "available": available }));
+            Ok(())
+        }
         // Fullscreen: the web player drives it through the shell when active
         // (FullscreenProvider). Toggle the native window and echo the state back
         // as `win-visibility-changed` so the UI updates (and can exit again).
@@ -1277,9 +1346,74 @@ fn check_mpv_command(refs: &[&str]) -> Result<(), String> {
         return Err(format!("mpv-command {name:?} is not allowed"));
     }
     if name == "loadfile" {
-        validate_stream_url(refs.get(1).copied().unwrap_or_default())?;
+        check_loadfile_argv(refs)?;
     }
     Ok(())
+}
+
+/// SECURITY: `loadfile`'s FULL argv shape is validated, not only its URL.
+///
+/// mpv's signature is `loadfile <url> [<flags> [<index>] [<options>]]`, and
+/// the trailing options argument is a comma-separated list of per-file
+/// property assignments that mpv applies with NO further vetting:
+/// `stream-record=<path>` writes an attacker-chosen file, `sub-file=` /
+/// `audio-file=` read one, `vf=` reaches lavfi. All of those are properties
+/// [`MPV_SETPROP_ALLOWLIST`] deliberately excludes, so letting them ride in
+/// argv[3]/argv[4] would bypass that allowlist entirely. Only the exact
+/// shapes ShellVideo.js emits pass (packages/video/src/ShellVideo, `load`):
+///
+///   [loadfile, url]
+///   [loadfile, url, "replace"]
+///   [loadfile, url, "replace", "start=+N"]        (mpv < 0.39: flags, options)
+///   [loadfile, url, "replace", "-1", "start=+N"]  (mpv >= 0.39: flags, index, options)
+fn check_loadfile_argv(refs: &[&str]) -> Result<(), String> {
+    validate_stream_url(refs.get(1).copied().unwrap_or_default())?;
+    let refuse = |what: &str| {
+        tracing::error!("shell: BLOCKED loadfile with {what} (argv {refs:?})");
+        Err(format!("loadfile: {what} is not allowed"))
+    };
+    if refs.len() > 5 {
+        return refuse("extra arguments");
+    }
+    if let Some(&flags) = refs.get(2) {
+        if flags != "replace" {
+            return refuse("flags other than \"replace\"");
+        }
+    }
+    match refs.len() {
+        2 | 3 => Ok(()),
+        4 if is_safe_loadfile_options(refs[3]) => Ok(()),
+        4 => refuse("an options argument outside start=<seconds>"),
+        5 if refs[3] != "-1" => refuse("a playlist index other than -1"),
+        5 if is_safe_loadfile_options(refs[4]) => Ok(()),
+        5 => refuse("an options argument outside start=<seconds>"),
+        _ => unreachable!("lengths 0..=1 cannot reach here and >5 was refused"),
+    }
+}
+
+/// The one per-file options string ShellVideo legitimately sends: empty, or
+/// exactly `start=` + an unsigned decimal number with an optional `+` sign and
+/// an optional fraction (`^start=\+?\d+(\.\d+)?$`). No commas, so a second
+/// option can never be smuggled alongside a valid start.
+fn is_safe_loadfile_options(opts: &str) -> bool {
+    if opts.is_empty() {
+        return true;
+    }
+    let Some(value) = opts.strip_prefix("start=") else {
+        return false;
+    };
+    let value = value.strip_prefix('+').unwrap_or(value);
+    let (int, frac) = match value.split_once('.') {
+        Some((int, frac)) => (int, Some(frac)),
+        None => (value, None),
+    };
+    if int.is_empty() || !int.bytes().all(|b| b.is_ascii_digit()) {
+        return false;
+    }
+    match frac {
+        Some(frac) => !frac.is_empty() && frac.bytes().all(|b| b.is_ascii_digit()),
+        None => true,
+    }
 }
 
 /// SECURITY (S5): gate an `mpv-set-prop` name against [`MPV_SETPROP_ALLOWLIST`].
@@ -1292,18 +1426,37 @@ fn check_mpv_setprop(name: &str) -> Result<(), String> {
 }
 
 /// SECURITY (S5): a `loadfile` target must be a plain http(s) stream URL (the
-/// local streaming server at http://127.0.0.1:11470/… or a direct addon URL).
-/// mpv would otherwise happily open a local path, `file://`, or one of its
-/// protocol handlers (`av://`, `edl://`, `memory://`, pipe/subprocess-style
-/// inputs) - data-exfil / code-execution vectors reachable from web content.
+/// local streaming server at http://127.0.0.1:<port>/… or a direct addon URL),
+/// or our own `rillio://` byte plane. mpv would otherwise happily open a local
+/// path, `file://`, or one of its protocol handlers (`av://`, `edl://`,
+/// `memory://`, pipe/subprocess-style inputs) - data-exfil / code-execution
+/// vectors reachable from web content.
+///
+/// `rillio://` is the ONE widening, and it is narrow by construction: the
+/// scheme resolves to the in-process torrent engine and nothing else, and
+/// [`crate::stream_cb::parse_url`] accepts exactly `rillio://<40 lowercase
+/// hex>/<u32>`. No filename, no query, no traversal, no second spelling of the
+/// same stream - so the only thing web content can ask for is "bytes of a file
+/// inside a torrent", the same authority the HTTP stream route already grants.
+/// Unlike the http(s) check, this one is CASE-SENSITIVE, because the parser's
+/// grammar is (an uppercase hash is a different string, therefore refused).
 fn validate_stream_url(url: &str) -> Result<(), String> {
-    let lower = url.trim().to_ascii_lowercase();
+    let trimmed = url.trim();
+    let lower = trimmed.to_ascii_lowercase();
     if lower.starts_with("http://") || lower.starts_with("https://") {
-        Ok(())
-    } else {
-        tracing::error!("shell: BLOCKED loadfile with non-http(s) URL {url:?}");
-        Err(format!("loadfile: refusing non-http(s) URL {url:?}"))
+        return Ok(());
     }
+    if lower.starts_with("rillio://") {
+        return match crate::stream_cb::parse_url(trimmed) {
+            Ok(_) => Ok(()),
+            Err(e) => {
+                tracing::error!("shell: BLOCKED loadfile with malformed rillio:// URL {url:?}: {e}");
+                Err(format!("loadfile: refusing malformed rillio:// URL {url:?}: {e}"))
+            }
+        };
+    }
+    tracing::error!("shell: BLOCKED loadfile with non-http(s) URL {url:?}");
+    Err(format!("loadfile: refusing non-http(s) URL {url:?}"))
 }
 
 #[cfg(test)]
@@ -1314,9 +1467,51 @@ mod tests {
     #[test]
     fn allows_the_commands_shellvideo_sends() {
         check_mpv_command(&["stop"]).unwrap();
+        // The three loadfile shapes ShellVideo emits: bare, mpv < 0.39
+        // (flags + options), mpv >= 0.39 (flags + index + options).
         check_mpv_command(&["loadfile", "http://127.0.0.1:11470/abc/0"]).unwrap();
+        check_mpv_command(&["loadfile", "https://cdn.example/stream.mkv", "replace", "start=+90"])
+            .unwrap();
         check_mpv_command(&["loadfile", "https://cdn.example/stream.mkv", "replace", "-1", "start=+90"])
             .unwrap();
+        // Shapes nothing emits today but that carry no options payload.
+        check_mpv_command(&["loadfile", "https://cdn.example/a.mkv", "replace"]).unwrap();
+        check_mpv_command(&["loadfile", "https://cdn.example/a.mkv", "replace", ""]).unwrap();
+        check_mpv_command(&["loadfile", "https://cdn.example/a.mkv", "replace", "-1", ""]).unwrap();
+        check_mpv_command(&["loadfile", "https://cdn.example/a.mkv", "replace", "-1", "start=90.5"])
+            .unwrap();
+    }
+
+    /// loadfile's options argument is mpv's per-file property list, applied
+    /// with no vetting: it must never carry anything but `start=<seconds>`.
+    /// This is the MPV_SETPROP_ALLOWLIST bypass (stream-record et al.).
+    #[test]
+    fn loadfile_argv_shape_is_enforced() {
+        const URL: &str = "https://cdn.example/stream.mkv";
+        for argv in [
+            // property smuggling through the options slot (5-arg form)
+            vec!["loadfile", URL, "replace", "-1", "stream-record=C:/evil.mkv"],
+            vec!["loadfile", URL, "replace", "-1", "sub-file=C:/secrets.txt"],
+            vec!["loadfile", URL, "replace", "-1", "audio-file=C:/secrets.wav"],
+            vec!["loadfile", URL, "replace", "-1", "vf=lavfi=[movie=C:/x]"],
+            // ...and through the legacy 4-arg options slot
+            vec!["loadfile", URL, "replace", "stream-record=C:/evil.mkv"],
+            // a second option riding along a valid start
+            vec!["loadfile", URL, "replace", "-1", "start=+90,stream-record=C:/evil.mkv"],
+            // malformed start values
+            vec!["loadfile", URL, "replace", "-1", "start=+90x"],
+            vec!["loadfile", URL, "replace", "-1", "start=-90"],
+            vec!["loadfile", URL, "replace", "-1", "start="],
+            vec!["loadfile", URL, "replace", "-1", "start=90."],
+            // flags other than replace, a playlist index other than -1
+            vec!["loadfile", URL, "append-play"],
+            vec!["loadfile", URL, "append", "-1", "start=+90"],
+            vec!["loadfile", URL, "replace", "0", "start=+90"],
+            // extra arguments past mpv's documented arity
+            vec!["loadfile", URL, "replace", "-1", "start=+90", "vf=lavfi=[x]"],
+        ] {
+            assert!(check_mpv_command(&argv).is_err(), "should block {argv:?}");
+        }
     }
 
     /// The dangerous mpv commands (the S1 RCE surface) must be rejected.
@@ -1335,7 +1530,8 @@ mod tests {
         assert!(check_mpv_command(&[]).is_err());
     }
 
-    /// loadfile only accepts http(s); local paths and mpv protocols are refused.
+    /// loadfile accepts http(s) and `rillio://`; local paths and mpv protocols
+    /// are refused.
     #[test]
     fn loadfile_url_scheme_is_enforced() {
         validate_stream_url("http://127.0.0.1:11470/abc/0").unwrap();
@@ -1356,6 +1552,55 @@ mod tests {
         }
         // A loadfile command with a bad URL is rejected as a whole.
         assert!(check_mpv_command(&["loadfile", "av://lavfi:testsrc"]).is_err());
+    }
+
+    /// The in-process byte plane is allowed, but ONLY in the one spelling the
+    /// strict parser accepts. Everything mpv could otherwise be talked into
+    /// (a filename segment, a query, an uppercase or wrong-length hash) is a
+    /// hard reject, so widening the allowlist did not widen the reachable set.
+    const TEST_IH: &str = "0123456789abcdef0123456789abcdef01234567";
+
+    #[test]
+    fn loadfile_accepts_a_well_formed_rillio_url() {
+        validate_stream_url(&format!("rillio://{TEST_IH}/0")).unwrap();
+        validate_stream_url(&format!("rillio://{TEST_IH}/12")).unwrap();
+        validate_stream_url(&format!("  rillio://{TEST_IH}/3  ")).unwrap(); // trimmed
+        check_mpv_command(&["loadfile", &format!("rillio://{TEST_IH}/0")]).unwrap();
+        check_mpv_command(&["loadfile", &format!("rillio://{TEST_IH}/0"), "replace", "-1", "start=+90"])
+            .unwrap();
+    }
+
+    #[test]
+    fn loadfile_rejects_a_malformed_rillio_url() {
+        for bad in [
+            // uppercase hex: the grammar is case-sensitive, one spelling only
+            format!("rillio://{}/0", TEST_IH.to_ascii_uppercase()),
+            // wrong hash length
+            format!("rillio://{}/0", &TEST_IH[..39]),
+            format!("rillio://{TEST_IH}f/0"),
+            // non-hex character
+            format!("rillio://{}g/0", &TEST_IH[..39]),
+            // extra path, query, fragment
+            format!("rillio://{TEST_IH}/0/movie.mkv"),
+            format!("rillio://{TEST_IH}/0?tr=http%3A%2F%2Fevil"),
+            format!("rillio://{TEST_IH}/0#x"),
+            // no file index at all, or not a bare non-negative integer
+            format!("rillio://{TEST_IH}"),
+            format!("rillio://{TEST_IH}/"),
+            format!("rillio://{TEST_IH}/-1"),
+            format!("rillio://{TEST_IH}/01"),
+            format!("rillio://{TEST_IH}/1a"),
+            // scheme lookalikes
+            format!("rillio:/{TEST_IH}/0"),
+            format!("RILLIO://{TEST_IH}/0"),
+            format!("rillio://evil.com/{TEST_IH}/0"),
+        ] {
+            assert!(validate_stream_url(&bad).is_err(), "should reject {bad:?}");
+            assert!(
+                check_mpv_command(&["loadfile", &bad]).is_err(),
+                "loadfile should reject {bad:?}"
+            );
+        }
     }
 
     /// Every property ShellVideo actually sets over the bridge must pass.

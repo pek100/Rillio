@@ -15,6 +15,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useProfile } from 'rillio/common';
 import type { CacheMeta } from 'rillio/common/cacheMetadata';
+import { serverFetch } from 'rillio/common/serverFetch';
 
 export type CachedStream = {
     infoHash: string,
@@ -38,7 +39,7 @@ const useCachedStreams = (metaId: string | null, videoId: string | null): Cached
             setMatches([]);
             return;
         }
-        fetch(new URL('cache/list', serverUrl))
+        serverFetch(new URL('cache/list', serverUrl))
             .then((resp) => {
                 if (!resp.ok) throw new Error(`cache/list responded ${resp.status}`);
                 return resp.json();

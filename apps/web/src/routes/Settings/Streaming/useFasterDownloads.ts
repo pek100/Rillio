@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useToast } from 'rillio/common';
+import { serverFetch } from 'rillio/common/serverFetch';
 
 // Rillio-specific "faster downloads" toggle: it drives the streaming server's
 // inbound listen port + UPnP via GET/POST /torrent-settings. That endpoint only
@@ -25,7 +26,7 @@ const useFasterDownloads = (streamingServerUrl?: string | null) => {
             setAvailable(false);
             return;
         }
-        fetch(`${base}/torrent-settings`)
+        serverFetch(`${base}/torrent-settings`)
             .then((res) => (res.ok ? res.json() : Promise.reject(new Error(String(res.status)))))
             .then((body) => {
                 if (cancelled) return;
@@ -44,7 +45,7 @@ const useFasterDownloads = (streamingServerUrl?: string | null) => {
         if (!base) return;
         const next = !enabled;
         setEnabled(next); // optimistic; reverted on failure below
-        fetch(`${base}/torrent-settings`, {
+        serverFetch(`${base}/torrent-settings`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ listenEnabled: next }),

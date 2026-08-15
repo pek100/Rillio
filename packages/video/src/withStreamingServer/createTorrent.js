@@ -1,4 +1,5 @@
 var url = require('url');
+var serverContext = require('../serverContext');
 
 function buildTorrent(streamingServerURL, infoHash, fileIdx, sources) {
     var query = Array.isArray(sources) && sources.length > 0 ?
@@ -52,7 +53,7 @@ function createTorrent(streamingServerURL, infoHash, fileIdx, sources, seriesInf
         body.guessFileIdx = false;
     }
 
-    return fetch(url.resolve(streamingServerURL, '/' + encodeURIComponent(infoHash) + '/create'), {
+    return serverContext.fetch(url.resolve(streamingServerURL, '/' + encodeURIComponent(infoHash) + '/create'), {
         method: 'POST',
         headers: {
             'content-type': 'application/json'

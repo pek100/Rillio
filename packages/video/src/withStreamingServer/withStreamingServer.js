@@ -4,11 +4,63 @@ var hat = require('hat');
 var cloneDeep = require('lodash.clonedeep');
 var deepFreeze = require('deep-freeze');
 var mediaCapabilities = require('../mediaCapabilities');
+var serverContext = require('../serverContext');
 var convertStream = require('./convertStream');
 var fetchVideoParams = require('./fetchVideoParams');
 var isPlayerLoaded = require('./isPlayerLoaded');
 var supportsTranscoding = require('../supportsTranscoding');
 var ERROR = require('../error');
+
+// Does `mediaURL` point at THIS streaming server's own stream route for
+// `(infoHash, fileIdx)`? Only then may the shell player swap it for the
+// in-process `rillio://` byte plane, which always reads the LOCAL engine.
+//
+// Three gates, all load-bearing:
+//   1. The configured server must BE the in-process one (serverContext).
+//      convertStream also reports an infoHash for a `/proxy` rewrite and for
+//      an addon that ships a pre-computed streaming-server url, and the user
+//      can select a remote server in Settings; reading those torrents from
+//      the local engine would download them all over again.
+//   2. The url must be the stream route for exactly this (infoHash, fileIdx).
+//   3. Only `?tr=` params (or an empty query - the core's url builder leaves a
+//      dangling '?') may ride on the route: the server gives `?f=<name>`
+//      priority over the numeric idx, so any other query can name a DIFFERENT
+//      file than the byte plane would open.
+function torrentIdentity(streamingServerURL, mediaURL, infoHash, fileIdx) {
+    if (typeof streamingServerURL !== 'string' || typeof mediaURL !== 'string' || typeof infoHash !== 'string') {
+        return {};
+    }
+
+    if (!serverContext.isLocalServerUrl(streamingServerURL)) {
+        return {};
+    }
+
+    // The core hands fileIdx over as a number, but a decoded deep link can
+    // carry it as a digit string; both name the same file.
+    var fileIdxNumber = typeof fileIdx === 'number' ?
+        fileIdx
+        :
+        typeof fileIdx === 'string' && /^-?\d+$/.test(fileIdx) ? parseInt(fileIdx, 10) : NaN;
+    if (!isFinite(fileIdxNumber)) {
+        return {};
+    }
+
+    var route = url.resolve(streamingServerURL, '/' + encodeURIComponent(infoHash) + '/' + encodeURIComponent(fileIdxNumber));
+    if (mediaURL !== route) {
+        if (mediaURL.indexOf(route + '?') !== 0) {
+            return {};
+        }
+
+        var query = mediaURL.slice(route.length + 1);
+        var onlyTrackers = Array.from(new URLSearchParams(query).keys())
+            .every(function(key) { return key === 'tr'; });
+        if (!onlyTrackers) {
+            return {};
+        }
+    }
+
+    return { infoHash: infoHash, fileIdx: fileIdxNumber };
+}
 
 function withStreamingServer(Video) {
     function VideoWithStreamingServer(options) {
@@ -37,6 +89,22 @@ function withStreamingServer(Video) {
             stream: false,
             videoParams: false
         };
+
+        function canLoadDirectlyWithoutServer(commandArgs) {
+            if (Video.canPlayWithoutStreamingServer !== true || !commandArgs || !commandArgs.stream) {
+                return false;
+            }
+
+            var stream = commandArgs.stream;
+            var proxyHeaders = stream.behaviorHints && stream.behaviorHints.proxyHeaders;
+            var proxyStreamsEnabled = commandArgs.streamingServerSettings && commandArgs.streamingServerSettings.proxyStreamsEnabled;
+
+            return typeof stream.url === 'string' &&
+                stream.url.indexOf('magnet:') !== 0 &&
+                !commandArgs.forceTranscoding &&
+                !proxyHeaders &&
+                !proxyStreamsEnabled;
+        }
 
         function flushActionsQueue() {
             while (actionsQueue.length > 0) {
@@ -99,14 +167,58 @@ function withStreamingServer(Video) {
         function command(commandName, commandArgs) {
             switch (commandName) {
                 case 'load': {
-                    if (commandArgs && commandArgs.stream && typeof commandArgs.streamingServerURL === 'string') {
+                    // THE entry point for streaming-server urls: everything
+                    // below (convertStream, the hlsv2 and subtitles.vtt urls,
+                    // fetchVideoParams, the error payloads) derives from this
+                    // one value, so the symbolic -> real mapping happens here
+                    // and exactly once. The sync map covers the common case
+                    // (address already resolved); the pipeline below ALSO waits
+                    // for the shell's address handshake (bounded), because a
+                    // load can fire before the server has reported where it
+                    // bound, and the symbolic port must never reach mpv.
+                    // loadArgs is kept pointing at the rewritten copy, which
+                    // keeps the `commandArgs !== loadArgs` staleness checks
+                    // below coherent.
+                    if (commandArgs && typeof commandArgs.streamingServerURL === 'string') {
+                        commandArgs = Object.assign({}, commandArgs, {
+                            streamingServerURL: serverContext.resolveServerUrl(commandArgs.streamingServerURL)
+                        });
+                    }
+                    var hasStreamingServer = commandArgs && typeof commandArgs.streamingServerURL === 'string';
+                    if (commandArgs && commandArgs.stream && (hasStreamingServer || canLoadDirectlyWithoutServer(commandArgs))) {
                         command('unload');
                         video.dispatch({ type: 'command', commandName: 'unload' });
                         loadArgs = commandArgs;
                         onPropChanged('stream');
-                        convertStream(commandArgs.streamingServerURL, commandArgs.stream, commandArgs.seriesInfo, commandArgs.streamingServerSettings)
+                        (hasStreamingServer ?
+                            serverContext.resolveServerUrlWhenReady(commandArgs.streamingServerURL)
+                            :
+                            Promise.resolve(null))
+                            .then(function(resolvedServerURL) {
+                                if (commandArgs !== loadArgs) {
+                                    return null;
+                                }
+
+                                if (hasStreamingServer && typeof resolvedServerURL === 'string' && resolvedServerURL !== commandArgs.streamingServerURL) {
+                                    commandArgs = Object.assign({}, commandArgs, {
+                                        streamingServerURL: resolvedServerURL
+                                    });
+                                    loadArgs = commandArgs;
+                                }
+
+                                return convertStream(commandArgs.streamingServerURL, commandArgs.stream, commandArgs.seriesInfo, commandArgs.streamingServerSettings);
+                            })
                             .then(function(result) {
-                                var mediaURL = result.url;
+                                if (result === null || commandArgs !== loadArgs) {
+                                    return null;
+                                }
+
+                                // A stream url built from the SYMBOLIC default is
+                                // pointed at the real server here: the core builds
+                                // its torrent urls from the persisted setting, and
+                                // this value is what mpv (or the transcode probe)
+                                // actually opens.
+                                var mediaURL = serverContext.resolveServerUrl(result.url);
                                 var infoHash = result.infoHash;
                                 var fileIdx = result.fileIdx;
                                 var formats = Array.isArray(commandArgs.formats) ?
@@ -142,9 +254,19 @@ function withStreamingServer(Video) {
                                                 mediaURL: mediaURL,
                                                 infoHash: infoHash,
                                                 fileIdx: fileIdx,
-                                                stream: {
-                                                    url: mediaURL
-                                                }
+                                                // The identity rides along so a
+                                                // player that can read the
+                                                // torrent in-process knows WHICH
+                                                // file this url is (see
+                                                // torrentIdentity). Absent for
+                                                // every other kind of stream, and
+                                                // for the transcode branch below,
+                                                // whose url is a server route with
+                                                // no byte-plane equivalent.
+                                                stream: Object.assign(
+                                                    { url: mediaURL },
+                                                    torrentIdentity(commandArgs.streamingServerURL, mediaURL, infoHash, fileIdx)
+                                                )
                                             };
                                         }
 
@@ -191,7 +313,7 @@ function withStreamingServer(Video) {
                                     });
                             })
                             .then(function(result) {
-                                if (commandArgs !== loadArgs) {
+                                if (!result || commandArgs !== loadArgs) {
                                     return;
                                 }
 
@@ -207,7 +329,14 @@ function withStreamingServer(Video) {
 
                                 isPlayerLoaded(video, Video.manifest.props)
                                     .then(function() {
-                                        return fetchVideoParams(commandArgs.streamingServerURL, result.mediaURL, result.infoHash, result.fileIdx, commandArgs.stream.behaviorHints);
+                                        return hasStreamingServer ?
+                                            fetchVideoParams(commandArgs.streamingServerURL, result.mediaURL, result.infoHash, result.fileIdx, commandArgs.stream.behaviorHints)
+                                            :
+                                            {
+                                                hash: null,
+                                                size: null,
+                                                filename: commandArgs.stream.behaviorHints && commandArgs.stream.behaviorHints.filename || null
+                                            };
                                     })
                                     .then(function(result) {
                                         if (commandArgs !== loadArgs) {
@@ -261,7 +390,7 @@ function withStreamingServer(Video) {
                                         return Object.assign({}, track, {
                                             // fallback is used in case server conversion fails (if server is offline)
                                             fallbackUrl: track.url,
-                                            url: typeof track.url === 'string' ?
+                                            url: typeof track.url === 'string' && typeof loadArgs.streamingServerURL === 'string' ?
                                                 url.resolve(loadArgs.streamingServerURL, '/subtitles.vtt?' + new URLSearchParams([['from', track.url]]).toString())
                                                 :
                                                 track.url
@@ -349,6 +478,14 @@ function withStreamingServer(Video) {
     }
 
     VideoWithStreamingServer.canPlayStream = function(stream, options) {
+        if (!options || typeof options.streamingServerURL !== 'string') {
+            return Video.canPlayStream(stream);
+        }
+
+        // The other entry point: this is called straight from the app as well
+        // as from `load` above, so it maps the symbolic url itself.
+        var streamingServerURL = serverContext.resolveServerUrl(options.streamingServerURL);
+
         return supportsTranscoding()
             .then(function(supported) {
                 if (!supported) {
@@ -357,7 +494,7 @@ function withStreamingServer(Video) {
                 }
                 // probing normally gives more accurate results
                 var queryParams = new URLSearchParams([['mediaURL', stream.url]]);
-                return fetch(url.resolve(options.streamingServerURL, '/hlsv2/probe?' + queryParams.toString()))
+                return serverContext.fetch(url.resolve(streamingServerURL, '/hlsv2/probe?' + queryParams.toString()))
                     .then(function(resp) {
                         return resp.json();
                     })
