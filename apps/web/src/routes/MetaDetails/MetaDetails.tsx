@@ -25,6 +25,7 @@ import { cn } from 'rillio/components/ui/cn';
 import StreamsList from './StreamsList';
 import VideosList from './VideosList';
 import HeroMedia from './HeroMedia';
+import SimilarRow from './SimilarRow';
 import useMetaDetails from './useMetaDetails';
 import useSeason from './useSeason';
 import useMetaExtensionTabs from './useMetaExtensionTabs';
@@ -150,7 +151,7 @@ const MetaDetails = () => {
     const trailerYtIds = React.useMemo(() => {
         const ts = metaDetails.metaItem?.content?.content?.trailerStreams;
         return Array.isArray(ts) ?
-            ts.map((t) => t.ytId).filter((id) => typeof id === 'string' && id.length > 0)
+            ts.map((t: { ytId?: string }) => t.ytId).filter((id: unknown) => typeof id === 'string' && id.length > 0)
             :
             [];
     }, [metaDetails.metaItem]);
@@ -194,25 +195,38 @@ const MetaDetails = () => {
                         null
                 }
                 <div className="flex min-w-0 flex-1 flex-col self-stretch overflow-y-auto px-8 pb-10 pt-2 max-sm:px-4 max-sm:pb-6">
-                    <div className="flex h-[50vh] min-h-[22rem] flex-none flex-row items-stretch gap-8 self-stretch max-[60rem]:h-auto max-[60rem]:min-h-0 max-[60rem]:flex-col max-[60rem]:gap-6">
-                        {
-                            metaPath === null ?
-                                <DelayedRenderer delay={500}>
-                                    <MetaMessage label={t('ERR_NO_META_SELECTED')} />
-                                </DelayedRenderer>
-                                :
-                                metaDetails.metaItem === null ?
-                                    <MetaMessage label={t('ERR_NO_ADDONS_FOR_META')} />
+                    {/* Single column, except the meta band: on screens wide enough
+                        the trailer/cover carousel sits to the RIGHT of the
+                        title/description group, vertically centered against it;
+                        below 75rem it disappears entirely (no stacked fallback -
+                        Michael's calls, 2026-08-16). Streams/episodes and Similar
+                        flow full-width beneath. */}
+                    {/* Everything above Similar is a full-viewport hero: the block
+                        (meta pair + streams/episodes) centers vertically in the
+                        first screenful; Similar lives below the fold. */}
+                    <div className="flex min-h-full min-w-0 flex-none flex-col justify-center self-stretch">
+                        {/* The meta group + trailer travel as a CENTERED pair once
+                            the screen outgrows them (an ultrawide left-anchored
+                            pair read as lopsided - Michael, 2026-08-16). */}
+                        <div className="flex flex-row items-center justify-center gap-10 self-stretch">
+                            <div className="flex w-full min-w-0 max-w-[56rem] shrink-0 flex-col">
+                            {
+                                metaPath === null ?
+                                    <DelayedRenderer delay={500}>
+                                        <MetaMessage label={t('ERR_NO_META_SELECTED')} />
+                                    </DelayedRenderer>
                                     :
-                                    metaDetails.metaItem.content.type === 'Err' ?
-                                        <MetaMessage label={t('ERR_NO_META_FOUND')} />
+                                    metaDetails.metaItem === null ?
+                                        <MetaMessage label={t('ERR_NO_ADDONS_FOR_META')} />
                                         :
-                                        metaDetails.metaItem.content.type === 'Loading' ?
-                                            <MetaPreview.Placeholder className={metaPreviewClassName} />
+                                        metaDetails.metaItem.content.type === 'Err' ?
+                                            <MetaMessage label={t('ERR_NO_META_FOUND')} />
                                             :
-                                            <React.Fragment>
+                                            metaDetails.metaItem.content.type === 'Loading' ?
+                                                <MetaPreview.Placeholder className="min-h-[22rem] flex-none self-stretch" />
+                                                :
                                                 <MetaPreview
-                                                    className={cn(metaPreviewClassName, 'animate-in fade-in duration-300')}
+                                                    className="max-w-[52rem] flex-none self-stretch duration-300 animate-in fade-in"
                                                     name={metaDetails.metaItem.content.content.name}
                                                     logo={metaDetails.metaItem.content.content.logo}
                                                     runtime={metaDetails.metaItem.content.content.runtime}
@@ -231,41 +245,66 @@ const MetaDetails = () => {
                                                     toggleWatched={toggleWatched}
                                                     ratingInfo={metaDetails.ratingInfo}
                                                 />
-                                                <HeroMedia
-                                                    className={cn(heroMediaClassName, 'animate-in fade-in duration-300')}
-                                                    ytIds={trailerYtIds}
-                                                    background={metaDetails.metaItem.content.content.background}
-                                                    poster={metaDetails.metaItem.content.content.poster}
-                                                    name={metaDetails.metaItem.content.content.name}
-                                                />
-                                            </React.Fragment>
-                        }
+                            }
+                            </div>
+                            {
+                                // The cap keeps it a card, not a cinema.
+                                metaPath !== null && metaDetails.metaItem !== null && metaDetails.metaItem.content.type === 'Ready' ?
+                                    <div className="flex w-full min-w-0 max-w-[52rem] items-center self-center max-[75rem]:hidden">
+                                        <HeroMedia
+                                            className="aspect-video w-full max-w-[52rem] flex-none overflow-hidden rounded-xl duration-300 animate-in fade-in"
+                                            ytIds={trailerYtIds}
+                                            background={metaDetails.metaItem.content.content.background}
+                                            poster={metaDetails.metaItem.content.content.poster}
+                                            name={metaDetails.metaItem.content.content.name}
+                                        />
+                                    </div>
+                                    :
+                                    null
+                            }
+                        </div>
+                            {
+                                streamPath !== null ?
+                                    <StreamsList
+                                        className="mt-8 w-full max-w-[80rem] flex-none self-center"
+                                        streams={metaDetails.streams}
+                                        video={video}
+                                        type={streamPath.type}
+                                        metaId={metaPath?.id ?? streamPath.id}
+                                        videoId={streamPath.id}
+                                        libraryItem={metaDetails.libraryItem}
+                                        onEpisodeSearch={handleEpisodeSearch}
+                                    />
+                                    :
+                                    null
+                            }
+                            {
+                                // The episode browser renders on the videos route
+                                // ONLY: once a stream is selected the streams list
+                                // owns the pane (both at once read as two competing
+                                // lists - Michael's call, 2026-08-15).
+                                streamPath === null && metaPath !== null ?
+                                    <VideosList
+                                        className="mt-8 w-full max-w-[80rem] flex-none self-center"
+                                        metaItem={metaDetails.metaItem}
+                                        libraryItem={metaDetails.libraryItem}
+                                        season={season}
+                                        selectedVideoId={metaDetails.libraryItem?.state?.video_id}
+                                        seasonOnSelect={seasonOnSelect}
+                                        toggleNotifications={toggleNotifications}
+                                    />
+                                    :
+                                    null
+                            }
                     </div>
                     {
-                        streamPath !== null ?
-                            <StreamsList
-                                className="mt-8 flex-none self-stretch"
-                                streams={metaDetails.streams}
-                                video={video}
-                                type={streamPath.type}
-                                metaId={metaPath?.id ?? streamPath.id}
-                                videoId={streamPath.id}
-                                libraryItem={metaDetails.libraryItem}
-                                onEpisodeSearch={handleEpisodeSearch}
-                            />
+                        // BOTTOM pane: "Similar", full-width under both columns.
+                        // Keyless, from the installed addon catalogs; renders
+                        // nothing at all when it has nothing.
+                        metaPath !== null ?
+                            <SimilarRow className="mt-6" metaItem={metaDetails.metaItem} />
                             :
-                            metaPath !== null ?
-                                <VideosList
-                                    className="mt-8 flex-none self-stretch"
-                                    metaItem={metaDetails.metaItem}
-                                    libraryItem={metaDetails.libraryItem}
-                                    season={season}
-                                    selectedVideoId={metaDetails.libraryItem?.state?.video_id}
-                                    seasonOnSelect={seasonOnSelect}
-                                    toggleNotifications={toggleNotifications}
-                                />
-                                :
-                                null
+                            null
                     }
                 </div>
             </div>
@@ -289,11 +328,6 @@ const MetaDetails = () => {
 
 // The details column: flex 0 0 clamp(20rem,40%,38rem), full-height in the band;
 // stacks full-width below the 60rem breakpoint.
-const metaPreviewClassName = 'min-h-0 min-w-0 shrink-0 grow-0 basis-[clamp(20rem,40%,38rem)] self-stretch max-[60rem]:basis-auto';
-// The hero fills the remaining width and the whole 50vh band (aspect auto); below
-// 60rem it reverts to a 16:9 block.
-const heroMediaClassName = 'h-full min-w-0 flex-1 self-stretch aspect-auto max-[60rem]:h-auto max-[60rem]:flex-none max-[60rem]:aspect-video';
-
 const MetaDetailsFallback = () => (
     <div
         className="relative box-border flex h-full w-full flex-col"

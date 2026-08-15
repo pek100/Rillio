@@ -23,11 +23,14 @@ type WithQuality = { stream: StreamLike; quality: Quality };
 
 type Tier = { key: string; label: string; match: (q: Quality) => boolean };
 
-type Pick = { tierKey: string; label: string; entry: WithQuality };
+// `candidates` is the tier's OWN ranked list; `entry` is always candidates[0],
+// so consumers that only read `entry` keep the exact pre-candidates behavior.
+// The tiles use the tail to offer "switch to the next source in this tier".
+type Pick = { tierKey: string; label: string; entry: WithQuality; candidates: WithQuality[] };
 
 type Curated = { picks: Pick[]; rest: WithQuality[] };
 
-type Recommendation = { entry: WithQuality; label: string; tierKey: string; pickIndex: number };
+type Recommendation = { entry: WithQuality; label: string; tierKey: string; pickIndex: number; candidates?: WithQuality[] };
 
 type Screen = { hdr?: boolean; resolutionHeight: number };
 
@@ -152,7 +155,7 @@ const curateStreams = (streams: StreamLike[], lang: string | null | undefined): 
             .sort(bySizeDesc);
         if (candidates.length) {
             used.add(candidates[0].stream);
-            picks.push({ tierKey: `${tier.key}-lang`, label: tier.label, entry: candidates[0] });
+            picks.push({ tierKey: `${tier.key}-lang`, label: tier.label, entry: candidates[0], candidates });
         }
     }
 
@@ -163,14 +166,14 @@ const curateStreams = (streams: StreamLike[], lang: string | null | undefined): 
         const candidates = withQuality.filter((s) => tier.match(s.quality)).sort(bySizeDesc);
         if (candidates.length && !used.has(candidates[0].stream)) {
             used.add(candidates[0].stream);
-            picks.push({ tierKey: tier.key, label: tier.label, entry: candidates[0] });
+            picks.push({ tierKey: tier.key, label: tier.label, entry: candidates[0], candidates });
         }
     }
 
     if (picks.length === 0 && withQuality.length) {
-        const best = withQuality.slice().sort((a, b) => byLangThenSize(a, b) || bySeedersDesc(a, b))[0];
-        used.add(best.stream);
-        picks.push({ tierKey: 'best', label: 'Best available', entry: best });
+        const ranked = withQuality.slice().sort((a, b) => byLangThenSize(a, b) || bySeedersDesc(a, b));
+        used.add(ranked[0].stream);
+        picks.push({ tierKey: 'best', label: 'Best available', entry: ranked[0], candidates: ranked });
     }
 
     // The expanded list also leads with the wanted language.
@@ -193,16 +196,22 @@ const recommendStream = ({ picks, rest }: Curated, preset: string, screen: Scree
 
     if (preset === 'speed') {
         // Fastest within the wanted language when possible; pure seeders otherwise.
+        // The whole pool is speed-ranked (seeders desc, ties broken by the smaller
+        // file - lighter downloads start faster); the head is the recommendation
+        // and the ranked tail feeds the Fastest tile's switch-source control.
         const all = picks.map((p) => p.entry).concat(rest);
         const withLang = lang ? all.filter((e) => langScore(e.quality, lang) === 2) : all;
         const pool = withLang.length ? withLang : all;
-        let best = pool[0];
-        for (const entry of pool) {
-            const a = entry.quality.seeders || 0, b = best.quality.seeders || 0;
-            if (a > b || (a === b && (entry.quality.size || Infinity) < (best.quality.size || Infinity))) best = entry;
-        }
+        const bySpeed = (a: WithQuality, b: WithQuality): number => {
+            const seeders = (b.quality.seeders || 0) - (a.quality.seeders || 0);
+            if (seeders !== 0) return seeders;
+            const sizeA = a.quality.size || Infinity, sizeB = b.quality.size || Infinity;
+            return sizeA === sizeB ? 0 : sizeA - sizeB;
+        };
+        const ranked = pool.slice().sort(bySpeed);
+        const best = ranked[0];
         const pickIndex = picks.findIndex((p) => p.entry === best);
-        return { entry: best, label: 'Fastest', tierKey: 'fastest', pickIndex };
+        return { entry: best, label: 'Fastest', tierKey: 'fastest', pickIndex, candidates: ranked };
     }
 
     if (!picks.length) return null;

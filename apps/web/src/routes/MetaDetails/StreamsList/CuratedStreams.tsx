@@ -14,7 +14,7 @@
  */
 
 import React from 'react';
-import { ChevronDown, Play, Download } from 'lucide-react';
+import { ChevronDown, Play, Download, RefreshCw, LayoutGrid } from 'lucide-react';
 import { useCore } from 'rillio/core';
 import { useProfile, languages } from 'rillio/common';
 import { useScreenCapability } from 'rillio/common/useScreenCapability';
@@ -23,6 +23,7 @@ import { cn } from 'rillio/components/ui/cn';
 import { Button } from 'rillio/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from 'rillio/components/ui/toggle-group';
 import { Tooltip } from 'rillio/components/ui/tooltip';
+import { ModalRoute } from 'rillio/components/ui/dialog';
 import { Popover, PopoverContent, PopoverTrigger } from 'rillio/components/ui/popover';
 import { Command, CommandGroup, CommandInput, CommandItem, CommandList } from 'rillio/components/ui/command';
 import { curateStreams, recommendStream, flagFor, availableLanguages, formatSize } from './streamQuality';
@@ -185,9 +186,24 @@ const LanguagePicker = ({ value, options, onSelect }: { value: string; options: 
 
 // One carousel tile: tier label on top, provider + size + seeders under it.
 // Transparent at rest; the highlighted (recommended) one gets the accent tint.
-const Tile = ({ label, entry, highlighted }: { label: string; entry: any; highlighted: boolean }) => {
-    const { stream, quality } = entry;
+//
+// `candidates` is the tier's own ranked list (entry === candidates[0]); when it
+// holds more than one stream, a hover-reveal switch control cycles the tile
+// through them, wrapping around. The cycle position is per-tile local state and
+// resets whenever the candidate list itself changes (new stream list, new
+// language), because `candidates` is a fresh memoized array in that case.
+const Tile = ({ label, entry, candidates, highlighted }: { label: string; entry: any; candidates?: any[]; highlighted: boolean }) => {
+    const list: any[] = Array.isArray(candidates) && candidates.length > 0 ? candidates : [entry];
+    const [index, setIndex] = React.useState(0);
+    React.useEffect(() => { setIndex(0); }, [candidates]);
+    const shown = list[index % list.length];
+    const { stream, quality } = shown;
     const size = formatSize(quality.size);
+    const onSwitch = React.useCallback((event: React.MouseEvent) => {
+        event.preventDefault();
+        event.stopPropagation();
+        setIndex((current) => (current + 1) % list.length);
+    }, [list.length]);
     return (
         <Button
             variant="ghost"
@@ -202,7 +218,24 @@ const Tile = ({ label, entry, highlighted }: { label: string; entry: any; highli
             <div className="flex items-center gap-1.5">
                 <span className={cn('text-sm font-semibold', highlighted ? 'text-accent' : 'text-fg')}>{label}</span>
                 <Play className={cn('size-3.5 transition', highlighted ? 'text-accent' : 'text-fg-subtle opacity-0 group-hover:opacity-100')} />
-                <DownloadToCache stream={stream} className="ml-auto opacity-0 transition group-hover:opacity-100" />
+                <span className="ml-auto flex shrink-0 items-center">
+                    {
+                        list.length > 1 ?
+                            <Tooltip label={`Switch to the next source in this tier (showing ${(index % list.length) + 1} of ${list.length})`}>
+                                <Button
+                                    variant="ghost"
+                                    tabIndex={-1}
+                                    onClick={onSwitch}
+                                    className="size-6 shrink-0 p-0 text-fg-subtle opacity-0 transition hover:bg-white/10 hover:text-fg group-hover:opacity-100"
+                                >
+                                    <RefreshCw className="size-3.5" />
+                                </Button>
+                            </Tooltip>
+                            :
+                            null
+                    }
+                    <DownloadToCache stream={stream} className="opacity-0 transition group-hover:opacity-100" />
+                </span>
             </div>
             <div className="truncate text-xs text-fg-muted">{providerOf(stream) || 'Stream'}</div>
             <div className="flex items-center gap-2 text-[11px] tabular-nums text-fg-subtle">
@@ -214,8 +247,11 @@ const Tile = ({ label, entry, highlighted }: { label: string; entry: any; highli
     );
 };
 
-// A compact row for the expanded "all streams" list (grid on wide screens).
-const Row = ({ entry }: { entry: any }) => {
+// A card in the all-streams modal gallery: the Tile's visual family (quality +
+// HDR badge on top, provider, then size / seeders / language flags), carrying
+// everything the old compact Row showed, with the same play + download-to-cache
+// contract.
+const StreamCard = ({ entry }: { entry: any }) => {
     const { stream, quality } = entry;
     const size = formatSize(quality.size);
     return (
@@ -224,15 +260,69 @@ const Row = ({ entry }: { entry: any }) => {
             href={playHref(stream)}
             onClick={stream.onClick}
             title={stream.description}
-            className="group flex h-auto justify-start gap-2.5 whitespace-normal rounded-lg px-2.5 py-2 text-left font-normal hover:bg-white/5"
+            className="group flex h-auto flex-col items-stretch justify-start gap-1 whitespace-normal rounded-xl px-3.5 py-3 text-left font-normal hover:bg-white/5"
         >
-            <span className="inline-flex w-16 shrink-0 justify-center rounded-md bg-white/10 px-1.5 py-0.5 text-[10px] font-semibold text-fg-muted">{badgeFor(quality)}</span>
-            <span className="min-w-0 flex-1 truncate text-xs text-fg-muted">{providerOf(stream) || stream.addonName || 'Stream'}</span>
-            {quality.flags.length ? <span className="shrink-0 text-[11px] tracking-tight">{quality.flags.slice(0, 3).join(' ')}</span> : null}
-            {size ? <span className="shrink-0 text-[11px] tabular-nums text-fg-subtle">{size}</span> : null}
-            {quality.seeders !== null && quality.seeders !== undefined ? <span className="shrink-0 text-[11px] tabular-nums text-fg-subtle">{quality.seeders}</span> : null}
-            <DownloadToCache stream={stream} className="shrink-0 opacity-0 transition group-hover:opacity-100" />
+            <div className="flex items-center gap-1.5">
+                <span className="text-sm font-semibold text-fg">{badgeFor(quality)}</span>
+                <Play className="size-3.5 shrink-0 text-fg-subtle opacity-0 transition group-hover:opacity-100" />
+                <DownloadToCache stream={stream} className="ml-auto opacity-0 transition group-hover:opacity-100" />
+            </div>
+            <div className="truncate text-xs text-fg-muted">{providerOf(stream) || stream.addonName || 'Stream'}</div>
+            <div className="flex items-center gap-2 text-[11px] tabular-nums text-fg-subtle">
+                {size ? <span>{size}</span> : null}
+                {quality.seeders !== null && quality.seeders !== undefined ? <span>{quality.seeders} seed</span> : null}
+                {quality.flags.length ? <span className="tracking-tight">{quality.flags.slice(0, 4).join(' ')}</span> : null}
+            </div>
         </Button>
+    );
+};
+
+// Sort orders for the all-streams modal. Auto keeps the curated, language-aware
+// order the list arrives in (picks first, then the rest sorted by language then
+// size, exactly as the inline list used to read).
+const sortEntries = (entries: any[], sort: string): any[] => {
+    if (sort === 'quality') {
+        return entries.slice().sort((a, b) =>
+            ((b.quality.resolution || 0) - (a.quality.resolution || 0)) ||
+            ((b.quality.size || 0) - (a.quality.size || 0)));
+    }
+    if (sort === 'speed') {
+        return entries.slice().sort((a, b) =>
+            ((b.quality.seeders || 0) - (a.quality.seeders || 0)) ||
+            ((b.quality.resolution || 0) - (a.quality.resolution || 0)));
+    }
+    return entries;
+};
+
+// The all-streams modal: every stream as a responsive card gallery, with the
+// same Auto / Quality / Speed toggle treatment as the preset switch. The grid
+// scrolls inside the modal (its own focusable overflow container), never the
+// page.
+const AllStreamsModal = ({ open, onClose, entries }: { open: boolean; onClose: () => void; entries: any[] }) => {
+    const [sort, setSort] = React.useState('auto');
+    const sorted = React.useMemo(() => sortEntries(entries, sort), [entries, sort]);
+    return (
+        <ModalRoute open={open} onClose={onClose} size="full" title={`All ${entries.length} streams`} className="gap-3">
+            <ToggleGroup
+                type="single"
+                value={sort}
+                onValueChange={(value) => { if (value) setSort(value); }}
+                className="w-fit gap-0.5 rounded-full bg-white/5 p-0.5"
+            >
+                {PRESETS.map((p) => (
+                    <ToggleGroupItem key={p.key} value={p.key} size="sm" className="h-auto px-2.5 py-1 text-xs font-medium">
+                        {p.label}
+                    </ToggleGroupItem>
+                ))}
+            </ToggleGroup>
+            <div tabIndex={0} className="-mx-2 max-h-[65vh] overflow-y-auto px-2 outline-none [scrollbar-width:thin]">
+                <div className="grid grid-cols-1 gap-0.5 sm:grid-cols-2 lg:grid-cols-3">
+                    {sorted.map((entry, index) => (
+                        <StreamCard key={index} entry={entry} />
+                    ))}
+                </div>
+            </div>
+        </ModalRoute>
     );
 };
 
@@ -241,7 +331,7 @@ const CuratedStreams = ({ streams, leading }: { streams: any[]; leading?: React.
     const profile = useProfile();
     const screen = useScreenCapability();
     const [preset, setPreset] = React.useState('auto');
-    const [showAll, setShowAll] = React.useState(false);
+    const [allOpen, setAllOpen] = React.useState(false);
 
     // The wanted language IS the core subtitles-language setting (one source of
     // truth: the player reads the same field to pick the default subtitle track).
@@ -315,10 +405,14 @@ const CuratedStreams = ({ streams, leading }: { streams: any[]; leading?: React.
     const tiles = React.useMemo(() => {
         const base: any[] = picks.map((p, i) => ({ ...p, highlighted: rec ? rec.pickIndex === i : false }));
         if (rec && rec.pickIndex === -1) {
-            base.unshift({ tierKey: 'fastest', label: 'Fastest', entry: rec.entry, highlighted: true });
+            base.unshift({ tierKey: 'fastest', label: 'Fastest', entry: rec.entry, candidates: rec.candidates, highlighted: true });
         }
         return base;
     }, [picks, rec]);
+
+    // Every stream, in the curated order (picks first, then the language-then-size
+    // sorted rest): the modal's Auto sort is exactly this list.
+    const allEntries = React.useMemo(() => [...picks.map((p) => p.entry), ...rest], [picks, rest]);
 
     if (!picks.length && !rest.length) return null;
 
@@ -359,27 +453,21 @@ const CuratedStreams = ({ streams, leading }: { streams: any[]; leading?: React.
             <div className="mx-auto flex w-fit max-w-full gap-1 overflow-x-auto pb-1 [scrollbar-width:thin]">
                 {leading}
                 {tiles.map((p) => (
-                    <Tile key={p.tierKey} label={p.label} entry={p.entry} highlighted={p.highlighted} />
+                    <Tile key={p.tierKey} label={p.label} entry={p.entry} candidates={p.candidates} highlighted={p.highlighted} />
                 ))}
             </div>
 
-            {rest.length ? (
+            {allEntries.length > 1 ? (
                 <React.Fragment>
                     <Button
                         variant="ghost"
-                        onClick={() => setShowAll((v) => !v)}
+                        onClick={() => setAllOpen(true)}
                         className="h-auto self-center gap-1.5 bg-white/5 px-3 py-1 text-xs font-medium text-fg-muted hover:bg-white/10 hover:text-fg"
                     >
-                        <ChevronDown className={cn('size-3 transition-transform', showAll && 'rotate-180')} />
-                        {showAll ? 'Hide' : `All ${rest.length} streams`}
+                        <LayoutGrid className="size-3" />
+                        All {allEntries.length} streams
                     </Button>
-                    {showAll ? (
-                        <div className="grid grid-cols-1 gap-0.5 duration-200 animate-in fade-in sm:grid-cols-2 xl:grid-cols-3">
-                            {rest.map((entry, i) => (
-                                <Row key={i} entry={entry} />
-                            ))}
-                        </div>
-                    ) : null}
+                    <AllStreamsModal open={allOpen} onClose={() => setAllOpen(false)} entries={allEntries} />
                 </React.Fragment>
             ) : null}
         </div>
