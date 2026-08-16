@@ -64,15 +64,15 @@ pub(crate) fn mpv_embed_enabled() -> bool {
 /// hide your IP from torrent peers (that needs a VPN/proxy) - see
 /// memory/compositing-dcomp-plan sibling notes.
 fn browser_args() -> String {
-    // msEnableTrackingPrevention / msEdgeTrackingPrevention: Edge's Tracking
-    // Prevention inside WebView2 can classify the app's own origin and BLOCK
-    // its DOM storage ("Tracking Prevention blocked access to storage" x12 in
-    // the 2026-08-16 incident console) - localStorage reads answer empty and
-    // writes drop while the leveldb sits intact, which users experience as a
-    // wiped profile. The app IS the site here; tracking prevention has nothing
-    // to protect. Both observed spellings of the feature name are listed;
-    // unknown names in --disable-features are inert, so the pair is safe.
-    let base = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,msEnableTrackingPrevention,msEdgeTrackingPrevention";
+    // NOTE: Tracking Prevention (the 2026-08-16 dead-storage incident suspect)
+    // is NOT controllable from here. It is governed by
+    // ICoreWebView2EnvironmentOptions5::EnableTrackingPrevention (hard-defaulted
+    // to true by webview2-com, never set by wry, so no browser arg can reach it)
+    // and by the per-profile level, which disable_tracking_prevention() below
+    // sets to None at runtime - the supported switch per Microsoft's
+    // TrackingPrevention spec. The ms* feature names v0.1.30 shipped here were
+    // inert guesses and have been removed.
+    let base = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
     let dns = match std::env::var("RILLIO_DOH_TEMPLATE") {
         Ok(v) if v == "0" || v.eq_ignore_ascii_case("off") => base.to_string(),
         Ok(v) if !v.trim().is_empty() => {
@@ -377,6 +377,9 @@ pub fn run() {
             storage_health,
             restart_app,
             snapshot_storage,
+            storage_retry_count,
+            storage_retry_increment,
+            storage_retry_reset,
             streaming_server_url,
             server_request,
             shell::shell_init,
@@ -613,6 +616,9 @@ fn build_main_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
     // always starts windowed; fullscreen is only entered via its header button.
     let _ = window.set_fullscreen(false);
 
+    #[cfg(windows)]
+    disable_tracking_prevention(&window);
+
     // Fallback reveal: if the web layer never calls show() (e.g. a startup error
     // before the loading screen paints), don't leave an invisible window. show()
     // is idempotent, so racing the JS path is harmless.
@@ -623,6 +629,57 @@ fn build_main_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
     });
 
     Ok(window)
+}
+
+/// Turns Edge Tracking Prevention OFF for the app's WebView2 profile - the
+/// prime suspect in the 2026-08-16 dead-storage incident ("Tracking Prevention
+/// blocked access to storage" x12 in the stuck console; localStorage reads
+/// answered empty, writes dropped, leveldb never opened). The app IS the site
+/// here; TP has nothing to protect and can classify the app's own origin.
+///
+/// Why this shape: the feature-level switch
+/// (ICoreWebView2EnvironmentOptions5::EnableTrackingPrevention) is set at
+/// environment creation inside wry, which never exposes it, and webview2-com
+/// defaults it to true - no browser argument reaches it (v0.1.30's ms*
+/// --disable-features names were inert). The per-profile level IS reachable
+/// post-creation and, per Microsoft's TrackingPrevention spec, level None
+/// fully disables TP even with the environment option left enabled, applies
+/// immediately, and is PERSISTED in the user data folder - so from the second
+/// boot on the profile starts with TP already off, closing the small window
+/// where this call races the page's first storage reads (the storage guard's
+/// auto-retry covers that first boot).
+///
+/// Failure here is logged loudly and never fatal: the cast to
+/// ICoreWebView2_13/Profile3 only fails on a runtime older than ~108 (we ship
+/// against much newer), and the app must still boot for the guard to handle a
+/// bad session.
+#[cfg(windows)]
+fn disable_tracking_prevention(window: &tauri::WebviewWindow) {
+    use webview2_com::Microsoft::Web::WebView2::Win32::{
+        ICoreWebView2Profile3, ICoreWebView2_13, COREWEBVIEW2_TRACKING_PREVENTION_LEVEL_NONE,
+    };
+    use windows::core::Interface;
+
+    let result = window.with_webview(|webview| {
+        let attempt = unsafe {
+            (|| -> windows::core::Result<()> {
+                let core = webview.controller().CoreWebView2()?;
+                let core13: ICoreWebView2_13 = core.cast()?;
+                let profile: ICoreWebView2Profile3 = core13.Profile()?.cast()?;
+                profile
+                    .SetPreferredTrackingPreventionLevel(COREWEBVIEW2_TRACKING_PREVENTION_LEVEL_NONE)
+            })()
+        };
+        match attempt {
+            Ok(()) => tracing::info!(
+                "tracking prevention set to None for the profile (persisted across sessions)"
+            ),
+            Err(e) => tracing::error!("failed to disable tracking prevention: {e}"),
+        }
+    });
+    if let Err(e) = result {
+        tracing::error!("with_webview failed while disabling tracking prevention: {e}");
+    }
 }
 
 /// On launch, ask GitHub Releases (see `plugins.updater.endpoints` in
@@ -930,6 +987,13 @@ struct StorageHealth {
     /// (incident 2026-08-16: a WebView2 session booted with its DOM-storage
     /// plane dead and the app looked wiped while the data sat intact here).
     local_storage_bytes: u64,
+    /// Debug knob: true only when `RILLIO_FORCE_STORAGE_UNREADABLE=1` is in
+    /// the environment. The web guard then treats the boot as unreadable
+    /// regardless of what localStorage answered, which is the only way to
+    /// exercise the refusal/auto-retry flow live without waiting for the real
+    /// per-boot coin flip. Inert unless the env var is set (mirrors
+    /// RILLIO_DEVTOOLS_PORT).
+    forced: bool,
 }
 
 #[tauri::command]
@@ -937,7 +1001,85 @@ fn storage_health(app: tauri::AppHandle) -> StorageHealth {
     let bytes = local_storage_leveldb_dir(&app.config().identifier)
         .map(|dir| dir_size(&dir))
         .unwrap_or(0);
-    StorageHealth { local_storage_bytes: bytes }
+    let forced = std::env::var("RILLIO_FORCE_STORAGE_UNREADABLE")
+        .map(|v| v.trim() == "1")
+        .unwrap_or(false);
+    StorageHealth { local_storage_bytes: bytes, forced }
+}
+
+/// The dead-storage auto-retry counter file. The count must live in the SHELL
+/// because localStorage is dead in exactly the sessions that need it (the web
+/// guard reads/bumps it around each automatic restart; see apps/web
+/// common/storageGuard). Same base dir the storage snapshots use:
+/// `%LOCALAPPDATA%\<identifier>`.
+fn storage_retry_counter_path(identifier: &str) -> Option<std::path::PathBuf> {
+    let local = std::env::var_os("LOCALAPPDATA")?;
+    Some(std::path::Path::new(&local).join(identifier).join("storage-retry-count"))
+}
+
+/// Read the counter. A missing file is 0 by design; an unreadable or corrupt
+/// file logs loudly and also counts as 0 (never crash a boot over a one-line
+/// bookkeeping file).
+fn read_retry_counter(path: &std::path::Path) -> u32 {
+    match std::fs::read_to_string(path) {
+        Ok(text) => match text.trim().parse::<u32>() {
+            Ok(count) => count,
+            Err(e) => {
+                tracing::error!("storage retry counter {} is corrupt ({e}); treating as 0", path.display());
+                0
+            }
+        },
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => 0,
+        Err(e) => {
+            tracing::error!("storage retry counter {} is unreadable ({e}); treating as 0", path.display());
+            0
+        }
+    }
+}
+
+/// Persist the counter (creating the parent dir if needed).
+fn write_retry_counter(path: &std::path::Path, value: u32) -> std::io::Result<()> {
+    if let Some(parent) = path.parent() {
+        std::fs::create_dir_all(parent)?;
+    }
+    std::fs::write(path, value.to_string())
+}
+
+#[tauri::command]
+fn storage_retry_count(app: tauri::AppHandle) -> u32 {
+    storage_retry_counter_path(&app.config().identifier)
+        .map(|path| read_retry_counter(&path))
+        .unwrap_or(0)
+}
+
+/// Bump and persist the counter; returns the new value. A write failure
+/// surfaces to the caller ON PURPOSE: the web guard must not restart when the
+/// attempt cannot be counted, or the retry loop could never end.
+#[tauri::command]
+fn storage_retry_increment(app: tauri::AppHandle) -> Result<u32, String> {
+    let path = storage_retry_counter_path(&app.config().identifier)
+        .ok_or_else(|| "LOCALAPPDATA is not set".to_string())?;
+    let next = read_retry_counter(&path).saturating_add(1);
+    write_retry_counter(&path, next).map_err(|e| {
+        let msg = format!("could not persist the storage retry counter at {}: {e}", path.display());
+        tracing::error!("{msg}");
+        msg
+    })?;
+    Ok(next)
+}
+
+/// Zero the counter by deleting the file (missing means 0). Best-effort: a
+/// healthy boot must not fail over bookkeeping, so errors only log.
+#[tauri::command]
+fn storage_retry_reset(app: tauri::AppHandle) {
+    let Some(path) = storage_retry_counter_path(&app.config().identifier) else {
+        return;
+    };
+    if let Err(e) = std::fs::remove_file(&path) {
+        if e.kind() != std::io::ErrorKind::NotFound {
+            tracing::error!("could not reset the storage retry counter at {}: {e}", path.display());
+        }
+    }
 }
 
 /// Total size of the files directly inside `dir` (leveldb keeps everything
@@ -1145,6 +1287,57 @@ mod storage_snapshot_tests {
     #[test]
     fn pruning_a_missing_dir_is_a_noop() {
         prune_snapshots(std::path::Path::new("Z:/definitely/not/here"), 3);
+    }
+}
+
+#[cfg(test)]
+mod storage_retry_counter_tests {
+    use super::{read_retry_counter, write_retry_counter};
+
+    fn temp_counter_path(tag: &str) -> std::path::PathBuf {
+        std::env::temp_dir().join(format!(
+            "rillio-retry-test-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
+        .join("storage-retry-count")
+    }
+
+    #[test]
+    fn missing_file_reads_zero() {
+        let path = temp_counter_path("missing");
+        assert_eq!(read_retry_counter(&path), 0);
+    }
+
+    #[test]
+    fn write_read_round_trip_and_overwrite() {
+        let path = temp_counter_path("roundtrip");
+        write_retry_counter(&path, 1).unwrap();
+        assert_eq!(read_retry_counter(&path), 1);
+        write_retry_counter(&path, 2).unwrap();
+        assert_eq!(read_retry_counter(&path), 2);
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn corrupt_content_reads_zero() {
+        let path = temp_counter_path("corrupt");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, b"not-a-number").unwrap();
+        assert_eq!(read_retry_counter(&path), 0);
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn surrounding_whitespace_is_tolerated() {
+        let path = temp_counter_path("whitespace");
+        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
+        std::fs::write(&path, b" 3\r\n").unwrap();
+        assert_eq!(read_retry_counter(&path), 3);
+        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 }
 

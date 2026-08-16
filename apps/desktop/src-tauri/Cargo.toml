@@ -76,6 +76,14 @@ windows = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
 ] }
+# WebView2 COM interfaces (same 0.38.x wry already pins, so the types unify
+# with what PlatformWebview::controller() returns). Used solely to set the
+# profile's tracking-prevention level to None (see disable_tracking_prevention
+# in lib.rs): wry never sets ICoreWebView2EnvironmentOptions5::
+# EnableTrackingPrevention, so the feature is force-ON and --disable-features
+# names cannot turn it off - the profile property is the only switch we can
+# reach without forking wry.
+webview2-com = "0.38"
 
 [target.'cfg(target_os = "android")'.dependencies]
 # The Android surface seam (surface.rs `android` module): receive the video

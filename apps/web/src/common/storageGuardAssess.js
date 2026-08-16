@@ -27,4 +27,32 @@ const assessStorage = (sentinelPresent, userDataPresent, diskBytes) => {
     return 'first-run';
 };
 
-module.exports = { assessStorage, DISK_FLOOR_BYTES };
+// How many automatic restarts one dead-storage streak may spend before the
+// manual refusal screen takes over. Each restart is a fresh roll of the
+// WebView2 coin flip, so two silent retries clear most streaks without the
+// user ever seeing the refusal screen; a streak that survives them needs a
+// human (and the manual Restart button keeps counting into the same budget).
+const MAX_STORAGE_AUTO_RETRIES = 2;
+
+// What to do about an 'unreadable' verdict, given how many restarts this
+// streak has already spent. The count comes from a SHELL-side file
+// (storage_retry_count): localStorage is dead in exactly the sessions that
+// need to count, so the counter can never live there.
+//
+// Inputs:
+//   retryCount - restarts already attempted, or null when there is no counter
+//                (browser build, or the shell probe failed)
+//   canRestart - a shell restart is actually available
+// Returns:
+//   'auto-retry' - restart silently behind an interim screen
+//   'refuse'     - show the manual refusal screen
+//
+// No shell or no counter means refuse: an auto-retry that cannot restart does
+// nothing, and one that cannot count its attempts loops forever.
+const decideUnreadableAction = (retryCount, canRestart) => {
+    if (!canRestart) return 'refuse';
+    if (typeof retryCount !== 'number' || !Number.isInteger(retryCount) || retryCount < 0) return 'refuse';
+    return retryCount < MAX_STORAGE_AUTO_RETRIES ? 'auto-retry' : 'refuse';
+};
+
+module.exports = { assessStorage, DISK_FLOOR_BYTES, decideUnreadableAction, MAX_STORAGE_AUTO_RETRIES };
