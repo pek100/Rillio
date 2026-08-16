@@ -15,6 +15,8 @@ import './common/videoServerContext';
 import App from './App';
 import { CoreProvider } from './core';
 import { FileDropProvider, PlatformProvider } from './common';
+import { runStorageGuard, stampStorageSentinel } from './common/storageGuard';
+import { getTauri } from './common/Platform/shell/isShell';
 // NEVER run the cache-first service worker inside the desktop shell. The shell's
 // assets are embedded and swapped in whole by the native updater, and the asset
 // path is prefixed with the (stable-between-rebuilds) commit hash, so a
@@ -48,19 +50,68 @@ const appInfo = {
 };
 
 const root = ReactDOM.createRoot(document.getElementById('app')!);
-root.render(
-    <React.StrictMode>
-        <PlatformProvider>
-            <CoreProvider appInfo={appInfo}>
-                <FileDropProvider>
-                    <HashRouter>
-                        <App />
-                    </HashRouter>
-                </FileDropProvider>
-            </CoreProvider>
-        </PlatformProvider>
-    </React.StrictMode>
-);
+
+// Storage-unreadable refusal screen (see common/storageGuard). Deliberately
+// self-contained: the app graph must NOT mount (mounting boots the core, and
+// the core would persist a default profile over whatever this session cannot
+// read). Restart goes through the shell when available; reloading the page
+// would reuse the same broken browser session.
+const StorageUnreadable = () => {
+    const t = i18n.t.bind(i18n);
+    return (
+        <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center text-fg">
+            <div className="text-xl font-semibold">
+                {t('STORAGE_UNREADABLE_TITLE', 'Rillio can\'t read its saved data')}
+            </div>
+            <div className="max-w-md text-sm opacity-80">
+                {t('STORAGE_UNREADABLE_BODY', 'Your profile and library are intact on disk, but this session came up without access to them. To avoid overwriting anything, Rillio won\'t start with a blank profile. Close Rillio completely and open it again.')}
+            </div>
+            <button
+                className="rounded-full bg-[#FFA033] px-6 py-2 text-sm font-semibold text-black hover:brightness-110"
+                onClick={() => {
+                    const invoke = getTauri()?.core?.invoke;
+                    if (typeof invoke === 'function') {
+                        invoke('restart_app').catch((error: unknown) => console.error('restart_app failed', error));
+                    }
+                }}
+            >
+                {t('STORAGE_UNREADABLE_RESTART', 'Restart Rillio')}
+            </button>
+        </div>
+    );
+};
+
+// The guard must settle BEFORE the core can exist: CoreProvider's transport
+// boots the wasm core, whose empty reads would be persisted as a fresh default
+// profile. 'unreadable' therefore renders the refusal screen INSTEAD of the app.
+void (async () => {
+    let verdict: 'ok' | 'first-run' | 'unreadable' = 'ok';
+    try {
+        verdict = await runStorageGuard();
+    } catch (error) {
+        // The guard never rejects by contract; treat a broken guard as no guard.
+        console.error('storageGuard: unexpected failure, booting unguarded', error);
+    }
+    if (verdict === 'unreadable') {
+        console.error('storageGuard: localStorage reads empty but the profile database on disk has data; refusing to boot the core');
+        root.render(<StorageUnreadable />);
+        return;
+    }
+    stampStorageSentinel();
+    root.render(
+        <React.StrictMode>
+            <PlatformProvider>
+                <CoreProvider appInfo={appInfo}>
+                    <FileDropProvider>
+                        <HashRouter>
+                            <App />
+                        </HashRouter>
+                    </FileDropProvider>
+                </CoreProvider>
+            </PlatformProvider>
+        </React.StrictMode>
+    );
+})();
 
 const rawServiceWorkerDisabled = process.env.SERVICE_WORKER_DISABLED as unknown;
 const SERVICE_WORKER_DISABLED = rawServiceWorkerDisabled === 'true' || rawServiceWorkerDisabled === true;

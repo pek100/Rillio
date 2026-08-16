@@ -38,11 +38,15 @@ const readRegistry = (): Registry => {
             }
         } catch { /* fall through to reseed */ }
     }
-    // First run (or an unreadable registry): seed with the default profile. The
-    // default's DATA is the raw keys, so reseeding the registry loses nothing.
-    const seeded: Registry = { v: 1, profiles: [{ id: DEFAULT_PROFILE_ID, createdAt: Date.now() }] };
-    window.localStorage.setItem(REGISTRY_KEY, JSON.stringify(seeded));
-    return seeded;
+    // First run (or an unreadable registry): behave as if only the default
+    // profile exists, WITHOUT writing anything. This module evaluates at boot,
+    // before the storage guard (common/storageGuard) has ruled the session
+    // trustworthy - a write-on-empty-read here is exactly how a transient empty
+    // read becomes a permanent overwrite (incident 2026-08-16). The registry is
+    // persisted by the paths that actually change it (createProfile,
+    // deleteProfile); until then the default-only registry is fully implied by
+    // its absence.
+    return { v: 1, profiles: [{ id: DEFAULT_PROFILE_ID, createdAt: Date.now() }] };
 };
 
 // The active id is fixed for the lifetime of the page: switching always

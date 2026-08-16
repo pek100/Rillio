@@ -366,6 +366,8 @@ pub fn run() {
             open_external,
             install_update,
             check_for_update,
+            storage_health,
+            restart_app,
             streaming_server_url,
             server_request,
             shell::shell_init,
@@ -815,6 +817,14 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
         tracing::warn!("update: WebView2 did not release the profile in time, installing anyway");
     }
 
+    // Safety snapshot of the profile's user data (Local Storage + IndexedDB)
+    // before the installer touches anything - see snapshot_profile_storage.
+    let version = app.package_info().version.to_string();
+    match snapshot_profile_storage(&app.config().identifier, &version) {
+        Ok(dest) => tracing::info!("update: storage snapshot at {}", dest.display()),
+        Err(e) => tracing::error!("update: STORAGE SNAPSHOT FAILED ({e}); proceeding with the update without one"),
+    }
+
     // Hands off to the installer and exits this process, so this normally
     // never returns. NSIS runs QUIET (installMode in tauri.conf.json): the
     // update window is the only thing on screen through the install.
@@ -885,6 +895,215 @@ fn wait_for_webview_profile_release(identifier: &str) -> bool {
 #[cfg(not(windows))]
 fn wait_for_webview_profile_release(_identifier: &str) -> bool {
     true
+}
+
+/// The WebView2 profile's Local Storage database directory - the ONLY copy of
+/// the user's profile/library/settings.
+fn local_storage_leveldb_dir(identifier: &str) -> Option<std::path::PathBuf> {
+    let local = std::env::var_os("LOCALAPPDATA")?;
+    Some(
+        std::path::Path::new(&local)
+            .join(identifier)
+            .join("EBWebView")
+            .join("Default")
+            .join("Local Storage")
+            .join("leveldb"),
+    )
+}
+
+/// Answer for the web's boot storage guard (apps/web common/storageGuard).
+#[derive(serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct StorageHealth {
+    /// Total bytes of the Local Storage leveldb on disk. ~0 on a fresh
+    /// install; anything substantial means user data exists, so a session
+    /// whose localStorage reads come back empty is UNREADABLE, not new
+    /// (incident 2026-08-16: a WebView2 session booted with its DOM-storage
+    /// plane dead and the app looked wiped while the data sat intact here).
+    local_storage_bytes: u64,
+}
+
+#[tauri::command]
+fn storage_health(app: tauri::AppHandle) -> StorageHealth {
+    let bytes = local_storage_leveldb_dir(&app.config().identifier)
+        .map(|dir| dir_size(&dir))
+        .unwrap_or(0);
+    StorageHealth { local_storage_bytes: bytes }
+}
+
+/// Total size of the files directly inside `dir` (leveldb keeps everything
+/// flat, so no recursion is needed; a missing dir is simply 0).
+fn dir_size(dir: &std::path::Path) -> u64 {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return 0;
+    };
+    entries
+        .flatten()
+        .filter_map(|e| e.metadata().ok())
+        .filter(|m| m.is_file())
+        .map(|m| m.len())
+        .sum()
+}
+
+/// Full app restart, for the storage guard's refusal screen: a page reload
+/// would reuse the same broken browser session, only a process relaunch gets a
+/// fresh WebView2 session that can mount the profile again.
+#[tauri::command]
+fn restart_app(app: tauri::AppHandle) {
+    app.restart();
+}
+
+/// How many pre-update storage snapshots to keep (the newest N survive).
+const STORAGE_SNAPSHOTS_KEPT: usize = 3;
+
+/// Pre-install safety net: copy the WebView2 profile's user-data stores to
+/// `%LOCALAPPDATA%\<identifier>\storage-backup\<version>-<timestamp>\` before
+/// handing off to the installer, so no update can ever be the last copy's
+/// death (incident 2026-08-16: a post-update session came up unable to read
+/// Local Storage and LOOKED wiped; with a snapshot this whole class of loss is
+/// recoverable by copying the snapshot back). Runs after the webview is down
+/// (wait_for_webview_profile_release), so the leveldb files are quiescent.
+///
+/// Best-effort by policy: a failed snapshot logs loudly but does not block the
+/// update (stranding users on an old version forever would be worse); the
+/// stores it copies are small (KBs to low MBs), so the handoff cost is noise.
+fn snapshot_profile_storage(identifier: &str, version: &str) -> Result<std::path::PathBuf, String> {
+    let local = std::env::var_os("LOCALAPPDATA").ok_or("LOCALAPPDATA is not set")?;
+    let base = std::path::Path::new(&local).join(identifier);
+    let profile = base.join("EBWebView").join("Default");
+    let backups = base.join("storage-backup");
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_secs())
+        .unwrap_or(0);
+    let dest = backups.join(format!("{version}-{stamp}"));
+
+    let mut copied_any = false;
+    for store in ["Local Storage", "IndexedDB"] {
+        let src = profile.join(store);
+        if !src.is_dir() {
+            continue;
+        }
+        copy_dir_recursive(&src, &dest.join(store))
+            .map_err(|e| format!("copying {store:?} failed: {e}"))?;
+        copied_any = true;
+    }
+    if !copied_any {
+        return Err(format!("no storage directories found under {}", profile.display()));
+    }
+    prune_snapshots(&backups, STORAGE_SNAPSHOTS_KEPT);
+    Ok(dest)
+}
+
+/// Plain recursive copy. WebView2 is shut down when this runs, so there are no
+/// locked files; any IO error aborts the copy and surfaces to the caller.
+fn copy_dir_recursive(src: &std::path::Path, dest: &std::path::Path) -> std::io::Result<()> {
+    std::fs::create_dir_all(dest)?;
+    for entry in std::fs::read_dir(src)? {
+        let entry = entry?;
+        let target = dest.join(entry.file_name());
+        if entry.file_type()?.is_dir() {
+            copy_dir_recursive(&entry.path(), &target)?;
+        } else {
+            std::fs::copy(entry.path(), &target)?;
+        }
+    }
+    Ok(())
+}
+
+/// Keep the newest `keep` snapshot directories (by directory name, which
+/// starts `<version>-<unix seconds>`; modified time breaks name ties in
+/// practice never, and name order is what the stamp encodes). Best-effort.
+fn prune_snapshots(backups: &std::path::Path, keep: usize) {
+    let Ok(entries) = std::fs::read_dir(backups) else {
+        return;
+    };
+    let mut dirs: Vec<std::path::PathBuf> = entries
+        .flatten()
+        .filter(|e| e.file_type().map(|t| t.is_dir()).unwrap_or(false))
+        .map(|e| e.path())
+        .collect();
+    // Newest last by the embedded unix-seconds suffix; fall back to the whole
+    // name so a malformed dir still sorts deterministically.
+    let stamp_of = |p: &std::path::Path| -> u64 {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .and_then(|n| n.rsplit('-').next())
+            .and_then(|s| s.parse::<u64>().ok())
+            .unwrap_or(0)
+    };
+    dirs.sort_by_key(|p| (stamp_of(p), p.file_name().map(|n| n.to_owned())));
+    let excess = dirs.len().saturating_sub(keep);
+    for dir in dirs.into_iter().take(excess) {
+        if let Err(e) = std::fs::remove_dir_all(&dir) {
+            tracing::warn!("storage snapshot: could not prune {}: {e}", dir.display());
+        }
+    }
+}
+
+#[cfg(test)]
+mod storage_snapshot_tests {
+    use super::{copy_dir_recursive, prune_snapshots};
+
+    fn temp_dir(tag: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!(
+            "rillio-snap-test-{tag}-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn copies_nested_files_byte_for_byte() {
+        let src = temp_dir("src");
+        let dest = temp_dir("dest").join("out");
+        std::fs::create_dir_all(src.join("leveldb")).unwrap();
+        std::fs::write(src.join("leveldb").join("000005.ldb"), b"table-bytes").unwrap();
+        std::fs::write(src.join("LOG"), b"log-line").unwrap();
+
+        copy_dir_recursive(&src, &dest).unwrap();
+
+        assert_eq!(std::fs::read(dest.join("leveldb").join("000005.ldb")).unwrap(), b"table-bytes");
+        assert_eq!(std::fs::read(dest.join("LOG")).unwrap(), b"log-line");
+        std::fs::remove_dir_all(&src).unwrap();
+        std::fs::remove_dir_all(dest.parent().unwrap()).unwrap();
+    }
+
+    #[test]
+    fn prunes_to_the_newest_n_by_stamp() {
+        let backups = temp_dir("prune");
+        for (name, marker) in [
+            ("0.1.26-1000", "a"),
+            ("0.1.27-2000", "b"),
+            ("0.1.27-3000", "c"),
+            ("0.1.28-4000", "d"),
+        ] {
+            let dir = backups.join(name);
+            std::fs::create_dir_all(&dir).unwrap();
+            std::fs::write(dir.join("marker"), marker).unwrap();
+        }
+
+        prune_snapshots(&backups, 3);
+
+        let mut left: Vec<String> = std::fs::read_dir(&backups)
+            .unwrap()
+            .flatten()
+            .map(|e| e.file_name().to_string_lossy().into_owned())
+            .collect();
+        left.sort();
+        assert_eq!(left, vec!["0.1.27-2000", "0.1.27-3000", "0.1.28-4000"]);
+        std::fs::remove_dir_all(&backups).unwrap();
+    }
+
+    #[test]
+    fn pruning_a_missing_dir_is_a_noop() {
+        prune_snapshots(std::path::Path::new("Z:/definitely/not/here"), 3);
+    }
 }
 
 /// True when we can create `dir` and write a file inside it.
