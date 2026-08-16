@@ -967,6 +967,13 @@ fn dir_size(dir: &std::path::Path) -> u64 {
 async fn restart_app(app: tauri::AppHandle) {
     #[cfg(desktop)]
     {
+        // Destroying the last window fires ExitRequested(code None), and the
+        // run-callback guard only prevents that exit while UpdateInFlight is
+        // set - without this the process died here and the relaunch below
+        // never ran ("restart closes the app but doesn't reopen", v0.1.31).
+        app.state::<UpdateInFlight>()
+            .0
+            .store(true, std::sync::atomic::Ordering::SeqCst);
         if let Some(window) = app.get_webview_window("main") {
             let _ = window.destroy();
         }
