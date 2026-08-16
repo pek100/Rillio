@@ -29,10 +29,22 @@ const assessStorage = (sentinelPresent, userDataPresent, diskBytes) => {
 
 // How many automatic restarts one dead-storage streak may spend before the
 // manual refusal screen takes over. Each restart is a fresh roll of the
-// WebView2 coin flip, so two silent retries clear most streaks without the
+// WebView2 coin flip, so a few silent retries clear most streaks without the
 // user ever seeing the refusal screen; a streak that survives them needs a
 // human (and the manual Restart button keeps counting into the same budget).
-const MAX_STORAGE_AUTO_RETRIES = 2;
+const MAX_STORAGE_AUTO_RETRIES = 3;
+
+// Pause before each automatic restart. Observed live (2026-08-17, runtime
+// 151.0.4129.86): rapid back-to-back restarts tend to SHARE the broken
+// storage fate, while launches spaced further apart come up healthy - so the
+// re-roll is worth more the longer we wait. Escalates per attempt; the window
+// stays hidden the whole time (index.html hands the reveal to the guard), so
+// the pause is invisible rather than a flicker of open-and-close windows.
+const AUTO_RETRY_DELAYS_MS = [2000, 4000, 6000];
+const autoRetryDelayMs = (retryCount) => {
+    const i = typeof retryCount === 'number' && Number.isInteger(retryCount) && retryCount >= 0 ? retryCount : 0;
+    return AUTO_RETRY_DELAYS_MS[Math.min(i, AUTO_RETRY_DELAYS_MS.length - 1)];
+};
 
 // What to do about an 'unreadable' verdict, given how many restarts this
 // streak has already spent. The count comes from a SHELL-side file
@@ -55,4 +67,4 @@ const decideUnreadableAction = (retryCount, canRestart) => {
     return retryCount < MAX_STORAGE_AUTO_RETRIES ? 'auto-retry' : 'refuse';
 };
 
-module.exports = { assessStorage, DISK_FLOOR_BYTES, decideUnreadableAction, MAX_STORAGE_AUTO_RETRIES };
+module.exports = { assessStorage, DISK_FLOOR_BYTES, decideUnreadableAction, MAX_STORAGE_AUTO_RETRIES, autoRetryDelayMs, AUTO_RETRY_DELAYS_MS };

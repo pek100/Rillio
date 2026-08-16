@@ -619,12 +619,16 @@ fn build_main_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
     #[cfg(windows)]
     disable_tracking_prevention(&window);
 
-    // Fallback reveal: if the web layer never calls show() (e.g. a startup error
-    // before the loading screen paints), don't leave an invisible window. show()
-    // is idempotent, so racing the JS path is harmless.
+    // Last-resort reveal: if the web layer never calls show() AND its own 8s
+    // fallback in index.html never runs (JS entirely dead), don't leave an
+    // invisible window forever. 20s, NOT shorter: the storage guard keeps the
+    // window hidden through its delayed auto-retry cycle (probe up to 3s + up
+    // to 6s pause + teardown), and a shorter timer here would reveal mid-retry
+    // and bring back the open-and-close flicker the hidden cycle exists to
+    // avoid. show() is idempotent, so racing the JS paths is harmless.
     let fallback = window.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(2500));
+        std::thread::sleep(std::time::Duration::from_millis(20_000));
         let _ = fallback.show();
     });
 

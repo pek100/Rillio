@@ -19,6 +19,7 @@ import {
     runStorageGuard,
     stampStorageSentinel,
     decideUnreadableAction,
+    autoRetryDelayMs,
     getStorageRetryCount,
     incrementStorageRetryCount,
     resetStorageRetryCount,
@@ -156,6 +157,19 @@ const StorageReconnecting = () => {
     );
 };
 
+// The guard owns the shell window reveal (index.html defers to
+// window.__rillioReveal): healthy boots reveal at mount, dead-storage
+// auto-retries keep the window HIDDEN through the whole delay+restart cycle
+// so a streak reads as one quiet launch instead of the app opening and
+// closing itself several times (observed live on v0.1.33, disliked).
+const revealShellWindow = () => {
+    try {
+        (window as { __rillioReveal?: () => void }).__rillioReveal?.();
+    } catch (error) {
+        console.error('reveal failed', error);
+    }
+};
+
 // The guard must settle BEFORE the core can exist: CoreProvider's transport
 // boots the wasm core, whose empty reads would be persisted as a fresh default
 // profile. 'unreadable' therefore renders the refusal screen INSTEAD of the app.
@@ -174,9 +188,13 @@ void (async () => {
         // refusal screen renders INVISIBLY underneath the splash and the user
         // sees an infinite loading logo (v0.1.29 hotfix; observed live).
         document.getElementById('rillio-loading')?.classList.add('rl-hide');
-        // Each restart is a re-roll of the WebView2 coin flip, so retry a
-        // couple of times automatically (counted in a SHELL-side file, since
-        // localStorage is dead right now) before asking the user to.
+        // Each restart is a re-roll of the WebView2 coin flip, so retry a few
+        // times automatically (counted in a SHELL-side file, since localStorage
+        // is dead right now) before asking the user to. The pause before each
+        // restart is deliberate and escalating: rapid restarts share the broken
+        // fate, spaced ones heal (observed 2026-08-17). The window stays hidden
+        // throughout; StorageReconnecting only shows if the shell's own
+        // fallback reveal fires on a pathologically slow cycle.
         const retryCount = await getStorageRetryCount();
         if (decideUnreadableAction(retryCount, isShell()) === 'auto-retry') {
             const invoke = getTauri()?.core?.invoke;
@@ -187,6 +205,16 @@ void (async () => {
                     // loop could never end, so fall through to the manual
                     // screen instead of restarting.
                     await incrementStorageRetryCount();
+                    // This boot restarts itself: cancel index.html's fallback
+                    // reveal so no flicker, but arm a failsafe first - if the
+                    // restart never tears us down, an invisible dead app is
+                    // worse than the refusal screen.
+                    setTimeout(() => {
+                        revealShellWindow();
+                        root.render(<StorageUnreadable />);
+                    }, 20000);
+                    (window as { __rillioSuppressReveal?: () => void }).__rillioSuppressReveal?.();
+                    await new Promise((resolve) => setTimeout(resolve, autoRetryDelayMs(retryCount)));
                     // Fires the teardown; this session ends here, so the
                     // promise is not awaited (it never resolves).
                     invoke('restart_app').catch((error: unknown) => console.error('restart_app failed', error));
@@ -196,6 +224,7 @@ void (async () => {
                 }
             }
         }
+        revealShellWindow();
         root.render(<StorageUnreadable />);
         return;
     }
@@ -203,6 +232,7 @@ void (async () => {
     // A trusted boot ends any dead-storage streak: give the next one a fresh
     // auto-retry budget. Fire-and-forget, no-op outside the shell.
     resetStorageRetryCount();
+    revealShellWindow();
     mountApp();
 })();
 

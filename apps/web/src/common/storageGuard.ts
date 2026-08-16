@@ -35,11 +35,12 @@ export type StorageVerdict = 'ok' | 'first-run' | 'unreadable';
 // The pure decision lives in a CommonJS sibling so the jest suite can require
 // it directly (this repo's jest has no TS transform); this module owns the
 // browser/shell wiring around it.
-const { assessStorage, decideUnreadableAction } = require('./storageGuardAssess') as {
+const { assessStorage, decideUnreadableAction, autoRetryDelayMs } = require('./storageGuardAssess') as {
     assessStorage: (sentinelPresent: boolean, userDataPresent: boolean, diskBytes: number | null) => StorageVerdict,
     decideUnreadableAction: (retryCount: number | null, canRestart: boolean) => 'auto-retry' | 'refuse',
+    autoRetryDelayMs: (retryCount: number | null) => number,
 };
-export { assessStorage, decideUnreadableAction };
+export { assessStorage, decideUnreadableAction, autoRetryDelayMs };
 
 const readLocalStorageState = (): { sentinelPresent: boolean, userDataPresent: boolean, readable: boolean } => {
     try {

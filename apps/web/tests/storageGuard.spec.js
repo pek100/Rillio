@@ -2,7 +2,7 @@
 // session came up with DOM storage unreadable and the app looked wiped while
 // the data sat intact on disk - the guard must refuse to boot the core then).
 
-const { assessStorage, DISK_FLOOR_BYTES, decideUnreadableAction, MAX_STORAGE_AUTO_RETRIES } = require('../src/common/storageGuardAssess');
+const { assessStorage, DISK_FLOOR_BYTES, decideUnreadableAction, MAX_STORAGE_AUTO_RETRIES, autoRetryDelayMs, AUTO_RETRY_DELAYS_MS } = require('../src/common/storageGuardAssess');
 
 describe('storage guard verdicts', () => {
     it('a healthy booted install is ok (sentinel present)', () => {
@@ -61,5 +61,20 @@ describe('unreadable-verdict auto-retry decision', () => {
         expect(decideUnreadableAction(NaN, true)).toBe('refuse');
         expect(decideUnreadableAction(1.5, true)).toBe('refuse');
         expect(decideUnreadableAction('1', true)).toBe('refuse');
+    });
+});
+
+describe('auto-retry pacing', () => {
+    it('escalates the pause per attempt and clamps at the last step', () => {
+        expect(autoRetryDelayMs(0)).toBe(AUTO_RETRY_DELAYS_MS[0]);
+        expect(autoRetryDelayMs(1)).toBe(AUTO_RETRY_DELAYS_MS[1]);
+        expect(autoRetryDelayMs(2)).toBe(AUTO_RETRY_DELAYS_MS[2]);
+        expect(autoRetryDelayMs(99)).toBe(AUTO_RETRY_DELAYS_MS[AUTO_RETRY_DELAYS_MS.length - 1]);
+    });
+
+    it('a broken count gets the first (shortest) pause, never a crash', () => {
+        expect(autoRetryDelayMs(null)).toBe(AUTO_RETRY_DELAYS_MS[0]);
+        expect(autoRetryDelayMs(undefined)).toBe(AUTO_RETRY_DELAYS_MS[0]);
+        expect(autoRetryDelayMs(-3)).toBe(AUTO_RETRY_DELAYS_MS[0]);
     });
 });

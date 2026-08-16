@@ -36,13 +36,25 @@
         <div id="rl-drag" data-tauri-drag-region></div>
     </div>
     <script>
-        // Reveal the frameless/transparent shell window as soon as this loading
-        // screen has painted, so the desktop never shows through. No-op in browser.
+        // The shell window reveal, DEFERRED to the storage guard (index.tsx
+        // calls window.__rillioReveal): a dead-storage boot auto-restarts a few
+        // times, and revealing before the guard's verdict made each retry flash
+        // the window open and closed (observed on v0.1.33). Healthy boots reveal
+        // at mount (~100ms later than the old first-paint reveal; the solid
+        // background still guarantees the desktop never shows through). If the
+        // bundle never runs the guard (load/compile failure), the 8s timer
+        // reveals a broken-but-visible window; the shell's own 10s fallback
+        // backstops even this script failing. No-op in browser.
         (function () {
             var t = window.__TAURI__;
             if (t && t.window && typeof t.window.getCurrentWindow === 'function') {
                 var show = function () { try { t.window.getCurrentWindow().show(); } catch (e) { } };
-                requestAnimationFrame(function () { requestAnimationFrame(show); });
+                window.__rillioReveal = show;
+                var timer = setTimeout(show, 8000);
+                // The guard's auto-retry path cancels the fallback: that boot is
+                // about to restart itself and must never become visible (it arms
+                // its own can't-restart failsafe before cancelling).
+                window.__rillioSuppressReveal = function () { clearTimeout(timer); };
             }
         })();
         // Loading animation: the Rillio mark colours itself with a fluid fill that
