@@ -51,6 +51,26 @@ const appInfo = {
 
 const root = ReactDOM.createRoot(document.getElementById('app')!);
 
+// The normal app graph. Reached from the trusted-boot path AND from the
+// refusal screen's continue-anyway escape hatch, so it must be callable twice
+// never - the guard IIFE and the button are mutually exclusive paths.
+const mountApp = () => {
+    document.getElementById('rillio-loading')?.classList.add('rl-hide');
+    root.render(
+        <React.StrictMode>
+            <PlatformProvider>
+                <CoreProvider appInfo={appInfo}>
+                    <FileDropProvider>
+                        <HashRouter>
+                            <App />
+                        </HashRouter>
+                    </FileDropProvider>
+                </CoreProvider>
+            </PlatformProvider>
+        </React.StrictMode>
+    );
+};
+
 // Storage-unreadable refusal screen (see common/storageGuard). Deliberately
 // self-contained: the app graph must NOT mount (mounting boots the core, and
 // the core would persist a default profile over whatever this session cannot
@@ -76,6 +96,23 @@ const StorageUnreadable = () => {
                 }}
             >
                 {t('STORAGE_UNREADABLE_RESTART', 'Restart Rillio')}
+            </button>
+            {/* Escape hatch (v0.1.30 locked users into this screen when the broken
+                browser session outlived restarts): boot anyway, AFTER snapshotting
+                the on-disk stores, so even the worst case (empty reads + working
+                writes overwriting the profile) stays recoverable. */}
+            <button
+                className="text-xs text-fg opacity-50 hover:opacity-90"
+                onClick={() => {
+                    const invoke = getTauri()?.core?.invoke;
+                    const snapshot = typeof invoke === 'function' ?
+                        invoke('snapshot_storage').catch((error: unknown) => console.error('snapshot_storage failed', error))
+                        :
+                        Promise.resolve();
+                    snapshot.then(() => mountApp());
+                }}
+            >
+                {t('STORAGE_UNREADABLE_CONTINUE', 'Continue anyway (a backup of your data is saved first)')}
             </button>
         </div>
     );
@@ -103,19 +140,7 @@ void (async () => {
         return;
     }
     stampStorageSentinel();
-    root.render(
-        <React.StrictMode>
-            <PlatformProvider>
-                <CoreProvider appInfo={appInfo}>
-                    <FileDropProvider>
-                        <HashRouter>
-                            <App />
-                        </HashRouter>
-                    </FileDropProvider>
-                </CoreProvider>
-            </PlatformProvider>
-        </React.StrictMode>
-    );
+    mountApp();
 })();
 
 const rawServiceWorkerDisabled = process.env.SERVICE_WORKER_DISABLED as unknown;

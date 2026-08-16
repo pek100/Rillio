@@ -376,6 +376,7 @@ pub fn run() {
             check_for_update,
             storage_health,
             restart_app,
+            snapshot_storage,
             streaming_server_url,
             server_request,
             shell::shell_init,
@@ -953,12 +954,38 @@ fn dir_size(dir: &std::path::Path) -> u64 {
         .sum()
 }
 
-/// Full app restart, for the storage guard's refusal screen: a page reload
-/// would reuse the same broken browser session, only a process relaunch gets a
-/// fresh WebView2 session that can mount the profile again.
+/// Full app restart, for the storage guard's refusal screen.
+///
+/// A page reload reuses the broken browser session. And a plain app.restart()
+/// is NOT enough either (v0.1.30, observed live): the WebView2 BROWSER process
+/// can outlive the app process, and the relaunched app re-attaches to that
+/// same broken-storage browser - the refusal screen came back on every
+/// restart, a lockout. So: destroy the window first, WAIT for the browser to
+/// release the profile (the updater's own teardown), and only then relaunch,
+/// guaranteeing the next session gets a fresh browser process.
 #[tauri::command]
-fn restart_app(app: tauri::AppHandle) {
+async fn restart_app(app: tauri::AppHandle) {
+    #[cfg(desktop)]
+    {
+        if let Some(window) = app.get_webview_window("main") {
+            let _ = window.destroy();
+        }
+        let identifier = app.config().identifier.clone();
+        let _ = tauri::async_runtime::spawn_blocking(move || {
+            wait_for_webview_profile_release(&identifier)
+        })
+        .await;
+    }
     app.restart();
+}
+
+/// On-demand storage snapshot (the refusal screen's "continue anyway" path
+/// snapshots before booting over storage it cannot read). Same store copier as
+/// the pre-update snapshot, labeled distinctly.
+#[tauri::command]
+fn snapshot_storage(app: tauri::AppHandle) -> Result<String, String> {
+    snapshot_profile_storage(&app.config().identifier, "bypass")
+        .map(|path| path.display().to_string())
 }
 
 /// How many pre-update storage snapshots to keep (the newest N survive).
