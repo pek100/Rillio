@@ -64,7 +64,15 @@ pub(crate) fn mpv_embed_enabled() -> bool {
 /// hide your IP from torrent peers (that needs a VPN/proxy) - see
 /// memory/compositing-dcomp-plan sibling notes.
 fn browser_args() -> String {
-    let base = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection";
+    // msEnableTrackingPrevention / msEdgeTrackingPrevention: Edge's Tracking
+    // Prevention inside WebView2 can classify the app's own origin and BLOCK
+    // its DOM storage ("Tracking Prevention blocked access to storage" x12 in
+    // the 2026-08-16 incident console) - localStorage reads answer empty and
+    // writes drop while the leveldb sits intact, which users experience as a
+    // wiped profile. The app IS the site here; tracking prevention has nothing
+    // to protect. Both observed spellings of the feature name are listed;
+    // unknown names in --disable-features are inert, so the pair is safe.
+    let base = "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,msEnableTrackingPrevention,msEdgeTrackingPrevention";
     let dns = match std::env::var("RILLIO_DOH_TEMPLATE") {
         Ok(v) if v == "0" || v.eq_ignore_ascii_case("off") => base.to_string(),
         Ok(v) if !v.trim().is_empty() => {

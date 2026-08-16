@@ -59,7 +59,7 @@ const root = ReactDOM.createRoot(document.getElementById('app')!);
 const StorageUnreadable = () => {
     const t = i18n.t.bind(i18n);
     return (
-        <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-background p-8 text-center text-fg">
+        <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-bg p-8 text-center text-fg">
             <div className="text-xl font-semibold">
                 {t('STORAGE_UNREADABLE_TITLE', 'Rillio can\'t read its saved data')}
             </div>
@@ -94,6 +94,11 @@ void (async () => {
     }
     if (verdict === 'unreadable') {
         console.error('storageGuard: localStorage reads empty but the profile database on disk has data; refusing to boot the core');
+        // The static splash overlay (#rillio-loading in index.html) is dismissed
+        // by App.tsx on mount - a path this branch never takes. Without this the
+        // refusal screen renders INVISIBLY underneath the splash and the user
+        // sees an infinite loading logo (v0.1.29 hotfix; observed live).
+        document.getElementById('rillio-loading')?.classList.add('rl-hide');
         root.render(<StorageUnreadable />);
         return;
     }
