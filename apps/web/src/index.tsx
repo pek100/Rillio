@@ -15,15 +15,7 @@ import './common/videoServerContext';
 import App from './App';
 import { CoreProvider } from './core';
 import { FileDropProvider, PlatformProvider } from './common';
-import {
-    runStorageGuard,
-    stampStorageSentinel,
-    decideUnreadableAction,
-    autoRetryDelayMs,
-    getStorageRetryCount,
-    incrementStorageRetryCount,
-    resetStorageRetryCount,
-} from './common/storageGuard';
+import { runStorageGuard, stampStorageSentinel } from './common/storageGuard';
 import { getTauri } from './common/Platform/shell/isShell';
 // NEVER run the cache-first service worker inside the desktop shell. The shell's
 // assets are embedded and swapped in whole by the native updater, and the asset
@@ -99,14 +91,7 @@ const StorageUnreadable = () => {
                 onClick={() => {
                     const invoke = getTauri()?.core?.invoke;
                     if (typeof invoke === 'function') {
-                        // A manual restart is still a restart attempt: count it,
-                        // so the counter keeps meaning "restarts attempted this
-                        // streak". Restart even if counting fails - the user
-                        // asked for it, and this path cannot loop on its own.
-                        incrementStorageRetryCount()
-                            .catch((error: unknown) => console.error('storage_retry_increment failed', error))
-                            .then(() => invoke('restart_app'))
-                            .catch((error: unknown) => console.error('restart_app failed', error));
+                        invoke('restart_app').catch((error: unknown) => console.error('restart_app failed', error));
                     }
                 }}
             >
@@ -119,11 +104,6 @@ const StorageUnreadable = () => {
             <button
                 className="text-xs text-fg opacity-50 hover:opacity-90"
                 onClick={() => {
-                    // Continue-anyway RESETS the retry counter (deliberate): the
-                    // user is abandoning this dead-storage streak and booting the
-                    // session, so a future streak deserves its own fresh
-                    // auto-retry budget instead of inheriting a spent one.
-                    resetStorageRetryCount();
                     const invoke = getTauri()?.core?.invoke;
                     const snapshot = typeof invoke === 'function' ?
                         invoke('snapshot_storage').catch((error: unknown) => console.error('snapshot_storage failed', error))
@@ -136,38 +116,6 @@ const StorageUnreadable = () => {
             </button>
         </div>
     );
-};
-
-// Interim screen for an automatic dead-storage restart: shown for the moment
-// between the 'unreadable' verdict and the shell tearing the window down (see
-// decideUnreadableAction in common/storageGuardAssess). No controls on
-// purpose, the restart is already in flight.
-const StorageReconnecting = () => {
-    const t = i18n.t.bind(i18n);
-    return (
-        <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-bg p-8 text-center text-fg">
-            <div className="text-xl font-semibold">
-                {t('STORAGE_RECONNECTING_TITLE', 'Reconnecting to your data...')}
-            </div>
-            <div className="max-w-md text-sm opacity-80">
-                {t('STORAGE_RECONNECTING_BODY', 'Rillio is restarting itself to reach your saved profile and library. This takes a few seconds.')}
-            </div>
-            <div className="h-1 w-24 animate-pulse rounded-full bg-[#FFA033]" />
-        </div>
-    );
-};
-
-// The guard owns the shell window reveal (index.html defers to
-// window.__rillioReveal): healthy boots reveal at mount, dead-storage
-// auto-retries keep the window HIDDEN through the whole delay+restart cycle
-// so a streak reads as one quiet launch instead of the app opening and
-// closing itself several times (observed live on v0.1.33, disliked).
-const revealShellWindow = () => {
-    try {
-        (window as { __rillioReveal?: () => void }).__rillioReveal?.();
-    } catch (error) {
-        console.error('reveal failed', error);
-    }
 };
 
 // The guard must settle BEFORE the core can exist: CoreProvider's transport
@@ -188,51 +136,10 @@ void (async () => {
         // refusal screen renders INVISIBLY underneath the splash and the user
         // sees an infinite loading logo (v0.1.29 hotfix; observed live).
         document.getElementById('rillio-loading')?.classList.add('rl-hide');
-        // Each restart is a re-roll of the WebView2 coin flip, so retry a few
-        // times automatically (counted in a SHELL-side file, since localStorage
-        // is dead right now) before asking the user to. The pause before each
-        // restart is deliberate and escalating: rapid restarts share the broken
-        // fate, spaced ones heal (observed 2026-08-17). The window stays hidden
-        // throughout; StorageReconnecting only shows if the shell's own
-        // fallback reveal fires on a pathologically slow cycle.
-        const retryCount = await getStorageRetryCount();
-        if (decideUnreadableAction(retryCount, isShell()) === 'auto-retry') {
-            const invoke = getTauri()?.core?.invoke;
-            if (typeof invoke === 'function') {
-                try {
-                    root.render(<StorageReconnecting />);
-                    // Count FIRST; if the attempt cannot be counted the retry
-                    // loop could never end, so fall through to the manual
-                    // screen instead of restarting.
-                    await incrementStorageRetryCount();
-                    // This boot restarts itself: cancel index.html's fallback
-                    // reveal so no flicker, but arm a failsafe first - if the
-                    // restart never tears us down, an invisible dead app is
-                    // worse than the refusal screen.
-                    setTimeout(() => {
-                        revealShellWindow();
-                        root.render(<StorageUnreadable />);
-                    }, 20000);
-                    (window as { __rillioSuppressReveal?: () => void }).__rillioSuppressReveal?.();
-                    await new Promise((resolve) => setTimeout(resolve, autoRetryDelayMs(retryCount)));
-                    // Fires the teardown; this session ends here, so the
-                    // promise is not awaited (it never resolves).
-                    invoke('restart_app').catch((error: unknown) => console.error('restart_app failed', error));
-                    return;
-                } catch (error) {
-                    console.error('storageGuard: auto-retry could not be counted, showing the refusal screen', error);
-                }
-            }
-        }
-        revealShellWindow();
         root.render(<StorageUnreadable />);
         return;
     }
     stampStorageSentinel();
-    // A trusted boot ends any dead-storage streak: give the next one a fresh
-    // auto-retry budget. Fire-and-forget, no-op outside the shell.
-    resetStorageRetryCount();
-    revealShellWindow();
     mountApp();
 })();
 

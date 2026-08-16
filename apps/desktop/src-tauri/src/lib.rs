@@ -377,9 +377,6 @@ pub fn run() {
             storage_health,
             restart_app,
             snapshot_storage,
-            storage_retry_count,
-            storage_retry_increment,
-            storage_retry_reset,
             streaming_server_url,
             server_request,
             shell::shell_init,
@@ -619,16 +616,12 @@ fn build_main_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
     #[cfg(windows)]
     disable_tracking_prevention(&window);
 
-    // Last-resort reveal: if the web layer never calls show() AND its own 8s
-    // fallback in index.html never runs (JS entirely dead), don't leave an
-    // invisible window forever. 20s, NOT shorter: the storage guard keeps the
-    // window hidden through its delayed auto-retry cycle (probe up to 3s + up
-    // to 6s pause + teardown), and a shorter timer here would reveal mid-retry
-    // and bring back the open-and-close flicker the hidden cycle exists to
-    // avoid. show() is idempotent, so racing the JS paths is harmless.
+    // Fallback reveal: if the web layer never calls show() (e.g. a startup error
+    // before the loading screen paints), don't leave an invisible window. show()
+    // is idempotent, so racing the JS path is harmless.
     let fallback = window.clone();
     std::thread::spawn(move || {
-        std::thread::sleep(std::time::Duration::from_millis(20_000));
+        std::thread::sleep(std::time::Duration::from_millis(2500));
         let _ = fallback.show();
     });
 
@@ -991,13 +984,6 @@ struct StorageHealth {
     /// (incident 2026-08-16: a WebView2 session booted with its DOM-storage
     /// plane dead and the app looked wiped while the data sat intact here).
     local_storage_bytes: u64,
-    /// Debug knob: true only when `RILLIO_FORCE_STORAGE_UNREADABLE=1` is in
-    /// the environment. The web guard then treats the boot as unreadable
-    /// regardless of what localStorage answered, which is the only way to
-    /// exercise the refusal/auto-retry flow live without waiting for the real
-    /// per-boot coin flip. Inert unless the env var is set (mirrors
-    /// RILLIO_DEVTOOLS_PORT).
-    forced: bool,
 }
 
 #[tauri::command]
@@ -1005,85 +991,7 @@ fn storage_health(app: tauri::AppHandle) -> StorageHealth {
     let bytes = local_storage_leveldb_dir(&app.config().identifier)
         .map(|dir| dir_size(&dir))
         .unwrap_or(0);
-    let forced = std::env::var("RILLIO_FORCE_STORAGE_UNREADABLE")
-        .map(|v| v.trim() == "1")
-        .unwrap_or(false);
-    StorageHealth { local_storage_bytes: bytes, forced }
-}
-
-/// The dead-storage auto-retry counter file. The count must live in the SHELL
-/// because localStorage is dead in exactly the sessions that need it (the web
-/// guard reads/bumps it around each automatic restart; see apps/web
-/// common/storageGuard). Same base dir the storage snapshots use:
-/// `%LOCALAPPDATA%\<identifier>`.
-fn storage_retry_counter_path(identifier: &str) -> Option<std::path::PathBuf> {
-    let local = std::env::var_os("LOCALAPPDATA")?;
-    Some(std::path::Path::new(&local).join(identifier).join("storage-retry-count"))
-}
-
-/// Read the counter. A missing file is 0 by design; an unreadable or corrupt
-/// file logs loudly and also counts as 0 (never crash a boot over a one-line
-/// bookkeeping file).
-fn read_retry_counter(path: &std::path::Path) -> u32 {
-    match std::fs::read_to_string(path) {
-        Ok(text) => match text.trim().parse::<u32>() {
-            Ok(count) => count,
-            Err(e) => {
-                tracing::error!("storage retry counter {} is corrupt ({e}); treating as 0", path.display());
-                0
-            }
-        },
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => 0,
-        Err(e) => {
-            tracing::error!("storage retry counter {} is unreadable ({e}); treating as 0", path.display());
-            0
-        }
-    }
-}
-
-/// Persist the counter (creating the parent dir if needed).
-fn write_retry_counter(path: &std::path::Path, value: u32) -> std::io::Result<()> {
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent)?;
-    }
-    std::fs::write(path, value.to_string())
-}
-
-#[tauri::command]
-fn storage_retry_count(app: tauri::AppHandle) -> u32 {
-    storage_retry_counter_path(&app.config().identifier)
-        .map(|path| read_retry_counter(&path))
-        .unwrap_or(0)
-}
-
-/// Bump and persist the counter; returns the new value. A write failure
-/// surfaces to the caller ON PURPOSE: the web guard must not restart when the
-/// attempt cannot be counted, or the retry loop could never end.
-#[tauri::command]
-fn storage_retry_increment(app: tauri::AppHandle) -> Result<u32, String> {
-    let path = storage_retry_counter_path(&app.config().identifier)
-        .ok_or_else(|| "LOCALAPPDATA is not set".to_string())?;
-    let next = read_retry_counter(&path).saturating_add(1);
-    write_retry_counter(&path, next).map_err(|e| {
-        let msg = format!("could not persist the storage retry counter at {}: {e}", path.display());
-        tracing::error!("{msg}");
-        msg
-    })?;
-    Ok(next)
-}
-
-/// Zero the counter by deleting the file (missing means 0). Best-effort: a
-/// healthy boot must not fail over bookkeeping, so errors only log.
-#[tauri::command]
-fn storage_retry_reset(app: tauri::AppHandle) {
-    let Some(path) = storage_retry_counter_path(&app.config().identifier) else {
-        return;
-    };
-    if let Err(e) = std::fs::remove_file(&path) {
-        if e.kind() != std::io::ErrorKind::NotFound {
-            tracing::error!("could not reset the storage retry counter at {}: {e}", path.display());
-        }
-    }
+    StorageHealth { local_storage_bytes: bytes }
 }
 
 /// Total size of the files directly inside `dir` (leveldb keeps everything
@@ -1291,57 +1199,6 @@ mod storage_snapshot_tests {
     #[test]
     fn pruning_a_missing_dir_is_a_noop() {
         prune_snapshots(std::path::Path::new("Z:/definitely/not/here"), 3);
-    }
-}
-
-#[cfg(test)]
-mod storage_retry_counter_tests {
-    use super::{read_retry_counter, write_retry_counter};
-
-    fn temp_counter_path(tag: &str) -> std::path::PathBuf {
-        std::env::temp_dir().join(format!(
-            "rillio-retry-test-{tag}-{}-{}",
-            std::process::id(),
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ))
-        .join("storage-retry-count")
-    }
-
-    #[test]
-    fn missing_file_reads_zero() {
-        let path = temp_counter_path("missing");
-        assert_eq!(read_retry_counter(&path), 0);
-    }
-
-    #[test]
-    fn write_read_round_trip_and_overwrite() {
-        let path = temp_counter_path("roundtrip");
-        write_retry_counter(&path, 1).unwrap();
-        assert_eq!(read_retry_counter(&path), 1);
-        write_retry_counter(&path, 2).unwrap();
-        assert_eq!(read_retry_counter(&path), 2);
-        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
-    }
-
-    #[test]
-    fn corrupt_content_reads_zero() {
-        let path = temp_counter_path("corrupt");
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, b"not-a-number").unwrap();
-        assert_eq!(read_retry_counter(&path), 0);
-        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
-    }
-
-    #[test]
-    fn surrounding_whitespace_is_tolerated() {
-        let path = temp_counter_path("whitespace");
-        std::fs::create_dir_all(path.parent().unwrap()).unwrap();
-        std::fs::write(&path, b" 3\r\n").unwrap();
-        assert_eq!(read_retry_counter(&path), 3);
-        std::fs::remove_dir_all(path.parent().unwrap()).unwrap();
     }
 }
 

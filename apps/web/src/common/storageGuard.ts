@@ -35,12 +35,10 @@ export type StorageVerdict = 'ok' | 'first-run' | 'unreadable';
 // The pure decision lives in a CommonJS sibling so the jest suite can require
 // it directly (this repo's jest has no TS transform); this module owns the
 // browser/shell wiring around it.
-const { assessStorage, decideUnreadableAction, autoRetryDelayMs } = require('./storageGuardAssess') as {
+const { assessStorage } = require('./storageGuardAssess') as {
     assessStorage: (sentinelPresent: boolean, userDataPresent: boolean, diskBytes: number | null) => StorageVerdict,
-    decideUnreadableAction: (retryCount: number | null, canRestart: boolean) => 'auto-retry' | 'refuse',
-    autoRetryDelayMs: (retryCount: number | null) => number,
 };
-export { assessStorage, decideUnreadableAction, autoRetryDelayMs };
+export { assessStorage };
 
 const readLocalStorageState = (): { sentinelPresent: boolean, userDataPresent: boolean, readable: boolean } => {
     try {
@@ -80,14 +78,12 @@ export const runStorageGuard = async (): Promise<StorageVerdict> => {
         // No disk oracle outside the shell: trust whatever localStorage said.
         return assessStorage(state.sentinelPresent, state.userDataPresent, null);
     }
-
-    // In the shell the health probe runs on EVERY boot, not only on empty
-    // reads: it is a cheap directory stat, and it carries the
-    // RILLIO_FORCE_STORAGE_UNREADABLE debug flag, which must be able to
-    // override even healthy-looking reads (live verification of the
-    // refusal/auto-retry flow without waiting for the real coin flip).
+    if (state.sentinelPresent || state.userDataPresent) return 'ok';
+    // A shell session where localStorage THROWS is never trustworthy,
+    // whatever the disk probe would say.
+    if (!state.readable) return 'unreadable';
+    // Empty read in the shell: ask the disk before trusting it as a first run.
     let diskBytes: number | null = null;
-    let forced = false;
     const invoke = await waitForInvoke(3000);
     if (invoke !== null) {
         try {
@@ -95,19 +91,10 @@ export const runStorageGuard = async (): Promise<StorageVerdict> => {
             if (health && typeof health.localStorageBytes === 'number') {
                 diskBytes = health.localStorageBytes;
             }
-            forced = !!(health && health.forced === true);
         } catch (error) {
             console.error('storageGuard: storage_health failed', error);
         }
     }
-    if (forced) {
-        console.warn('storageGuard: RILLIO_FORCE_STORAGE_UNREADABLE is set, forcing the unreadable verdict');
-        return 'unreadable';
-    }
-    if (state.sentinelPresent || state.userDataPresent) return 'ok';
-    // A shell session where localStorage THROWS is never trustworthy,
-    // whatever the disk probe managed to say.
-    if (!state.readable) return 'unreadable';
     return assessStorage(state.sentinelPresent, state.userDataPresent, diskBytes);
 };
 
@@ -120,42 +107,3 @@ export const stampStorageSentinel = (): void => {
     }
 };
 
-// --- The shell-side dead-storage restart counter -------------------------
-// The auto-retry loop's memory (see decideUnreadableAction). It lives in a
-// small file the SHELL owns because localStorage is dead in exactly the
-// sessions that need to count their restarts. Outside the shell every helper
-// is a no-op, mirroring how the guard skips its disk oracle there.
-
-/** Restarts already attempted this streak, or null when there is no counter. */
-export const getStorageRetryCount = async (): Promise<number | null> => {
-    if (!isShell()) return null;
-    const invoke = await waitForInvoke(3000);
-    if (invoke === null) return null;
-    try {
-        const count = await invoke('storage_retry_count');
-        return typeof count === 'number' ? count : null;
-    } catch (error) {
-        console.error('storageGuard: storage_retry_count failed', error);
-        return null;
-    }
-};
-
-/**
- * Bump the counter. Rejects on failure ON PURPOSE: a caller about to restart
- * must not restart when the attempt cannot be counted, because an uncountable
- * retry loop never ends.
- */
-export const incrementStorageRetryCount = async (): Promise<void> => {
-    if (!isShell()) return;
-    const invoke = await waitForInvoke(3000);
-    if (invoke === null) throw new Error('storageGuard: no shell invoke to count the restart');
-    await invoke('storage_retry_increment');
-};
-
-/** Zero the counter; a trusted boot ends the streak. Fire-and-forget. */
-export const resetStorageRetryCount = (): void => {
-    if (!isShell()) return;
-    void waitForInvoke(3000)
-        .then((invoke) => invoke !== null ? invoke('storage_retry_reset') : undefined)
-        .catch((error) => console.error('storageGuard: storage_retry_reset failed', error));
-};
