@@ -33,6 +33,16 @@ stale, present but not applying means the WebView2 cache.
 `libmpv-2.dll` is not present next to the debug binary, so playback is disabled
 under `cargo run` (harmless for UI work; the release bundle ships the dll).
 
+**Debug builds use their own profile** (`com.rillio.desktop.dev` - fresh/empty
+data, own dirs under `%LOCALAPPDATA%`), so a dev shell can never contend with
+the installed app's WebView2 profile (root cause of the 2026-08 dead-storage
+incident: a boot while the previous browser still held the Local Storage LOCK
+got a silent empty in-memory session). `RILLIO_SHARED_PROFILE=1` opts a dev
+build into the REAL profile when a bug needs real data - run it strictly
+instead of the installed app, never alongside it. The cache-clear ritual below
+targets the installed profile; for a default dev build substitute
+`com.rillio.desktop.dev` in the paths.
+
 To inspect the running shell (its real DOM/console, the only way to settle bugs
 that do not reproduce in a browser), launch with `RILLIO_DEVTOOLS_PORT=9222` and
 drive CDP over `ws://127.0.0.1:9222`. Off unless the env var is set.

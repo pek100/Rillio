@@ -281,6 +281,28 @@ pub fn run() {
     // Windows the cap is true and this runs exactly as before.
     let ctx = tauri::generate_context!();
 
+    // Dev/installed profile separation (2026-08-17): a cargo-run dev shell and
+    // the installed app used to share one identifier and therefore ONE WebView2
+    // profile and browser-process pool. Interleaving them multiplied the
+    // rapid-relaunch churn behind the dead-storage sessions (see the profile
+    // lock wait in setup). Debug builds now get their own identifier: own
+    // profile dir (%LOCALAPPDATA%\com.rillio.desktop.dev), own single-instance
+    // mutex, zero contact with the user's real data. RILLIO_SHARED_PROFILE=1
+    // deliberately opts a dev build back into the real profile when a bug only
+    // reproduces against real data - run it strictly INSTEAD of the installed
+    // app, never alongside it. Release builds are untouched.
+    #[cfg(debug_assertions)]
+    let ctx = {
+        let mut ctx = ctx;
+        let shared = std::env::var("RILLIO_SHARED_PROFILE")
+            .map(|v| v.trim() == "1")
+            .unwrap_or(false);
+        if !shared {
+            ctx.config_mut().identifier = "com.rillio.desktop.dev".into();
+        }
+        ctx
+    };
+
     // The detached update-window process mode (docs/update-window): a minimal
     // one-window app that shows update.html while the real update runs. It must
     // branch BEFORE the stale-cache sweep below - that sweep touches the MAIN
@@ -349,6 +371,27 @@ pub fn run() {
             // Phase 2 runtime task (needs a device to exercise).
             #[cfg(desktop)]
             {
+                // ROOT-CAUSE FIX for the dead-storage sessions (2026-08-17,
+                // reproduced deterministically by holding the leveldb LOCK
+                // during boot): when a new browser process starts while the
+                // previous one is still tearing down and holding the Local
+                // Storage LOCK, Chromium's storage service fails to open the
+                // database and silently serves an EMPTY in-memory map for the
+                // whole session - reads empty, writes dropped, looks like a
+                // wiped profile. localStorage has no error channel, so nothing
+                // ever surfaces. Wait for the previous session to release the
+                // profile BEFORE creating the webview; on timeout boot anyway
+                // (the storage guard remains the safety net).
+                let identifier = app.config().identifier.clone();
+                let waited = std::time::Instant::now();
+                if !wait_for_webview_profile_release(&identifier) {
+                    tracing::warn!("previous browser session still holds the profile after 10s; booting anyway");
+                } else if waited.elapsed().as_millis() > 300 {
+                    tracing::info!(
+                        "waited {:?} for the previous browser session to release the profile",
+                        waited.elapsed()
+                    );
+                }
                 let window = build_main_window(app)?;
                 // S3 part-2 render proof: RILLIO_MPV_TEST=<url|"test"> embeds mpv
                 // in the window and plays it. "test" = a generated color pattern.
@@ -933,6 +976,7 @@ fn wait_for_webview_profile_release(identifier: &str) -> bool {
         return true;
     }
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+    let mut contended = false;
     loop {
         match std::fs::OpenOptions::new()
             .read(true)
@@ -940,11 +984,17 @@ fn wait_for_webview_profile_release(identifier: &str) -> bool {
             .open(&lock)
         {
             Ok(_) => {
-                // Small grace period for the rest of the browser teardown.
-                std::thread::sleep(std::time::Duration::from_millis(200));
+                // Grace period for the rest of the browser teardown - but only
+                // when we actually saw contention. This now also runs on every
+                // normal boot (see setup), where the lock is typically free on
+                // the first probe and the boot must not pay a flat 200ms.
+                if contended {
+                    std::thread::sleep(std::time::Duration::from_millis(200));
+                }
                 return true;
             }
             Err(e) => {
+                contended = true;
                 if std::time::Instant::now() >= deadline {
                     tracing::warn!("webview profile still locked after 10s: {e}");
                     return false;
