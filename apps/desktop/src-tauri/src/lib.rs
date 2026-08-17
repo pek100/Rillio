@@ -383,8 +383,20 @@ pub fn run() {
                 // profile BEFORE creating the webview; on timeout boot anyway
                 // (the storage guard remains the safety net).
                 let identifier = app.config().identifier.clone();
+                let profile = std::env::var_os("LOCALAPPDATA").map(|local| {
+                    std::path::Path::new(&local).join(&identifier).join("EBWebView")
+                });
+                let (lockfile_held, ldb_held) = profile
+                    .map(|p| {
+                        (
+                            lock_held(&p.join("lockfile")),
+                            lock_held(&p.join("Default").join("Local Storage").join("leveldb").join("LOCK")),
+                        )
+                    })
+                    .unwrap_or((false, false));
                 let waited = std::time::Instant::now();
-                if !wait_for_webview_profile_release(&identifier) {
+                let released = wait_for_webview_profile_release(&identifier);
+                if !released {
                     tracing::warn!("previous browser session still holds the profile after 10s; booting anyway");
                 } else if waited.elapsed().as_millis() > 300 {
                     tracing::info!(
@@ -392,6 +404,17 @@ pub fn run() {
                         waited.elapsed()
                     );
                 }
+                boot_journal_append(
+                    &identifier,
+                    &format!(
+                        "boot v{} lockfile_held={} ldb_lock_held={} waited_ms={} released={}",
+                        app.package_info().version,
+                        lockfile_held,
+                        ldb_held,
+                        waited.elapsed().as_millis(),
+                        released
+                    ),
+                );
                 let window = build_main_window(app)?;
                 // S3 part-2 render proof: RILLIO_MPV_TEST=<url|"test"> embeds mpv
                 // in the window and plays it. "test" = a generated color pattern.
@@ -965,49 +988,117 @@ fn wait_for_webview_profile_release(identifier: &str) -> bool {
         Some(dir) => dir,
         None => return true,
     };
-    let lock = std::path::Path::new(&local)
-        .join(identifier)
-        .join("EBWebView")
-        .join("Default")
-        .join("Local Storage")
-        .join("leveldb")
-        .join("LOCK");
-    if !lock.exists() {
-        return true;
-    }
+    let profile = std::path::Path::new(&local).join(identifier).join("EBWebView");
+    // TWO locks, and both matter (2026-08-17, learned in the field):
+    // - `EBWebView\lockfile` is Chromium's user-data-dir lock, held by EVERY
+    //   browser process for its whole life - healthy or broken. Waiting on it
+    //   serializes against ANY predecessor. v0.1.36 waited only on the
+    //   leveldb LOCK, which a dead-storage-plane predecessor never holds
+    //   (it never opened the database), so a relaunch right after closing a
+    //   dead session raced the dying browser and inherited the dead state.
+    // - `Default\Local Storage\leveldb\LOCK` is held only while the storage
+    //   database is open; waiting on it lets a HEALTHY predecessor finish
+    //   flushing before we boot.
+    let locks = [
+        profile.join("lockfile"),
+        profile
+            .join("Default")
+            .join("Local Storage")
+            .join("leveldb")
+            .join("LOCK"),
+    ];
     let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
     let mut contended = false;
-    loop {
-        match std::fs::OpenOptions::new()
-            .read(true)
-            .share_mode(0) // exclusive: fails while ANY other handle is open
-            .open(&lock)
-        {
-            Ok(_) => {
-                // Grace period for the rest of the browser teardown - but only
-                // when we actually saw contention. This now also runs on every
-                // normal boot (see setup), where the lock is typically free on
-                // the first probe and the boot must not pay a flat 200ms.
-                if contended {
-                    std::thread::sleep(std::time::Duration::from_millis(200));
-                }
-                return true;
+    'outer: loop {
+        for lock in &locks {
+            if !lock.exists() {
+                continue;
             }
-            Err(e) => {
-                contended = true;
-                if std::time::Instant::now() >= deadline {
-                    tracing::warn!("webview profile still locked after 10s: {e}");
-                    return false;
+            match std::fs::OpenOptions::new()
+                .read(true)
+                .share_mode(0) // exclusive: fails while ANY other handle is open
+                .open(lock)
+            {
+                Ok(_) => {}
+                Err(e) => {
+                    contended = true;
+                    if std::time::Instant::now() >= deadline {
+                        tracing::warn!("webview profile still locked after 10s ({}): {e}", lock.display());
+                        return false;
+                    }
+                    std::thread::sleep(std::time::Duration::from_millis(100));
+                    continue 'outer;
                 }
-                std::thread::sleep(std::time::Duration::from_millis(100));
             }
         }
+        // Grace period for the rest of the browser teardown - but only when we
+        // actually saw contention; a normal boot with free locks pays ~0ms.
+        if contended {
+            std::thread::sleep(std::time::Duration::from_millis(200));
+        }
+        return true;
     }
 }
 
 #[cfg(not(windows))]
 fn wait_for_webview_profile_release(_identifier: &str) -> bool {
     true
+}
+
+/// Append one line to the boot journal (`%LOCALAPPDATA%\<identifier>\
+/// boot-journal.log`). Pure observability for the dead-storage incident: every
+/// boot records the lock states it found and every empty-read guard probe
+/// records what the disk said, so a field incident arrives with data instead
+/// of a screenshot. Epoch-ms timestamps; append-only; capped by truncating to
+/// the newest half above ~256KB; never fails the caller.
+fn boot_journal_append(identifier: &str, line: &str) {
+    let Some(local) = std::env::var_os("LOCALAPPDATA") else { return };
+    let dir = std::path::Path::new(&local).join(identifier);
+    let path = dir.join("boot-journal.log");
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis())
+        .unwrap_or(0);
+    let entry = format!("{now_ms} {line}\n");
+    let _ = std::fs::create_dir_all(&dir);
+    if let Ok(meta) = std::fs::metadata(&path) {
+        if meta.len() > 256 * 1024 {
+            if let Ok(text) = std::fs::read_to_string(&path) {
+                let lines: Vec<&str> = text.lines().collect();
+                let keep = lines.len() / 2;
+                let _ = std::fs::write(&path, format!("{}\n", lines[keep..].join("\n")));
+            }
+        }
+    }
+    if let Err(e) = std::fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&path)
+        .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()))
+    {
+        tracing::error!("boot journal write failed: {e}");
+    }
+}
+
+/// True when the file exists and is exclusively held by another process.
+fn lock_held(path: &std::path::Path) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::OpenOptionsExt;
+        if !path.exists() {
+            return false;
+        }
+        std::fs::OpenOptions::new()
+            .read(true)
+            .share_mode(0)
+            .open(path)
+            .is_err()
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = path;
+        false
+    }
 }
 
 /// The WebView2 profile's Local Storage database directory - the ONLY copy of
@@ -1038,9 +1129,14 @@ struct StorageHealth {
 
 #[tauri::command]
 fn storage_health(app: tauri::AppHandle) -> StorageHealth {
-    let bytes = local_storage_leveldb_dir(&app.config().identifier)
+    let identifier = app.config().identifier.clone();
+    let bytes = local_storage_leveldb_dir(&identifier)
         .map(|dir| dir_size(&dir))
         .unwrap_or(0);
+    // This command only runs when the web guard saw EMPTY localStorage reads,
+    // so its presence in the journal marks an empty-read boot; the bytes tell
+    // whether the verdict became first-run (~0) or unreadable (data on disk).
+    boot_journal_append(&identifier, &format!("guard-probe bytes={bytes}"));
     StorageHealth { local_storage_bytes: bytes }
 }
 
