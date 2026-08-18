@@ -98,6 +98,27 @@ export const runStorageGuard = async (): Promise<StorageVerdict> => {
     return assessStorage(state.sentinelPresent, state.userDataPresent, diskBytes);
 };
 
+/**
+ * Report the verdict (and what localStorage looked like) to the shell's boot
+ * journal. Fire-and-forget, no-op outside the shell. This is the web half of
+ * the journal: it records the `readable=false` branch (localStorage THROWING),
+ * which never probes storage_health and was otherwise invisible.
+ */
+export const reportStorageGuardOutcome = (verdict: StorageVerdict): void => {
+    if (!isShell()) return;
+    const state = readLocalStorageState();
+    void waitForInvoke(3000)
+        .then((invoke) => invoke !== null ?
+            invoke('storage_guard_report', {
+                verdict,
+                readable: state.readable,
+                sentinelPresent: state.sentinelPresent,
+                userDataPresent: state.userDataPresent,
+            }) :
+            undefined)
+        .catch((error) => console.error('storageGuard: storage_guard_report failed', error));
+};
+
 /** Stamp the sentinel; called once the boot is trusted. Best-effort. */
 export const stampStorageSentinel = (): void => {
     try {

@@ -303,6 +303,26 @@ pub fn run() {
         ctx
     };
 
+    // Process-birth journal line: written for EVERY rillio process (main app,
+    // update splash, second instances that single-instance will kill) BEFORE
+    // any branching, so a boot that dies pre-setup still leaves a trace. Four
+    // field refusals (2026-08-17/18) left zero journal lines while healthy
+    // boots always journaled; whatever distinguishes those processes, this
+    // line records it: how it was launched (args), whether the environment is
+    // intact, and where it started from.
+    #[cfg(desktop)]
+    boot_journal_append(
+        &ctx.config().identifier,
+        &format!(
+            "run-start v{} pid={} args={:?} localappdata={} cwd={:?}",
+            ctx.package_info().version,
+            std::process::id(),
+            std::env::args().skip(1).collect::<Vec<_>>(),
+            std::env::var_os("LOCALAPPDATA").is_some(),
+            std::env::current_dir().map(|d| d.display().to_string()).unwrap_or_else(|e| format!("<{e}>"))
+        ),
+    );
+
     // The detached update-window process mode (docs/update-window): a minimal
     // one-window app that shows update.html while the real update runs. It must
     // branch BEFORE the stale-cache sweep below - that sweep touches the MAIN
@@ -441,6 +461,7 @@ pub fn run() {
             install_update,
             check_for_update,
             storage_health,
+            storage_guard_report,
             restart_app,
             snapshot_storage,
             streaming_server_url,
@@ -953,6 +974,13 @@ async fn install_update(app: tauri::AppHandle) -> Result<(), String> {
         Ok(dest) => tracing::info!("update: storage snapshot at {}", dest.display()),
         Err(e) => tracing::error!("update: STORAGE SNAPSHOT FAILED ({e}); proceeding with the update without one"),
     }
+    // Journal the handoff: the next journal line after this one should be the
+    // relaunched app's run-start. Its absence after an update is itself data
+    // (the 2026-08-17 21:03 update relaunch refused with a silent journal).
+    boot_journal_append(
+        &app.config().identifier,
+        &format!("update-handoff from=v{version} spawning the installer"),
+    );
 
     // Hands off to the installer and exits this process, so this normally
     // never returns. NSIS runs QUIET (installMode in tauri.conf.json): the
@@ -1052,31 +1080,64 @@ fn wait_for_webview_profile_release(_identifier: &str) -> bool {
 /// of a screenshot. Epoch-ms timestamps; append-only; capped by truncating to
 /// the newest half above ~256KB; never fails the caller.
 fn boot_journal_append(identifier: &str, line: &str) {
-    let Some(local) = std::env::var_os("LOCALAPPDATA") else { return };
-    let dir = std::path::Path::new(&local).join(identifier);
-    let path = dir.join("boot-journal.log");
     let now_ms = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map(|d| d.as_millis())
         .unwrap_or(0);
     let entry = format!("{now_ms} {line}\n");
-    let _ = std::fs::create_dir_all(&dir);
-    if let Ok(meta) = std::fs::metadata(&path) {
-        if meta.len() > 256 * 1024 {
-            if let Ok(text) = std::fs::read_to_string(&path) {
-                let lines: Vec<&str> = text.lines().collect();
-                let keep = lines.len() / 2;
-                let _ = std::fs::write(&path, format!("{}\n", lines[keep..].join("\n")));
+
+    // Primary target: %LOCALAPPDATA%\<identifier>\boot-journal.log.
+    let primary_error: Option<String> = match std::env::var_os("LOCALAPPDATA") {
+        None => Some("LOCALAPPDATA missing from the environment".into()),
+        Some(local) => {
+            let dir = std::path::Path::new(&local).join(identifier);
+            let path = dir.join("boot-journal.log");
+            let _ = std::fs::create_dir_all(&dir);
+            if let Ok(meta) = std::fs::metadata(&path) {
+                if meta.len() > 256 * 1024 {
+                    if let Ok(text) = std::fs::read_to_string(&path) {
+                        let lines: Vec<&str> = text.lines().collect();
+                        let keep = lines.len() / 2;
+                        let _ = std::fs::write(&path, format!("{}\n", lines[keep..].join("\n")));
+                    }
+                }
+            }
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&path)
+                .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()))
+                .err()
+                .map(|e| e.to_string())
+        }
+    };
+
+    // A refusal boot that also fails this append used to be SILENT - four
+    // observed field refusals left zero journal lines while the same
+    // directory accepted writes minutes later (2026-08-18). The failure
+    // itself is the datum we need, so on primary failure the entry rides to
+    // fallback locations with the primary error embedded. Only on failure:
+    // the fallbacks must not become a second journal to reconcile.
+    if let Some(err) = primary_error {
+        tracing::error!("boot journal primary write failed: {err}");
+        let fallback_entry = format!(
+            "{} {line} primary_error={:?}\n",
+            now_ms,
+            err
+        );
+        let mut targets = vec![std::env::temp_dir().join("rillio-boot-journal.log")];
+        if let Ok(exe) = std::env::current_exe() {
+            if let Some(dir) = exe.parent() {
+                targets.push(dir.join("boot-journal.log"));
             }
         }
-    }
-    if let Err(e) = std::fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&path)
-        .and_then(|mut f| std::io::Write::write_all(&mut f, entry.as_bytes()))
-    {
-        tracing::error!("boot journal write failed: {e}");
+        for target in targets {
+            let _ = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(&target)
+                .and_then(|mut f| std::io::Write::write_all(&mut f, fallback_entry.as_bytes()));
+        }
     }
 }
 
@@ -1125,6 +1186,27 @@ struct StorageHealth {
     /// (incident 2026-08-16: a WebView2 session booted with its DOM-storage
     /// plane dead and the app looked wiped while the data sat intact here).
     local_storage_bytes: u64,
+}
+
+/// The web guard reports its verdict here on every boot (fire-and-forget), so
+/// the journal shows what the WEB side concluded next to what the shell saw -
+/// including the `readable=false` branch (localStorage THROWING), which never
+/// calls storage_health and was otherwise invisible.
+#[tauri::command]
+fn storage_guard_report(
+    app: tauri::AppHandle,
+    verdict: String,
+    readable: bool,
+    sentinel_present: bool,
+    user_data_present: bool,
+) {
+    boot_journal_append(
+        &app.config().identifier,
+        &format!(
+            "guard verdict={} readable={} sentinel={} userdata={}",
+            verdict, readable, sentinel_present, user_data_present
+        ),
+    );
 }
 
 #[tauri::command]

@@ -15,7 +15,7 @@ import './common/videoServerContext';
 import App from './App';
 import { CoreProvider } from './core';
 import { FileDropProvider, PlatformProvider } from './common';
-import { runStorageGuard, stampStorageSentinel } from './common/storageGuard';
+import { runStorageGuard, stampStorageSentinel, reportStorageGuardOutcome } from './common/storageGuard';
 import { getTauri } from './common/Platform/shell/isShell';
 // NEVER run the cache-first service worker inside the desktop shell. The shell's
 // assets are embedded and swapped in whole by the native updater, and the asset
@@ -78,6 +78,15 @@ const mountApp = () => {
 // would reuse the same broken browser session.
 const StorageUnreadable = () => {
     const t = i18n.t.bind(i18n);
+    // Version stamp: a screenshot of this screen must identify the build (a
+    // field refusal on 2026-08-17 could not be attributed to a version).
+    const [version, setVersion] = React.useState<string | null>(null);
+    React.useEffect(() => {
+        const getVersion = getTauri()?.app?.getVersion;
+        if (typeof getVersion === 'function') {
+            getVersion().then(setVersion).catch(() => setVersion(null));
+        }
+    }, []);
     return (
         <div className="flex h-screen w-screen flex-col items-center justify-center gap-4 bg-bg p-8 text-center text-fg">
             <div className="text-xl font-semibold">
@@ -114,6 +123,9 @@ const StorageUnreadable = () => {
             >
                 {t('STORAGE_UNREADABLE_CONTINUE', 'Continue anyway (a backup of your data is saved first)')}
             </button>
+            {version !== null ? (
+                <div className="absolute bottom-3 right-4 text-xs text-fg opacity-30">v{version}</div>
+            ) : null}
         </div>
     );
 };
@@ -129,6 +141,10 @@ void (async () => {
         // The guard never rejects by contract; treat a broken guard as no guard.
         console.error('storageGuard: unexpected failure, booting unguarded', error);
     }
+    // Every verdict lands in the shell's boot journal (fire-and-forget): the
+    // web side's view next to the shell's lock states is the correlation the
+    // field incidents were missing.
+    reportStorageGuardOutcome(verdict);
     if (verdict === 'unreadable') {
         console.error('storageGuard: localStorage reads empty but the profile database on disk has data; refusing to boot the core');
         // The static splash overlay (#rillio-loading in index.html) is dismissed
