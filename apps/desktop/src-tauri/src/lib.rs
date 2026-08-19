@@ -323,6 +323,46 @@ pub fn run() {
         ),
     );
 
+    // STALE-IMAGE SELF-HEAL (2026-08-19): the v0.1.38 update relaunch produced
+    // a process that ran for minutes with UI yet left ZERO journal lines in
+    // any location, including the unconditional run-start above - only
+    // possible if the running IMAGE predates the journal code even though the
+    // file on disk is current (checks against the disk file, like
+    // MainModule.FileVersionInfo, cannot see this). Whatever race hands the
+    // update relaunch an old image, the old image can notice and hand over:
+    // compare the compiled-in version against the version resource of the exe
+    // file on disk; on mismatch, relaunch the disk binary and exit. Matching
+    // versions (every normal boot) cost one version-resource read. Errors
+    // reading the resource boot normally - never brick startup over the check.
+    #[cfg(all(desktop, windows))]
+    if std::env::args().all(|arg| arg != "--update-window") {
+        if let Ok(exe) = std::env::current_exe() {
+            // Compare against the CANONICAL install-path name, not current_exe
+            // itself: if the installer renamed the running old exe aside,
+            // current_exe follows the rename (and would read the old file, a
+            // false match); the canonical name in the same directory is what
+            // the next launch runs. For a normally-named process the two paths
+            // are the same file.
+            let canonical = exe.with_file_name("rillio-desktop.exe");
+            if canonical.exists() {
+                if let Some(disk_version) = read_disk_file_version(&canonical) {
+                    let built_version = ctx.package_info().version.to_string();
+                    if disk_version != built_version {
+                        boot_journal_append(
+                            &ctx.config().identifier,
+                            &format!(
+                                "stale-image built=v{built_version} disk=v{disk_version}; relaunching {}",
+                                canonical.display()
+                            ),
+                        );
+                        let _ = std::process::Command::new(&canonical).spawn();
+                        std::process::exit(0);
+                    }
+                }
+            }
+        }
+    }
+
     // The detached update-window process mode (docs/update-window): a minimal
     // one-window app that shows update.html while the real update runs. It must
     // branch BEFORE the stale-cache sweep below - that sweep touches the MAIN
@@ -660,7 +700,11 @@ fn build_main_window(app: &tauri::App) -> tauri::Result<tauri::WebviewWindow> {
         .map(tauri::WebviewUrl::External)
         .unwrap_or_default();
     let window = tauri::WebviewWindowBuilder::new(app, "main", start_url)
-        .title("Rillio")
+        // Version in the native title (taskbar/alt-tab only - the window is
+        // frameless): makes the RUNNING image's version externally readable
+        // (Get-Process MainWindowTitle), which the stale-image incident showed
+        // nothing derived from the on-disk file can be trusted to reveal.
+        .title(format!("Rillio {}", app.package_info().version))
         .inner_size(1280.0, 800.0)
         .resizable(true)
         // Frameless: the web app draws its own window controls + drag region
@@ -1071,6 +1115,51 @@ fn wait_for_webview_profile_release(identifier: &str) -> bool {
 #[cfg(not(windows))]
 fn wait_for_webview_profile_release(_identifier: &str) -> bool {
     true
+}
+
+/// Product version (major.minor.patch) from the version RESOURCE of the file
+/// on disk - unlike anything derived from a loaded module, this reads what a
+/// fresh launch of `path` would actually run. None on any failure (no
+/// resource, unreadable file): the caller must boot normally rather than
+/// guess.
+#[cfg(windows)]
+fn read_disk_file_version(path: &std::path::Path) -> Option<String> {
+    use std::os::windows::ffi::OsStrExt;
+    use windows::core::PCWSTR;
+    use windows::Win32::Storage::FileSystem::{
+        GetFileVersionInfoSizeW, GetFileVersionInfoW, VerQueryValueW, VS_FIXEDFILEINFO,
+    };
+
+    let wide: Vec<u16> = path.as_os_str().encode_wide().chain(std::iter::once(0)).collect();
+    unsafe {
+        let size = GetFileVersionInfoSizeW(PCWSTR(wide.as_ptr()), None);
+        if size == 0 {
+            return None;
+        }
+        let mut buf = vec![0u8; size as usize];
+        GetFileVersionInfoW(PCWSTR(wide.as_ptr()), None, size, buf.as_mut_ptr() as *mut _).ok()?;
+        let mut fixed: *mut VS_FIXEDFILEINFO = std::ptr::null_mut();
+        let mut len = 0u32;
+        let sub: Vec<u16> = "\\".encode_utf16().chain(std::iter::once(0)).collect();
+        if !VerQueryValueW(
+            buf.as_ptr() as *const _,
+            PCWSTR(sub.as_ptr()),
+            &mut fixed as *mut _ as *mut *mut core::ffi::c_void,
+            &mut len,
+        )
+        .as_bool()
+            || fixed.is_null()
+        {
+            return None;
+        }
+        let info = &*fixed;
+        Some(format!(
+            "{}.{}.{}",
+            (info.dwProductVersionMS >> 16) & 0xffff,
+            info.dwProductVersionMS & 0xffff,
+            (info.dwProductVersionLS >> 16) & 0xffff
+        ))
+    }
 }
 
 /// Append one line to the boot journal (`%LOCALAPPDATA%\<identifier>\

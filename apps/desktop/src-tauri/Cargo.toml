@@ -4,7 +4,7 @@
 
 [package]
 name = "rillio-desktop"
-version = "0.1.38"
+version = "0.1.39"
 edition = "2021"
 description = "Rillio desktop shell (Tauri) embedding the Rust streaming server"
 license = "gpl-2.0"
@@ -75,6 +75,9 @@ tauri-plugin-deep-link = "2"
 windows = { version = "0.61", features = [
     "Win32_Foundation",
     "Win32_UI_WindowsAndMessaging",
+    # Version-resource APIs (GetFileVersionInfoW/VerQueryValueW) for the
+    # stale-image self-heal: read what the exe ON DISK would run.
+    "Win32_Storage_FileSystem",
 ] }
 # WebView2 COM interfaces (same 0.38.x wry already pins, so the types unify
 # with what PlatformWebview::controller() returns). Used solely to set the
