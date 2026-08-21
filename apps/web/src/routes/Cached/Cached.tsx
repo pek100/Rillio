@@ -7,7 +7,6 @@ import { useProfile } from 'rillio/common';
 import { fetchStreamingModeEnabled, postStreamingModeEnabled } from 'rillio/common/streamingMode';
 import { playerDeepLink } from 'rillio/common/cacheMetadata';
 import { Button, IconButton, ModalRoute, Switch, cn } from 'rillio/components/ui';
-import { ToggleGroup, ToggleGroupItem } from 'rillio/components/ui/toggle-group';
 import AnimatedPercentage from 'rillio/components/ui/animated-percentage';
 import SpeedChart from 'rillio/components/ui/speed-chart';
 import useCachedTorrents, { CacheEntry } from './useCachedTorrents';
@@ -51,12 +50,15 @@ const SORT_LABELS: Record<string, string> = {
     quality: 'Quality',
 };
 
+// Short labels: the whole toolbar is ONE quiet row, and "Downloading" alone
+// would eat a chip row's worth of it. Active = an unfinished transfer, Done =
+// complete on disk.
 const FILTER_LABELS: Record<string, string> = {
     '4k': '4K',
     '1080p': '1080p',
     hdr: 'HDR',
-    downloading: 'Downloading',
-    complete: 'Complete',
+    downloading: 'Active',
+    complete: 'Done',
     kept: 'Kept',
 };
 
@@ -834,49 +836,29 @@ const Cached = ({ onClose }: Props) => {
                 </IconButton>
             </div>
             {
-                // The toolbar earns its place only once there is a list to work
-                // on: search, the sort order, and AND-combined filter chips.
+                // The toolbar: ONE quiet hairline row - a bare inline search, the
+                // filter facets as text chips (accent when active), and the sort
+                // behind a thin divider. No pills, no boxes: the flat list below
+                // is the surface, this is just its caption.
                 entries !== null && entries.length > 0 ?
-                    <div className="flex flex-col gap-2 border-b border-line px-6 pb-3">
-                        <div className="flex items-center gap-3">
-                            <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full bg-surface px-3">
-                                <Search className="size-3.5 shrink-0 text-fg-subtle" />
-                                <input
-                                    type="text"
-                                    value={query}
-                                    onChange={(event) => setQuery(event.target.value)}
-                                    placeholder="Search the cache"
-                                    className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-subtle"
-                                />
-                                {
-                                    query.length > 0 ?
-                                        <IconButton onClick={() => setQuery('')} title="Clear search" className="-mr-1 size-5 shrink-0 text-fg-subtle hover:text-fg">
-                                            <X className="size-3.5" />
-                                        </IconButton>
-                                        :
-                                        null
-                                }
-                            </div>
-                            <ToggleGroup
-                                type="single"
-                                value={sort}
-                                onValueChange={(value: string) => { if (value) setSort(value); }}
-                                className="shrink-0 gap-1"
-                            >
-                                {
-                                    (SORTS as string[]).map((value) => (
-                                        <ToggleGroupItem
-                                            key={value}
-                                            value={value}
-                                            className="h-7 rounded-full px-3 text-xs data-[state=off]:text-fg-muted data-[state=off]:hover:bg-surface"
-                                        >
-                                            {SORT_LABELS[value]}
-                                        </ToggleGroupItem>
-                                    ))
-                                }
-                            </ToggleGroup>
-                        </div>
-                        <div className="flex flex-wrap items-center gap-1.5">
+                    <div className="flex h-10 shrink-0 items-center gap-3 border-b border-line px-6">
+                        <Search className="size-3.5 shrink-0 text-fg-subtle" />
+                        <input
+                            type="text"
+                            value={query}
+                            onChange={(event) => setQuery(event.target.value)}
+                            placeholder="Search the cache"
+                            className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-subtle"
+                        />
+                        {
+                            query.length > 0 ?
+                                <IconButton onClick={() => setQuery('')} title="Clear search" className="size-5 shrink-0 text-fg-subtle hover:text-fg">
+                                    <X className="size-3.5" />
+                                </IconButton>
+                                :
+                                null
+                        }
+                        <div className="flex shrink-0 items-center gap-1">
                             {
                                 (FILTERS as string[]).map((filter) => {
                                     const active = filters.includes(filter);
@@ -890,7 +872,7 @@ const Cached = ({ onClose }: Props) => {
                                                 active ?
                                                     'bg-accent/15 text-accent'
                                                     :
-                                                    'bg-surface text-fg-muted hover:brightness-110',
+                                                    'text-fg-muted hover:bg-surface hover:text-fg',
                                             )}
                                         >
                                             {FILTER_LABELS[filter]}
@@ -898,17 +880,26 @@ const Cached = ({ onClose }: Props) => {
                                     );
                                 })
                             }
+                        </div>
+                        <div className="h-3.5 w-px shrink-0 bg-line" />
+                        <div className="flex shrink-0 items-center gap-1">
                             {
-                                filters.length > 0 || query.length > 0 ?
+                                (SORTS as string[]).map((value) => (
                                     <button
+                                        key={value}
                                         type="button"
-                                        onClick={() => { setFilters([]); setQuery(''); }}
-                                        className="h-6 rounded-full px-2.5 text-[0.6875rem] font-medium text-fg-subtle transition hover:text-fg"
+                                        onClick={() => setSort(value)}
+                                        className={cn(
+                                            'h-6 rounded-full px-2.5 text-[0.6875rem] font-medium transition',
+                                            sort === value ?
+                                                'bg-accent/15 text-accent'
+                                                :
+                                                'text-fg-muted hover:bg-surface hover:text-fg',
+                                        )}
                                     >
-                                        Clear
+                                        {SORT_LABELS[value]}
                                     </button>
-                                    :
-                                    null
+                                ))
                             }
                         </div>
                     </div>
