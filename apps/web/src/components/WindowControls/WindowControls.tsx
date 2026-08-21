@@ -118,8 +118,16 @@ const WindowControls = () => {
             .catch(() => { /* no-op */ });
     };
 
-    const minimize = () => { collapseFullscreen().then(() => currentWindow()?.minimize?.()); };
+    // A window operation must never leave ITSELF (or anything else) holding
+    // keyboard focus: a later Space/Enter would re-fire it, which is how
+    // "pause the player" minimized the window. The mousedown preventDefault on
+    // the buttons stops mouse clicks from focusing them, and this covers every
+    // other activation path (assistive tech, keyboard).
+    const dropFocus = () => { (document.activeElement as HTMLElement | null)?.blur?.(); };
+
+    const minimize = () => { dropFocus(); collapseFullscreen().then(() => currentWindow()?.minimize?.()); };
     const toggleMaximize = () => {
+        dropFocus();
         // While fullscreen, "maximize" just returns to the windowed state.
         if (fullscreen) { collapseFullscreen(); return; }
         currentWindow()?.toggleMaximize?.();
@@ -129,12 +137,21 @@ const WindowControls = () => {
     // webview INSIDE the frameless window, which reads as broken. This is the one
     // fullscreen control; the account-menu entry is hidden in the shell.
     const toggleFullscreen = () => {
+        dropFocus();
         const win = currentWindow();
         if (!win?.setFullscreen) return;
         win.setFullscreen(!fullscreen).then(() => setFullscreen(!fullscreen)).catch(() => { /* no-op */ });
     };
 
     const btn = 'flex h-full w-11 items-center justify-center text-fg-muted outline-none transition-colors duration-150';
+
+    // Clicking a web button FOCUSES it, and with outline-none nothing shows it.
+    // A later Space/Enter then re-activates the last-clicked window control:
+    // pressing Space to pause the player minimized (or closed) the window
+    // instead, whenever one of these was the last click. Native titlebar
+    // buttons never take focus; preventDefault on mousedown makes these behave
+    // the same. (Keyboard focus via Tab is unaffected.)
+    const noFocus = (event: React.MouseEvent) => event.preventDefault();
 
     return (
         <>
@@ -154,6 +171,7 @@ const WindowControls = () => {
             <div className={`fixed right-0 top-0 z-[2147483646] flex h-8 select-none rounded-bl-card transition-[opacity,background-color] duration-150 hover:bg-glass-chrome hover:backdrop-blur-(--glass-blur) ${headerVisibility}`}>
                 <button
                     type="button"
+                    onMouseDown={noFocus}
                     className={`${btn} hover:bg-white/10 hover:text-fg`}
                     onClick={toggleFullscreen}
                     title={fullscreen ? 'Exit full screen' : 'Full screen'}
@@ -171,6 +189,7 @@ const WindowControls = () => {
                 </button>
                 <button
                     type="button"
+                    onMouseDown={noFocus}
                     className={`${btn} hover:bg-white/10 hover:text-fg`}
                     onClick={minimize}
                     title="Minimize"
@@ -182,6 +201,7 @@ const WindowControls = () => {
                 </button>
                 <button
                     type="button"
+                    onMouseDown={noFocus}
                     className={`${btn} hover:bg-white/10 hover:text-fg`}
                     onClick={toggleMaximize}
                     title={maximized ? 'Restore' : 'Maximize'}
@@ -200,6 +220,7 @@ const WindowControls = () => {
                 </button>
                 <button
                     type="button"
+                    onMouseDown={noFocus}
                     className={`${btn} hover:bg-danger hover:text-white`}
                     onClick={close}
                     title="Close"

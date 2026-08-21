@@ -962,6 +962,14 @@ const Player = () => {
             if (e.code !== 'Space' || e.repeat) return;
             if (menusOpen || e.ctrlKey || e.metaKey || e.altKey) return;
 
+            // Space is the player's key here, so its default behavior must not
+            // ALSO run: with any chrome button still focused from a click,
+            // that default is a re-click of the button (a pause button click +
+            // the pause toggle below = a double toggle; a window control =
+            // minimize/close). Preventing the keydown also cancels the
+            // browser's keyup click synthesis on the focused element.
+            e.preventDefault();
+
             longPress.current = false;
 
             pressTimer.current = setTimeout(() => {
