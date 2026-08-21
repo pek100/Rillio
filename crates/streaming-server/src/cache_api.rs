@@ -56,6 +56,10 @@ pub(crate) struct CacheEntry {
     /// every one of those look unplayable (no Play button on a finished movie).
     #[serde(skip_serializing_if = "Option::is_none")]
     pub file_idx: Option<usize>,
+    /// When this torrent entered the cache, unix epoch milliseconds. Stamped on
+    /// add; pre-existing caches are backfilled once from on-disk file times
+    /// (see engine::added_at_stamped). Drives the Cache page's date sort.
+    pub added_at: u64,
 }
 
 /// Extensions we treat as playable video. Matches the container formats the
@@ -161,6 +165,7 @@ pub(crate) async fn list(State(engine): State<Engine>) -> Json<Vec<CacheEntry>> 
                 pinned: engine.is_pinned(&info_hash),
                 watched: engine.is_watched(&info_hash),
                 meta: engine.meta(&info_hash),
+                added_at: engine.added_at_stamped(&info_hash, handle),
                 info_hash,
                 name,
                 downloaded,
@@ -172,7 +177,9 @@ pub(crate) async fn list(State(engine): State<Engine>) -> Json<Vec<CacheEntry>> 
             }
         })
         .collect();
-    entries.sort_by(|a, b| b.downloaded.cmp(&a.downloaded));
+    // Newest first as the wire order; the web re-sorts to whatever the user
+    // picked, this is just a sensible default for any other consumer.
+    entries.sort_by(|a, b| b.added_at.cmp(&a.added_at));
     Json(entries)
 }
 

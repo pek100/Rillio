@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Play, Info, Trash2, X, ChevronRight } from 'lucide-react';
+import { Play, Info, Trash2, X, ChevronRight, Search } from 'lucide-react';
 import { useNavigate } from 'react-router';
 import { toPath } from 'rillio-router';
 import { useCore } from 'rillio/core';
@@ -7,6 +7,7 @@ import { useProfile } from 'rillio/common';
 import { fetchStreamingModeEnabled, postStreamingModeEnabled } from 'rillio/common/streamingMode';
 import { playerDeepLink } from 'rillio/common/cacheMetadata';
 import { Button, IconButton, ModalRoute, Switch, cn } from 'rillio/components/ui';
+import { ToggleGroup, ToggleGroupItem } from 'rillio/components/ui/toggle-group';
 import AnimatedPercentage from 'rillio/components/ui/animated-percentage';
 import SpeedChart from 'rillio/components/ui/speed-chart';
 import useCachedTorrents, { CacheEntry } from './useCachedTorrents';
@@ -38,6 +39,38 @@ const metaDetailsLink = (entry: CacheEntry): string | null =>
 // entry name (the selected file's name for single-file selections, e.g. an
 // episode filename, otherwise the torrent name - both carry the same tokens).
 const { parseStream } = require('rillio/routes/MetaDetails/StreamsList/streamQuality');
+
+// The toolbar's decision logic (sort orders, filter facets, search), pure and
+// jest-covered in cacheListOps; quality parsing and naming are injected from
+// here so there is exactly one tokenizer and one naming rule.
+const { SORTS, FILTERS, sortEntries, filterEntries } = require('./cacheListOps');
+
+const SORT_LABELS: Record<string, string> = {
+    date: 'Newest',
+    size: 'Largest',
+    quality: 'Quality',
+};
+
+const FILTER_LABELS: Record<string, string> = {
+    '4k': '4K',
+    '1080p': '1080p',
+    hdr: 'HDR',
+    downloading: 'Downloading',
+    complete: 'Complete',
+    kept: 'Kept',
+};
+
+// "3w ago" for the row subline: at a glance is all the date sort needs to be
+// verifiable; exact timestamps would just be noise at this size.
+const formatAge = (addedAt: number | undefined): string | null => {
+    if (typeof addedAt !== 'number' || addedAt <= 0) return null;
+    const seconds = Math.max(0, (Date.now() - addedAt) / 1000);
+    if (seconds < 3600) return 'just now';
+    if (seconds < 86400) return `${Math.round(seconds / 3600)}h ago`;
+    if (seconds < 86400 * 7) return `${Math.round(seconds / 86400)}d ago`;
+    if (seconds < 86400 * 30) return `${Math.round(seconds / (86400 * 7))}w ago`;
+    return `${Math.round(seconds / (86400 * 30))}mo ago`;
+};
 
 type ParsedQuality = {
     resolution: number,
@@ -518,6 +551,15 @@ const Row = ({ entry, metaLink, streamingMode, onPlay, onPlayFile, onMoreInfo, o
                             :
                             null
                     }
+                    {
+                        // The age makes the (default) newest-first order legible.
+                        // Finished rows only: an active row's subline already
+                        // carries progress and state.
+                        complete && formatAge(entry.addedAt) !== null ?
+                            <span className="text-fg-subtle">{` · ${formatAge(entry.addedAt)}`}</span>
+                            :
+                            null
+                    }
                 </div>
                 {
                     !complete && !preparing && entry.total > 0 ?
@@ -695,14 +737,48 @@ const Cached = ({ onClose }: Props) => {
         [entries],
     );
 
+    // Toolbar state. Newest-first is the default order; filters are toggle
+    // chips that AND together; the search box matches titles and filenames.
+    const [sort, setSort] = useState<string>('date');
+    const [filters, setFilters] = useState<string[]>([]);
+    const [query, setQuery] = useState('');
+    const toggleFilter = useCallback((filter: string) => {
+        setFilters((current) => current.includes(filter) ?
+            current.filter((f) => f !== filter)
+            :
+            [...current, filter]);
+    }, []);
+
+    // parseStream tokenizes a release name on every call; entries re-arrive
+    // every 3s poll with the same names, so cache by name for the session.
+    const qualityCache = useRef(new Map<string, ParsedQuality>());
+    const getQuality = useCallback((entry: CacheEntry): ParsedQuality => {
+        const cached = qualityCache.current.get(entry.name);
+        if (cached !== undefined) return cached;
+        const parsed: ParsedQuality = parseStream({ name: entry.name, description: '' });
+        qualityCache.current.set(entry.name, parsed);
+        return parsed;
+    }, []);
+
+    // What the list actually shows: filters + search, then the chosen order.
+    const visible = useMemo(
+        () => sortEntries(
+            filterEntries(entries ?? [], filters, query, getQuality, displayName),
+            sort,
+            getQuality,
+        ) as CacheEntry[],
+        [entries, filters, query, sort, getQuality],
+    );
+
     // The hero: the first ACTIVE download (live or paused mid-transfer - paused
     // stays a hero so pausing does not bounce the layout). Initializing entries
-    // have no honest byte counts yet and errors are rows, not heroes.
+    // have no honest byte counts yet and errors are rows, not heroes. Picked
+    // from the FILTERED list so the toolbar applies to it like any row.
     const heroEntry = useMemo(
-        () => (entries ?? []).find((entry) =>
+        () => visible.find((entry) =>
             entry.total > 0 && entry.downloaded < entry.total &&
             (entry.state === 'live' || entry.state === 'paused')) ?? null,
-        [entries],
+        [visible],
     );
 
     return (
@@ -757,6 +833,88 @@ const Cached = ({ onClose }: Props) => {
                     <X className="size-5" />
                 </IconButton>
             </div>
+            {
+                // The toolbar earns its place only once there is a list to work
+                // on: search, the sort order, and AND-combined filter chips.
+                entries !== null && entries.length > 0 ?
+                    <div className="flex flex-col gap-2 border-b border-line px-6 pb-3">
+                        <div className="flex items-center gap-3">
+                            <div className="flex h-8 min-w-0 flex-1 items-center gap-2 rounded-full bg-surface px-3">
+                                <Search className="size-3.5 shrink-0 text-fg-subtle" />
+                                <input
+                                    type="text"
+                                    value={query}
+                                    onChange={(event) => setQuery(event.target.value)}
+                                    placeholder="Search the cache"
+                                    className="min-w-0 flex-1 bg-transparent text-xs text-fg outline-none placeholder:text-fg-subtle"
+                                />
+                                {
+                                    query.length > 0 ?
+                                        <IconButton onClick={() => setQuery('')} title="Clear search" className="-mr-1 size-5 shrink-0 text-fg-subtle hover:text-fg">
+                                            <X className="size-3.5" />
+                                        </IconButton>
+                                        :
+                                        null
+                                }
+                            </div>
+                            <ToggleGroup
+                                type="single"
+                                value={sort}
+                                onValueChange={(value: string) => { if (value) setSort(value); }}
+                                className="shrink-0 gap-1"
+                            >
+                                {
+                                    (SORTS as string[]).map((value) => (
+                                        <ToggleGroupItem
+                                            key={value}
+                                            value={value}
+                                            className="h-7 rounded-full px-3 text-xs data-[state=off]:text-fg-muted data-[state=off]:hover:bg-surface"
+                                        >
+                                            {SORT_LABELS[value]}
+                                        </ToggleGroupItem>
+                                    ))
+                                }
+                            </ToggleGroup>
+                        </div>
+                        <div className="flex flex-wrap items-center gap-1.5">
+                            {
+                                (FILTERS as string[]).map((filter) => {
+                                    const active = filters.includes(filter);
+                                    return (
+                                        <button
+                                            key={filter}
+                                            type="button"
+                                            onClick={() => toggleFilter(filter)}
+                                            className={cn(
+                                                'h-6 rounded-full px-2.5 text-[0.6875rem] font-medium transition',
+                                                active ?
+                                                    'bg-accent/15 text-accent'
+                                                    :
+                                                    'bg-surface text-fg-muted hover:brightness-110',
+                                            )}
+                                        >
+                                            {FILTER_LABELS[filter]}
+                                        </button>
+                                    );
+                                })
+                            }
+                            {
+                                filters.length > 0 || query.length > 0 ?
+                                    <button
+                                        type="button"
+                                        onClick={() => { setFilters([]); setQuery(''); }}
+                                        className="h-6 rounded-full px-2.5 text-[0.6875rem] font-medium text-fg-subtle transition hover:text-fg"
+                                    >
+                                        Clear
+                                    </button>
+                                    :
+                                    null
+                            }
+                        </div>
+                    </div>
+                    :
+                    null
+            }
             <div className="min-h-0 flex-1 overflow-y-auto">
                 {
                     failed ?
@@ -772,6 +930,11 @@ const Cached = ({ onClose }: Props) => {
                                     Nothing cached yet. Streams are kept here while you watch, and the Download button on any source stores it for later.
                                 </div>
                                 :
+                                visible.length === 0 ?
+                                    <div className="px-5 py-10 text-center text-sm text-fg-muted">
+                                        Nothing here matches. Loosen the filters or clear the search.
+                                    </div>
+                                    :
                                 <>
                                     {
                                         heroEntry !== null ?
@@ -792,7 +955,7 @@ const Cached = ({ onClose }: Props) => {
                                             null
                                     }
                                     <div className="divide-y divide-surface">
-                                        {entries.filter((entry) => entry.infoHash !== heroEntry?.infoHash).map((entry) => (
+                                        {visible.filter((entry) => entry.infoHash !== heroEntry?.infoHash).map((entry) => (
                                             <Row
                                                 key={entry.infoHash}
                                                 entry={entry}

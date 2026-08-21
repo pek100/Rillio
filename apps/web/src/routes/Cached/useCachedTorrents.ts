@@ -23,6 +23,11 @@ export type CacheEntry = {
     // The single selected file's index when the entry is one playable file,
     // absent for multi-file selections. Powers the row's play button.
     fileIdx?: number,
+    // When the torrent entered the cache, unix epoch ms (server-stamped on add,
+    // backfilled from file times for caches that predate the stamp). Optional
+    // because an older server build simply doesn't send it; the date sort
+    // treats absent as oldest.
+    addedAt?: number,
 };
 
 // The Cached page's data layer: polls the local streaming server's cache list

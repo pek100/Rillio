@@ -225,6 +225,9 @@ pub struct Engine {
     /// recently-touched (i.e. currently-playing) one is protected. See
     /// [`Engine::touch`] and [`Engine::enforce_cache_cap`].
     last_access: Arc<Mutex<HashMap<String, Instant>>>,
+    /// infohash -> unix epoch ms the torrent entered the cache (see
+    /// [`Self::added_at_stamped`]); persisted as `added.json`.
+    added: Arc<Mutex<HashMap<String, u64>>>,
     /// (infohash, file_id) pairs whose tail (MKV Cues) has already been
     /// prefetched, so we warm each file's Cues at most once per session. See
     /// [`Engine::mark_prefetch`] and the tail-prefetch in stream.rs.
@@ -323,6 +326,38 @@ fn write_watched(cache_dir: &std::path::Path, watched: &HashMap<String, u64>) {
     if let Err(e) = std::fs::write(cache_dir.join(WATCHED_FILE), body) {
         tracing::error!("watched: persisting {WATCHED_FILE} failed: {e}");
     }
+}
+
+/// Filename of the persisted added-at map (unix epoch MILLISECONDS, matching
+/// what `Date` on the web side consumes directly), under the cache root.
+const ADDED_FILE: &str = "added.json";
+
+/// Read the persisted added-at map. Absent/unreadable/malformed => empty -
+/// added dates are presentation hints (the Cache page's sort), not integrity
+/// data; missing entries are backfilled from on-disk file times (see
+/// [`Engine::added_at_stamped`]).
+fn read_added(cache_dir: &std::path::Path) -> HashMap<String, u64> {
+    std::fs::read(cache_dir.join(ADDED_FILE))
+        .ok()
+        .and_then(|bytes| serde_json::from_slice::<HashMap<String, u64>>(&bytes).ok())
+        .unwrap_or_default()
+}
+
+/// Persist the added-at map. Loud on failure: a lost stamp re-backfills from
+/// file times on the next list, so the failure direction is only a possibly
+/// drifting sort date.
+fn write_added(cache_dir: &std::path::Path, added: &HashMap<String, u64>) {
+    let body = serde_json::to_vec(added).expect("added map serializes");
+    if let Err(e) = std::fs::write(cache_dir.join(ADDED_FILE), body) {
+        tracing::error!("added: persisting {ADDED_FILE} failed: {e}");
+    }
+}
+
+fn now_epoch_ms() -> u64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map(|d| d.as_millis() as u64)
+        .unwrap_or(0)
 }
 
 // ---------------------------------------------------------------------------
@@ -646,6 +681,7 @@ impl Engine {
         let pinned = read_pins(&cache_root);
         let watched = read_watched(&cache_root);
         let meta = read_meta(&cache_root);
+        let added = read_added(&cache_root);
         Ok(Self {
             session,
             cache_root: Arc::new(cache_root),
@@ -655,7 +691,65 @@ impl Engine {
             pinned: Arc::new(Mutex::new(pinned)),
             watched: Arc::new(Mutex::new(watched)),
             meta: Arc::new(Mutex::new(meta)),
+            added: Arc::new(Mutex::new(added)),
         })
+    }
+
+    /// When this torrent entered the cache, as unix epoch milliseconds.
+    ///
+    /// The stamp is written on add ([`Self::stamp_added_if_new`]); a torrent
+    /// that predates the stamping (an existing cache) is backfilled ONCE from
+    /// its files' on-disk times - the oldest creation time among them, which on
+    /// Windows is the moment the download was first written - and the backfill
+    /// is persisted so the date never drifts afterwards. No file times at all
+    /// (metadata still resolving) leaves the map alone and reports "now"
+    /// transiently, so a just-added magnet sorts newest instead of at 1970.
+    pub fn added_at_stamped(&self, info_hash: &str, handle: &Handle) -> u64 {
+        if let Ok(map) = self.added.lock() {
+            if let Some(&at) = map.get(info_hash) {
+                return at;
+            }
+        }
+        let oldest_file_time: Option<u64> = Self::files(handle)
+            .iter()
+            .filter_map(|file| {
+                let meta = std::fs::metadata(self.cache_root.join(&file.path)).ok()?;
+                let time = meta.created().or_else(|_| meta.modified()).ok()?;
+                let ms = time.duration_since(std::time::UNIX_EPOCH).ok()?.as_millis() as u64;
+                Some(ms)
+            })
+            .min();
+        match oldest_file_time {
+            Some(at) => {
+                if let Ok(mut map) = self.added.lock() {
+                    map.insert(info_hash.to_owned(), at);
+                    write_added(&self.cache_root, &map);
+                }
+                at
+            }
+            None => now_epoch_ms(),
+        }
+    }
+
+    /// Stamp a torrent's added time if it has none; persists immediately.
+    pub fn stamp_added_if_new(&self, info_hash: &str) {
+        if let Ok(mut map) = self.added.lock() {
+            if !map.contains_key(info_hash) {
+                map.insert(info_hash.to_owned(), now_epoch_ms());
+                write_added(&self.cache_root, &map);
+            }
+        }
+    }
+
+    /// Drop a torrent's added stamp; persists immediately. Deletion cleanup:
+    /// a re-add of the same infohash is a NEW cache entry and must date from
+    /// its re-add, not the original download.
+    fn clear_added(&self, info_hash: &str) {
+        if let Ok(mut map) = self.added.lock() {
+            if map.remove(info_hash).is_some() {
+                write_added(&self.cache_root, &map);
+            }
+        }
     }
 
     /// The stored metadata for a torrent, if it has been identified.
@@ -957,6 +1051,7 @@ impl Engine {
             .await?;
         let handle = resp.into_handle().context("add_torrent returned list-only")?;
         self.reject_if_unconfined(&handle).await?;
+        self.stamp_added_if_new(&Self::info_hash_hex(&handle));
         Ok(handle)
     }
 
@@ -985,6 +1080,7 @@ impl Engine {
         // Bounded wait: a magnet with no reachable peers must not hang the request.
         let _ = tokio::time::timeout(METADATA_TIMEOUT, handle.wait_until_initialized()).await;
         self.reject_if_unconfined(&handle).await?;
+        self.stamp_added_if_new(&Self::info_hash_hex(&handle));
         Ok(handle)
     }
 
@@ -1055,6 +1151,7 @@ impl Engine {
             self.set_pinned(info_hash, false);
             self.set_watched(info_hash, false);
             self.set_meta(info_hash, None);
+            self.clear_added(info_hash);
             true
         } else {
             false
